@@ -336,7 +336,7 @@ public:
     /**
        Function for testing if the string can be returned
     */
-    int (*test_func)(const wchar_t *);
+    parser_test_error_bits_t (*test_func)(const wchar_t *);
 
     /**
        When this is true, the reader will exit
@@ -867,7 +867,7 @@ bool reader_data_t::expand_abbreviation_as_necessary(size_t cursor_backtrack)
 /** Sorts and remove any duplicate completions in the list. */
 static void sort_and_make_unique(std::vector<completion_t> &l)
 {
-    sort(l.begin(), l.end(), completion_t::is_alphabetically_less_than);
+    sort(l.begin(), l.end(), completion_t::is_naturally_less_than);
     l.erase(std::unique(l.begin(), l.end(), completion_t::is_alphabetically_equal_to), l.end());
 }
 
@@ -1142,8 +1142,6 @@ static bool command_ends_paging(wchar_t c, bool focused_on_search_field)
             /* These commands always end paging */
         case R_HISTORY_SEARCH_BACKWARD:
         case R_HISTORY_SEARCH_FORWARD:
-        case R_BEGINNING_OF_HISTORY:
-        case R_END_OF_HISTORY:
         case R_HISTORY_TOKEN_SEARCH_BACKWARD:
         case R_HISTORY_TOKEN_SEARCH_FORWARD:
         case R_ACCEPT_AUTOSUGGESTION:
@@ -1160,6 +1158,8 @@ static bool command_ends_paging(wchar_t c, bool focused_on_search_field)
         case R_NULL:
         case R_REPAINT:
         case R_SUPPRESS_AUTOSUGGESTION:
+        case R_BEGINNING_OF_HISTORY:
+        case R_END_OF_HISTORY:
         default:
             return false;
 
@@ -2555,7 +2555,7 @@ void reader_run_command(parser_t &parser, const wcstring &cmd)
 }
 
 
-int reader_shell_test(const wchar_t *b)
+parser_test_error_bits_t reader_shell_test(const wchar_t *b)
 {
     assert(b != NULL);
     wcstring bstr = b;
@@ -2564,7 +2564,7 @@ int reader_shell_test(const wchar_t *b)
     bstr.push_back(L'\n');
 
     parse_error_list_t errors;
-    int res = parse_util_detect_errors(bstr, &errors, true /* do accept incomplete */);
+    parser_test_error_bits_t res = parse_util_detect_errors(bstr, &errors, true /* do accept incomplete */);
 
     if (res & PARSER_TEST_ERROR)
     {
@@ -2586,7 +2586,7 @@ int reader_shell_test(const wchar_t *b)
    detection for general purpose, there are no invalid strings, so
    this function always returns false.
 */
-static int default_test(const wchar_t *b)
+static parser_test_error_bits_t default_test(const wchar_t *b)
 {
     return 0;
 }
@@ -2672,7 +2672,7 @@ void reader_set_highlight_function(highlight_function_t func)
     data->highlight_function = func;
 }
 
-void reader_set_test_function(int (*f)(const wchar_t *))
+void reader_set_test_function(parser_test_error_bits_t (*f)(const wchar_t *))
 {
     data->test_func = f;
 }
@@ -2989,6 +2989,11 @@ static int read_i(void)
             event_fire_generic(L"fish_preexec", &argv);
             reader_run_command(parser, command);
             event_fire_generic(L"fish_postexec", &argv);
+            /* Allow any pending history items to be returned in the history array. */
+            if (data->history)
+            {
+                data->history->resolve_pending();
+            }
             if (data->end_loop)
             {
                 handle_end_loop();
@@ -3067,6 +3072,18 @@ static wchar_t unescaped_quote(const wcstring &str, size_t pos)
     return result;
 }
 
+/* Returns true if the last token is a comment. */
+static bool text_ends_in_comment(const wcstring &text)
+{
+    token_type last_type = TOK_NONE;
+    tokenizer_t tok(text.c_str(), TOK_ACCEPT_UNFINISHED | TOK_SHOW_COMMENTS | TOK_SQUASH_ERRORS);
+    while (tok_has_next(&tok))
+    {
+        last_type = tok_last_type(&tok);
+        tok_next(&tok);
+    }
+    return last_type == TOK_COMMENT;
+}
 
 const wchar_t *reader_readline(int nchars)
 {
@@ -3163,8 +3180,15 @@ const wchar_t *reader_readline(int nchars)
                             break;
                     }
 
-                    insert_string(&data->command_line, arr, true);
-
+                    editable_line_t *el = data->active_edit_line();
+                    insert_string(el, arr, true);
+                    
+                    /* End paging upon inserting into the normal command line */
+                    if (el == &data->command_line)
+                    {
+                        clear_pager();
+                    }
+                    last_char = c;
                 }
             }
 
@@ -3556,10 +3580,19 @@ const wchar_t *reader_readline(int nchars)
                 /* We only execute the command line */
                 editable_line_t *el = &data->command_line;
 
-                /* Allow backslash-escaped newlines, but only if the following character is whitespace, or we're at the end of the text (see issue #163) */
+                /* Allow backslash-escaped newlines, but only if the following character is whitespace, or we're at the end of the text (see issue #613) and not in a comment (#1255). */
                 if (is_backslashed(el->text, el->position))
                 {
-                    if (el->position >= el->size() || iswspace(el->text.at(el->position)))
+                    bool continue_on_next_line = false;
+                    if (el->position >= el->size())
+                    {
+                        continue_on_next_line = ! text_ends_in_comment(el->text);
+                    }
+                    else
+                    {
+                        continue_on_next_line = iswspace(el->text.at(el->position));
+                    }
+                    if (continue_on_next_line)
                     {
                         insert_char(el, '\n');
                         break;
@@ -3592,7 +3625,7 @@ const wchar_t *reader_readline(int nchars)
                         const editable_line_t *el = &data->command_line;
                         if (data->history != NULL && ! el->empty() && el->text.at(0) != L' ')
                         {
-                            data->history->add_with_file_detection(el->text);
+                            data->history->add_pending_with_file_detection(el->text);
                         }
                         finished=1;
                         update_buff_pos(&data->command_line, data->command_line.size());
@@ -3787,21 +3820,30 @@ const wchar_t *reader_readline(int nchars)
 
             case R_BEGINNING_OF_HISTORY:
             {
-                const editable_line_t *el = &data->command_line;
-                data->history_search = history_search_t(*data->history, el->text, HISTORY_SEARCH_TYPE_PREFIX);
-                data->history_search.go_to_beginning();
-                if (! data->history_search.is_at_end())
+                if (data->is_navigating_pager_contents())
                 {
-                    wcstring new_text = data->history_search.current_string();
-                    set_command_line_and_position(&data->command_line, new_text, new_text.size());
+                        select_completion_in_direction(direction_page_north);
+                } else {
+                    const editable_line_t *el = &data->command_line;
+                    data->history_search = history_search_t(*data->history, el->text, HISTORY_SEARCH_TYPE_PREFIX);
+                    data->history_search.go_to_beginning();
+                    if (! data->history_search.is_at_end())
+                    {
+                        wcstring new_text = data->history_search.current_string();
+                        set_command_line_and_position(&data->command_line, new_text, new_text.size());
+                    }
                 }
-
                 break;
             }
 
             case R_END_OF_HISTORY:
             {
-                data->history_search.go_to_end();
+                if (data->is_navigating_pager_contents())
+                {
+                    select_completion_in_direction(direction_page_south);
+                } else {
+                    data->history_search.go_to_end();
+                }
                 break;
             }
 
@@ -4114,7 +4156,9 @@ const wchar_t *reader_readline(int nchars)
                 (c != R_HISTORY_SEARCH_FORWARD) &&
                 (c != R_HISTORY_TOKEN_SEARCH_BACKWARD) &&
                 (c != R_HISTORY_TOKEN_SEARCH_FORWARD) &&
-                (c != R_NULL))
+                (c != R_NULL) &&
+                (c != R_REPAINT) &&
+                (c != R_FORCE_REPAINT))
         {
             data->search_mode = NO_SEARCH;
             data->search_buff.clear();

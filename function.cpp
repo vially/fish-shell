@@ -43,6 +43,11 @@
 typedef std::map<wcstring, function_info_t> function_map_t;
 static function_map_t loaded_functions;
 
+/**
+   Functions that shouldn't be autoloaded (anymore).
+*/
+static std::set<wcstring> function_tombstones;
+
 /* Lock for functions */
 static pthread_mutex_t functions_lock;
 
@@ -61,10 +66,12 @@ function_autoload_t::function_autoload_t() : autoload_t(L"fish_function_path", N
 {
 }
 
+static bool function_remove_ignore_autoload(const wcstring &name, bool tombstone = true);
+
 /** Callback when an autoloaded function is removed */
 void function_autoload_t::command_removed(const wcstring &cmd)
 {
-    function_remove_ignore_autoload(cmd);
+    function_remove_ignore_autoload(cmd, false);
 }
 
 /**
@@ -84,6 +91,11 @@ static int load(const wcstring &name)
     scoped_lock lock(functions_lock);
     bool was_autoload = is_autoload;
     int res;
+
+    bool no_more_autoload = function_tombstones.count(name) > 0;
+    if (no_more_autoload)
+        return 0;
+
     function_map_t::iterator iter = loaded_functions.find(name);
     if (iter !=  loaded_functions.end() && !iter->second.is_autoload)
     {
@@ -225,19 +237,29 @@ int function_exists_no_autoload(const wcstring &cmd, const env_vars_snapshot_t &
     return loaded_functions.find(cmd) != loaded_functions.end() || function_autoloader.can_load(cmd, vars);
 }
 
-bool function_remove_ignore_autoload(const wcstring &name)
+static bool function_remove_ignore_autoload(const wcstring &name, bool tombstone)
 {
+    // Note: the lock may be held at this point, but is recursive
     scoped_lock lock(functions_lock);
-    bool erased = (loaded_functions.erase(name) > 0);
 
-    if (erased)
-    {
-        event_t ev(EVENT_ANY);
-        ev.function_name=name;
-        event_remove(ev);
-    }
-    return erased;
+    function_map_t::iterator iter = loaded_functions.find(name);
 
+    // not found.  not erasing.
+    if (iter == loaded_functions.end())
+        return false;
+
+    // removing an auto-loaded function.  prevent it from being
+    // auto-reloaded.
+    if (iter->second.is_autoload && tombstone)
+        function_tombstones.insert(name);
+
+    loaded_functions.erase(iter);
+
+    event_t ev(EVENT_ANY);
+    ev.function_name=name;
+    event_remove(ev);
+
+    return true;
 }
 
 void function_remove(const wcstring &name)

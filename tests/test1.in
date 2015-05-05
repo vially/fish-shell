@@ -150,6 +150,16 @@ echo "/bin/echo pipe 12 <&12 12<&-" | source 12<&0
 echo "Checking for infinite loops in no-execute"
 echo "while true; end" | ../fish --no-execute
 
+# Comments allowed in between lines (#1987)
+echo before comment \
+  # comment
+  after comment
+
+# Backslashes are part of comments and do not join lines (#1255)
+# This should execute false, not echo it
+echo -n # comment\
+false
+
 function always_fails
     if true
         return 1

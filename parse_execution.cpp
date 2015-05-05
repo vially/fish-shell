@@ -413,7 +413,7 @@ parse_execution_result_t parse_execution_context_t::run_block_statement(const pa
 
     const parse_node_t &block_header = *get_child(statement, 0, symbol_block_header); //block header
     const parse_node_t &header = *get_child(block_header, 0); //specific header type (e.g. for loop)
-    const parse_node_t &contents = *get_child(statement, 2, symbol_job_list); //block contents
+    const parse_node_t &contents = *get_child(statement, 1, symbol_job_list); //block contents
 
     parse_execution_result_t ret = parse_execution_success;
     switch (header.type)
@@ -428,7 +428,7 @@ parse_execution_result_t parse_execution_context_t::run_block_statement(const pa
 
         case symbol_function_header:
         {
-            const parse_node_t &function_end = *get_child(statement, 3, symbol_end_command); //the 'end' associated with the block
+            const parse_node_t &function_end = *get_child(statement, 2, symbol_end_command); //the 'end' associated with the block
             ret = run_function_statement(header, function_end);
             break;
         }
@@ -768,7 +768,7 @@ parse_execution_result_t parse_execution_context_t::report_unmatched_wildcard_er
 }
 
 /* Handle the case of command not found */
-void parse_execution_context_t::handle_command_not_found(const wcstring &cmd_str, const parse_node_t &statement_node, int err_code)
+parse_execution_result_t parse_execution_context_t::handle_command_not_found(const wcstring &cmd_str, const parse_node_t &statement_node, int err_code)
 {
     assert(statement_node.type == symbol_plain_statement);
 
@@ -796,8 +796,7 @@ void parse_execution_context_t::handle_command_not_found(const wcstring &cmd_str
 
             /* Looks like a command */
             this->report_error(statement_node,
-                               _(L"Unknown command '%ls'. Did you mean to run %ls with a modified environment? Try 'env %ls=%ls %ls%ls'. See the help section on the set command by typing 'help set'."),
-                               cmd,
+                               ERROR_BAD_EQUALS_IN_COMMAND5,
                                argument.c_str(),
                                name_str.c_str(),
                                val_str.c_str(),
@@ -807,39 +806,21 @@ void parse_execution_context_t::handle_command_not_found(const wcstring &cmd_str
         else
         {
             this->report_error(statement_node,
-                               COMMAND_ASSIGN_ERR_MSG,
-                               cmd,
+                               ERROR_BAD_COMMAND_ASSIGN_ERR_MSG,
                                name_str.c_str(),
                                val_str.c_str());
         }
     }
-    else if (cmd[0]==L'$' || cmd[0] == VARIABLE_EXPAND || cmd[0] == VARIABLE_EXPAND_SINGLE)
+    else if ((cmd[0] == L'$' || cmd[0] == VARIABLE_EXPAND || cmd[0] == VARIABLE_EXPAND_SINGLE) && cmd[1] != L'\0')
     {
-
-        const env_var_t val_wstr = env_get_string(cmd+1);
-        const wchar_t *val = val_wstr.missing() ? NULL : val_wstr.c_str();
-        if (val)
-        {
-            this->report_error(statement_node,
-                               _(L"Variables may not be used as commands. Instead, define a function like 'function %ls; %ls $argv; end' or use the eval builtin instead, like 'eval %ls'. See the help section for the function command by typing 'help function'."),
-                               cmd+1,
-                               val,
-                               cmd,
-                               cmd);
-        }
-        else
-        {
-            this->report_error(statement_node,
-                               _(L"Variables may not be used as commands. Instead, define a function or use the eval builtin instead, like 'eval %ls'. See the help section for the function command by typing 'help function'."),
-                               cmd,
-                               cmd);
-        }
+        this->report_error(statement_node,
+                           _(L"Variables may not be used as commands. In fish, please define a function or use 'eval %ls'."),
+                           cmd+1);
     }
     else if (wcschr(cmd, L'$'))
     {
         this->report_error(statement_node,
-                           _(L"Commands may not contain variables. Use the eval builtin instead, like 'eval %ls'. See the help section for the eval command by typing 'help eval'."),
-                           cmd,
+                           _(L"Commands may not contain variables. In fish, please use 'eval %ls'."),
                            cmd);
     }
     else if (err_code!=ENOENT)
@@ -857,7 +838,17 @@ void parse_execution_context_t::handle_command_not_found(const wcstring &cmd_str
          */
 
         wcstring_list_t event_args;
-        event_args.push_back(cmd_str);
+        {
+            parse_execution_result_t arg_result = this->determine_arguments(statement_node, &event_args);
+
+            if (arg_result != parse_execution_success)
+            {
+                return arg_result;
+            }
+
+            event_args.insert(event_args.begin(), cmd_str);
+        }
+
         event_fire_generic(L"fish_command_not_found", &event_args);
 
         /* Here we want to report an error (so it shows a backtrace), but with no text */
@@ -866,6 +857,8 @@ void parse_execution_context_t::handle_command_not_found(const wcstring &cmd_str
 
     /* Set the last proc status appropriately */
     proc_set_last_status(err_code==ENOENT?STATUS_UNKNOWN_COMMAND:STATUS_NOT_EXECUTABLE);
+
+    return parse_execution_errored;
 }
 
 /* Creates a 'normal' (non-block) process */
@@ -926,14 +919,13 @@ parse_execution_result_t parse_execution_context_t::populate_plain_process(job_t
         if (! has_command && ! use_implicit_cd)
         {
             /* No command */
-            this->handle_command_not_found(cmd, statement, no_cmd_err_code);
-            return parse_execution_errored;
+            return this->handle_command_not_found(cmd, statement, no_cmd_err_code);
         }
     }
 
     /* The argument list and set of IO redirections that we will construct for the process */
-    wcstring_list_t argument_list;
     io_chain_t process_io_chain;
+    wcstring_list_t argument_list;
     if (use_implicit_cd)
     {
         /* Implicit cd is simple */
