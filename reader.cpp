@@ -128,6 +128,10 @@ commence.
 #define RIGHT_PROMPT_FUNCTION_NAME L"fish_right_prompt"
 
 
+/* The name of the function for getting the input mode indicator */
+#define MODE_PROMPT_FUNCTION_NAME L"fish_mode_prompt"
+
+
 /**
    The default title for the reader. This is used by reader_readline.
 */
@@ -997,6 +1001,18 @@ static void exec_prompt()
     {
         proc_push_interactive(0);
 
+        // Prepend any mode indicator to the left prompt (#1988)
+        if (function_exists(MODE_PROMPT_FUNCTION_NAME))
+        {
+            wcstring_list_t mode_indicator_list;
+            exec_subshell(MODE_PROMPT_FUNCTION_NAME, mode_indicator_list, apply_exit_status);
+            // We do not support multiple lines in the mode indicator, so just concatenate all of them
+            for (size_t i = 0; i < mode_indicator_list.size(); i++)
+            {
+                data->left_prompt_buff += mode_indicator_list.at(i);
+            }
+        }
+
         if (! data->left_prompt.empty())
         {
             wcstring_list_t prompt_list;
@@ -1172,6 +1188,8 @@ static bool command_ends_paging(wchar_t c, bool focused_on_search_field)
         case R_END_OF_LINE:
         case R_FORWARD_WORD:
         case R_BACKWARD_WORD:
+        case R_FORWARD_BIGWORD:
+        case R_BACKWARD_BIGWORD:
         case R_DELETE_CHAR:
         case R_BACKWARD_DELETE_CHAR:
         case R_KILL_LINE:
@@ -1180,8 +1198,10 @@ static bool command_ends_paging(wchar_t c, bool focused_on_search_field)
         case R_BACKWARD_KILL_LINE:
         case R_KILL_WHOLE_LINE:
         case R_KILL_WORD:
+        case R_KILL_BIGWORD:
         case R_BACKWARD_KILL_WORD:
         case R_BACKWARD_KILL_PATH_COMPONENT:
+        case R_BACKWARD_KILL_BIGWORD:
         case R_SELF_INSERT:
         case R_TRANSPOSE_CHARS:
         case R_TRANSPOSE_WORDS:
@@ -3782,9 +3802,12 @@ const wchar_t *reader_readline(int nchars)
             /* kill one word left */
             case R_BACKWARD_KILL_WORD:
             case R_BACKWARD_KILL_PATH_COMPONENT:
+            case R_BACKWARD_KILL_BIGWORD:
             {
-                move_word_style_t style = (c == R_BACKWARD_KILL_PATH_COMPONENT ? move_word_style_path_components : move_word_style_punctuation);
-                bool newv = (last_char != R_BACKWARD_KILL_WORD && last_char != R_BACKWARD_KILL_PATH_COMPONENT);
+                move_word_style_t style =
+                    (c == R_BACKWARD_KILL_BIGWORD ? move_word_style_whitespace :
+                     c == R_BACKWARD_KILL_PATH_COMPONENT ? move_word_style_path_components : move_word_style_punctuation);
+                bool newv = (last_char != R_BACKWARD_KILL_WORD && last_char != R_BACKWARD_KILL_PATH_COMPONENT && last_char != R_BACKWARD_KILL_BIGWORD);
                 move_word(data->active_edit_line(), MOVE_DIR_LEFT, true /* erase */, style, newv);
                 break;
             }
@@ -3796,10 +3819,24 @@ const wchar_t *reader_readline(int nchars)
                 break;
             }
 
+            /* kill one bigword right */
+            case R_KILL_BIGWORD:
+            {
+                move_word(data->active_edit_line(), MOVE_DIR_RIGHT, true /* erase */, move_word_style_whitespace, last_char!=R_KILL_BIGWORD);
+                break;
+            }
+
             /* move one word left*/
             case R_BACKWARD_WORD:
             {
                 move_word(data->active_edit_line(), MOVE_DIR_LEFT, false /* do not erase */, move_word_style_punctuation, false);
+                break;
+            }
+
+            /* move one bigword left */
+            case R_BACKWARD_BIGWORD:
+            {
+                move_word(data->active_edit_line(), MOVE_DIR_LEFT, false /* do not erase */, move_word_style_whitespace, false);
                 break;
             }
 
@@ -3810,6 +3847,21 @@ const wchar_t *reader_readline(int nchars)
                 if (el->position < el->size())
                 {
                     move_word(el, MOVE_DIR_RIGHT, false /* do not erase */, move_word_style_punctuation, false);
+                }
+                else
+                {
+                    accept_autosuggestion(false /* accept only one word */);
+                }
+                break;
+            }
+
+            /* move one bigword right */
+            case R_FORWARD_BIGWORD:
+            {
+                editable_line_t *el = data->active_edit_line();
+                if (el->position < el->size())
+                {
+                    move_word(el, MOVE_DIR_RIGHT, false /* do not erase */, move_word_style_whitespace, false);
                 }
                 else
                 {
