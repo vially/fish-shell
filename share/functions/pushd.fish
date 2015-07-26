@@ -32,7 +32,7 @@ function pushd --description 'Push directory to stack'
 		return
 	end
 
-	# emulate bash: heck for rotations
+	# emulate bash: check for rotations
 	if test -n "$rot_l" -o -n "$rot_r"
 		# grab the current stack
 		set -l stack (command pwd) $dirstack

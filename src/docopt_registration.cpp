@@ -9,7 +9,7 @@ Functions for handling the set of docopt descriptions
 #include "common.h"
 #include "parse_constants.h"
 #include "parser.h"
-#include "docopt/docopt_fish.h"
+#include "docopt_fish.h"
 #include "expand.h"
 #include <map>
 #include <vector>

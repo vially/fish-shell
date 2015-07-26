@@ -371,6 +371,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		4E142D731B56B5D7008783C8 /* config.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = config.h; path = ../osx/config.h; sourceTree = "<group>"; };
 		D007690B19899E4000CA4627 /* docopt_fish_grammar.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = docopt_fish_grammar.h; sourceTree = "<group>"; };
 		D007690C19899E4400CA4627 /* docopt_fish_parse_tree.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = docopt_fish_parse_tree.cpp; sourceTree = "<group>"; };
 		D007690E19899E4F00CA4627 /* docopt_fish_types.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = docopt_fish_types.h; sourceTree = "<group>"; };
@@ -394,7 +395,6 @@
 		D0A0850313B3ACEE0099B651 /* builtin.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = builtin.h; sourceTree = "<group>"; };
 		D0A0850413B3ACEE0099B651 /* common.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = common.h; sourceTree = "<group>"; };
 		D0A0850513B3ACEE0099B651 /* complete.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = complete.h; sourceTree = "<group>"; };
-		D0A0850613B3ACEE0099B651 /* config.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = config.h; sourceTree = "<group>"; };
 		D0A0850713B3ACEE0099B651 /* env_universal_common.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = env_universal_common.h; sourceTree = "<group>"; };
 		D0A0850913B3ACEE0099B651 /* env.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = env.h; sourceTree = "<group>"; };
 		D0A0850A13B3ACEE0099B651 /* event.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = event.h; sourceTree = "<group>"; };
@@ -426,12 +426,6 @@
 		D0A0852713B3ACEE0099B651 /* wgetopt.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = wgetopt.h; sourceTree = "<group>"; };
 		D0A0852813B3ACEE0099B651 /* wildcard.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = wildcard.h; sourceTree = "<group>"; };
 		D0A0852913B3ACEE0099B651 /* wutil.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = wutil.h; sourceTree = "<group>"; };
-		D0A0852A13B3ACEE0099B651 /* xdgmime.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = xdgmime.h; sourceTree = "<group>"; };
-		D0A0852B13B3ACEE0099B651 /* xdgmimealias.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = xdgmimealias.h; sourceTree = "<group>"; };
-		D0A0852C13B3ACEE0099B651 /* xdgmimeglob.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = xdgmimeglob.h; sourceTree = "<group>"; };
-		D0A0852D13B3ACEE0099B651 /* xdgmimeint.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = xdgmimeint.h; sourceTree = "<group>"; };
-		D0A0852E13B3ACEE0099B651 /* xdgmimemagic.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = xdgmimemagic.h; sourceTree = "<group>"; };
-		D0A0852F13B3ACEE0099B651 /* xdgmimeparent.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = xdgmimeparent.h; sourceTree = "<group>"; };
 		D0A0853013B3ACEE0099B651 /* builtin_commandline.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = builtin_commandline.cpp; sourceTree = "<group>"; };
 		D0A0853113B3ACEE0099B651 /* builtin_complete.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = builtin_complete.cpp; sourceTree = "<group>"; };
 		D0A0853213B3ACEE0099B651 /* builtin_jobs.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = builtin_jobs.cpp; sourceTree = "<group>"; };
@@ -459,7 +453,6 @@
 		D0A0854D13B3ACEE0099B651 /* iothread.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = iothread.cpp; sourceTree = "<group>"; };
 		D0A0854E13B3ACEE0099B651 /* key_reader.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = key_reader.cpp; sourceTree = "<group>"; };
 		D0A0854F13B3ACEE0099B651 /* kill.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = kill.cpp; sourceTree = "<group>"; };
-		D0A0855013B3ACEE0099B651 /* mimedb.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = mimedb.cpp; sourceTree = "<group>"; };
 		D0A0855113B3ACEE0099B651 /* output.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = output.cpp; sourceTree = "<group>"; };
 		D0A0855213B3ACEE0099B651 /* parse_util.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = parse_util.cpp; sourceTree = "<group>"; };
 		D0A0855313B3ACEE0099B651 /* parser_keywords.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = parser_keywords.cpp; sourceTree = "<group>"; };
@@ -476,12 +469,6 @@
 		D0A0855F13B3ACEE0099B651 /* wgetopt.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = wgetopt.cpp; sourceTree = "<group>"; };
 		D0A0856013B3ACEE0099B651 /* wildcard.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = wildcard.cpp; sourceTree = "<group>"; };
 		D0A0856113B3ACEE0099B651 /* wutil.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = wutil.cpp; sourceTree = "<group>"; };
-		D0A0856213B3ACEE0099B651 /* xdgmime.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = xdgmime.cpp; sourceTree = "<group>"; };
-		D0A0856313B3ACEE0099B651 /* xdgmimealias.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = xdgmimealias.cpp; sourceTree = "<group>"; };
-		D0A0856413B3ACEE0099B651 /* xdgmimeglob.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = xdgmimeglob.cpp; sourceTree = "<group>"; };
-		D0A0856513B3ACEE0099B651 /* xdgmimeint.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = xdgmimeint.cpp; sourceTree = "<group>"; };
-		D0A0856613B3ACEE0099B651 /* xdgmimemagic.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = xdgmimemagic.cpp; sourceTree = "<group>"; };
-		D0A0856713B3ACEE0099B651 /* xdgmimeparent.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = xdgmimeparent.cpp; sourceTree = "<group>"; };
 		D0A564D2168CF34A00AF6161 /* doc_src */ = {isa = PBXFileReference; lastKnownFileType = folder; path = doc_src; sourceTree = "<group>"; };
 		D0A564F1168D0BAB00AF6161 /* man */ = {isa = PBXFileReference; lastKnownFileType = text; path = man; sourceTree = BUILT_PRODUCTS_DIR; };
 		D0A564F2168D1F2000AF6161 /* build_documentation.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; name = build_documentation.sh; path = build_tools/build_documentation.sh; sourceTree = "<group>"; };
@@ -498,7 +485,7 @@
 		D0C9A729197444E40006BE78 /* docopt_fish.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = docopt_fish.cpp; sourceTree = "<group>"; };
 		D0C9A72A197444E40006BE78 /* docopt_fish.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = docopt_fish.h; sourceTree = "<group>"; };
 		D0C9A72C19745B8E0006BE78 /* docopt_registration.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = docopt_registration.cpp; sourceTree = "<group>"; };
-		D0C9A72D19745B8E0006BE78 /* docopt_registration.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = docopt_registration.h; sourceTree = SOURCE_ROOT; };
+		D0C9A72D19745B8E0006BE78 /* docopt_registration.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = docopt_registration.h; path = src/docopt_registration.h; sourceTree = SOURCE_ROOT; };
 		D0CA63F316FC275F00093BD4 /* builtin_printf.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = builtin_printf.cpp; sourceTree = "<group>"; };
 		D0CBD580159EE48F0024809C /* config.fish */ = {isa = PBXFileReference; lastKnownFileType = text; name = config.fish; path = share/config.fish; sourceTree = "<group>"; };
 		D0CBD583159EEE010024809C /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
@@ -513,7 +500,6 @@
 		D0F3373A1506DE3C00ECEFC0 /* builtin_test.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = builtin_test.cpp; sourceTree = "<group>"; };
 		D0F5B46319CFCDE80090665E /* wcstringutil.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = wcstringutil.cpp; sourceTree = "<group>"; };
 		D0F5B46419CFCDE80090665E /* wcstringutil.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = wcstringutil.h; sourceTree = "<group>"; };
-		D0F5E28415A7A32D00315DFF /* config.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = config.h; sourceTree = "<group>"; };
 		D0FE8EE6179CA8A5008C9F21 /* parse_productions.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = parse_productions.h; sourceTree = "<group>"; };
 		D0FE8EE7179FB75F008C9F21 /* parse_productions.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = parse_productions.cpp; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -581,7 +567,6 @@
 			isa = PBXGroup;
 			children = (
 				D0D02A91159845EF008E62BD /* Sources */,
-				D0F5E28115A7A32D00315DFF /* DerivedSources */,
 				D0D02AFC159871BF008E62BD /* Launcher */,
 				D0D02A8E15983D5F008E62BD /* Libraries */,
 				D0D02AAB15985C14008E62BD /* Resources */,
@@ -589,18 +574,6 @@
 				D08A328E17B4455100F3A533 /* fish_tests */,
 				D0D2693215983562005D9B9C /* Products */,
 			);
-			sourceTree = "<group>";
-		};
-		D0C9A728197444E40006BE78 /* docopt */ = {
-			isa = PBXGroup;
-			children = (
-				D007690B19899E4000CA4627 /* docopt_fish_grammar.h */,
-				D007690C19899E4400CA4627 /* docopt_fish_parse_tree.cpp */,
-				D007690E19899E4F00CA4627 /* docopt_fish_types.h */,
-				D0C9A72A197444E40006BE78 /* docopt_fish.h */,
-				D0C9A729197444E40006BE78 /* docopt_fish.cpp */,
-			);
-			path = docopt;
 			sourceTree = "<group>";
 		};
 		D0D02A8E15983D5F008E62BD /* Libraries */ = {
@@ -615,9 +588,14 @@
 		D0D02A91159845EF008E62BD /* Sources */ = {
 			isa = PBXGroup;
 			children = (
-				D0C9A728197444E40006BE78 /* docopt */,
+				D007690C19899E4400CA4627 /* docopt_fish_parse_tree.cpp */,
+				D007690E19899E4F00CA4627 /* docopt_fish_types.h */,
+				D0C9A72A197444E40006BE78 /* docopt_fish.h */,
+				D0C9A729197444E40006BE78 /* docopt_fish.cpp */,
+				D007690B19899E4000CA4627 /* docopt_fish_grammar.h */,
 				D0C9A72D19745B8E0006BE78 /* docopt_registration.h */,
 				D0C9A72C19745B8E0006BE78 /* docopt_registration.cpp */,
+				4E142D731B56B5D7008783C8 /* config.h */,
 				D0C6FCCB14CFA4B7004CE8AD /* autoload.h */,
 				D0C6FCC914CFA4B0004CE8AD /* autoload.cpp */,
 				D0A0850313B3ACEE0099B651 /* builtin.h */,
@@ -636,7 +614,6 @@
 				D0A0853613B3ACEE0099B651 /* common.cpp */,
 				D0A0850513B3ACEE0099B651 /* complete.h */,
 				D0A0853713B3ACEE0099B651 /* complete.cpp */,
-				D0A0850613B3ACEE0099B651 /* config.h */,
 				D0A0850713B3ACEE0099B651 /* env_universal_common.h */,
 				D0A0853813B3ACEE0099B651 /* env_universal_common.cpp */,
 				D0A0850913B3ACEE0099B651 /* env.h */,
@@ -680,7 +657,6 @@
 				D0A0854F13B3ACEE0099B651 /* kill.cpp */,
 				D0A0854E13B3ACEE0099B651 /* key_reader.cpp */,
 				D03EE83814DF88B200FC7150 /* lru.h */,
-				D0A0855013B3ACEE0099B651 /* mimedb.cpp */,
 				D0A0851A13B3ACEE0099B651 /* output.h */,
 				D0A0855113B3ACEE0099B651 /* output.cpp */,
 				D032388A1849D1980032CF2C /* pager.h */,
@@ -721,20 +697,9 @@
 				D0A0856013B3ACEE0099B651 /* wildcard.cpp */,
 				D0A0852913B3ACEE0099B651 /* wutil.h */,
 				D0A0856113B3ACEE0099B651 /* wutil.cpp */,
-				D0A0852A13B3ACEE0099B651 /* xdgmime.h */,
-				D0A0856213B3ACEE0099B651 /* xdgmime.cpp */,
-				D0A0852B13B3ACEE0099B651 /* xdgmimealias.h */,
-				D0A0856313B3ACEE0099B651 /* xdgmimealias.cpp */,
-				D0A0852C13B3ACEE0099B651 /* xdgmimeglob.h */,
-				D0A0856413B3ACEE0099B651 /* xdgmimeglob.cpp */,
-				D0A0852D13B3ACEE0099B651 /* xdgmimeint.h */,
-				D0A0856513B3ACEE0099B651 /* xdgmimeint.cpp */,
-				D0A0852E13B3ACEE0099B651 /* xdgmimemagic.h */,
-				D0A0856613B3ACEE0099B651 /* xdgmimemagic.cpp */,
-				D0A0852F13B3ACEE0099B651 /* xdgmimeparent.h */,
-				D0A0856713B3ACEE0099B651 /* xdgmimeparent.cpp */,
 			);
 			name = Sources;
+			path = src;
 			sourceTree = "<group>";
 		};
 		D0D02AAB15985C14008E62BD /* Resources */ = {
@@ -776,14 +741,6 @@
 			);
 			name = Products;
 			sourceTree = "<group>";
-		};
-		D0F5E28115A7A32D00315DFF /* DerivedSources */ = {
-			isa = PBXGroup;
-			children = (
-				D0F5E28415A7A32D00315DFF /* config.h */,
-			);
-			name = DerivedSources;
-			sourceTree = DERIVED_FILE_DIR;
 		};
 /* End PBXGroup section */
 
@@ -877,7 +834,7 @@
 		D0A084F213B3AC130099B651 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastUpgradeCheck = 0630;
+				LastUpgradeCheck = 0640;
 			};
 			buildConfigurationList = D0A084F513B3AC130099B651 /* Build configuration list for PBXProject "fish" */;
 			compatibilityVersion = "Xcode 3.2";
