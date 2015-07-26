@@ -90,6 +90,7 @@ static int builtin_set_color(parser_t &parser, wchar_t **argv)
     if (! parse_argv_or_show_help(parser, argv, &args, &status))
     {
         return status;
+
     }
     
     if (args.has(L"--print_colors"))
@@ -111,7 +112,7 @@ static int builtin_set_color(parser_t &parser, wchar_t **argv)
         rgb_color_t fg = rgb_color_t(fgcolor_strs.at(i));
         if (fg.is_none() || fg.is_ignore())
         {
-            append_format(stderr_buffer, _(L"%ls: Unknown color '%ls'\n"), argv[0], argv[woptind]);
+            append_format(stderr_buffer, _(L"%ls: Unknown color '%ls'\n"), argv[0], fgcolor_strs.at(i).c_str());
             return STATUS_BUILTIN_ERROR;
         }
         fgcolors.push_back(fg);
