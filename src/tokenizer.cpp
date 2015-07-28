@@ -24,7 +24,7 @@ segments.
 #include "common.h"
 
 /* Wow what a hack */
-#define TOK_CALL_ERROR(t, e, x) do { tok_call_error((t), (e), (t)->squash_errors ? L"" : (x)); } while (0)
+#define TOK_CALL_ERROR(t, e, x) do { (t)->call_error((e), (t)->squash_errors ? L"" : (x)); } while (0)
 
 /**
    Error string for unexpected end of string
@@ -53,50 +53,18 @@ segments.
 #define PIPE_ERROR _( L"Cannot use stdin (fd 0) as pipe output" )
 
 /**
-   Characters that separate tokens. They are ordered by frequency of occurrence to increase parsing speed.
-*/
-#define SEP L" \n|\t;#\r<>^&"
-
-/**
-   Descriptions of all tokenizer errors
-*/
-static const wchar_t *tok_desc[] =
-{
-    N_(L"Tokenizer not yet initialized"),
-    N_(L"Tokenizer error"),
-    N_(L"String"),
-    N_(L"Pipe"),
-    N_(L"End of command"),
-    N_(L"Redirect output to file"),
-    N_(L"Append output to file"),
-    N_(L"Redirect input to file"),
-    N_(L"Redirect to file descriptor"),
-    N_(L"Redirect output to file if file does not exist"),
-    N_(L"Run job in background"),
-    N_(L"Comment")
-};
-
-
-
-/**
    Set the latest tokens string to be the specified error message
 */
-static void tok_call_error(tokenizer_t *tok, int error_type, const wchar_t *error_message)
+void tokenizer_t::call_error(enum tokenizer_error error_type, const wchar_t *error_message)
 {
-    tok->last_type = TOK_ERROR;
-    tok->error = error_type;
-    tok->last_token = error_message;
+    this->last_type = TOK_ERROR;
+    this->error = error_type;
+    this->last_token = error_message;
 }
 
-int tok_get_error(tokenizer_t *tok)
+tokenizer_t::tokenizer_t(const wchar_t *b, tok_flags_t flags) : buff(b), orig_buff(b), last_type(TOK_NONE), last_pos(0), has_next(false), accept_unfinished(false), show_comments(false), show_blank_lines(false), error(TOK_ERROR_NONE), squash_errors(false), continue_line_after_comment(false)
 {
-    return tok->error;
-}
-
-
-tokenizer_t::tokenizer_t(const wchar_t *b, tok_flags_t flags) : buff(NULL), orig_buff(NULL), last_type(TOK_NONE), last_pos(0), has_next(false), accept_unfinished(false), show_comments(false), show_blank_lines(false), last_quote(0), error(0), squash_errors(false), cached_lineno_offset(0), cached_lineno_count(0), continue_line_after_comment(false)
-{
-    CHECK(b,);
+    assert(b != NULL);
 
     this->accept_unfinished = !!(flags & TOK_ACCEPT_UNFINISHED);
     this->show_comments = !!(flags & TOK_SHOW_COMMENTS);
@@ -104,37 +72,28 @@ tokenizer_t::tokenizer_t(const wchar_t *b, tok_flags_t flags) : buff(NULL), orig
     this->show_blank_lines = !!(flags & TOK_SHOW_BLANK_LINES);
 
     this->has_next = (*b != L'\0');
-    this->orig_buff = this->buff = b;
-    this->cached_lineno_offset = 0;
-    this->cached_lineno_count = 0;
-    tok_next(this);
+    this->tok_next();
 }
 
-enum token_type tok_last_type(tokenizer_t *tok)
+bool tokenizer_t::next(struct tok_t *result)
 {
-    CHECK(tok, TOK_ERROR);
-    CHECK(tok->buff, TOK_ERROR);
-
-    return tok->last_type;
-}
-
-const wchar_t *tok_last(tokenizer_t *tok)
-{
-    CHECK(tok, 0);
-
-    return tok->last_token.c_str();
-}
-
-int tok_has_next(tokenizer_t *tok)
-{
-    /*
-      Return 1 on broken tokenizer
-    */
-    CHECK(tok, 1);
-    CHECK(tok->buff, 1);
-
-    /*  fwprintf( stderr, L"has_next is %ls \n", tok->has_next?L"true":L"false" );*/
-    return   tok->has_next;
+    assert(result != NULL);
+    if (! this->has_next)
+    {
+        return false;
+    }
+    result->text = this->last_token;
+    result->type = this->last_type;
+    result->offset = last_pos;
+    result->error = this->last_type == TOK_ERROR ? this->error : TOK_ERROR_NONE;
+    assert(this->buff >= this->orig_buff);
+    
+    assert(this->buff >= this->orig_buff);
+    size_t current_pos = this->buff - this->orig_buff;
+    result->length = current_pos >= this->last_pos ? current_pos - this->last_pos : 0;
+    
+    this->tok_next();
+    return true;
 }
 
 /**
@@ -142,7 +101,7 @@ int tok_has_next(tokenizer_t *tok)
    Hash (#) starts a comment if it's the first character in a token; otherwise it is considered a string character.
    See #953.
 */
-bool tok_is_string_character(wchar_t c, bool is_first)
+static bool tok_is_string_character(wchar_t c, bool is_first)
 {
     switch (c)
     {
@@ -182,14 +141,14 @@ static int myal(wchar_t c)
 /**
    Read the next token as a string
 */
-static void read_string(tokenizer_t *tok)
+void tokenizer_t::read_string()
 {
     const wchar_t *start;
     long len;
     int do_loop=1;
     int paran_count=0;
 
-    start = tok->buff;
+    start = this->buff;
     bool is_first = true;
 
     enum tok_mode_t
@@ -202,27 +161,27 @@ static void read_string(tokenizer_t *tok)
 
     while (1)
     {
-        if (!myal(*tok->buff))
+        if (!myal(*this->buff))
         {
-            if (*tok->buff == L'\\')
+            if (*this->buff == L'\\')
             {
-                tok->buff++;
-                if (*tok->buff == L'\0')
+                this->buff++;
+                if (*this->buff == L'\0')
                 {
-                    if ((!tok->accept_unfinished))
+                    if ((!this->accept_unfinished))
                     {
-                        TOK_CALL_ERROR(tok, TOK_UNTERMINATED_ESCAPE, QUOTE_ERROR);
+                        TOK_CALL_ERROR(this, TOK_UNTERMINATED_ESCAPE, QUOTE_ERROR);
                         return;
                     }
                     else
                     {
                         /* Since we are about to increment tok->buff, decrement it first so the increment doesn't go past the end of the buffer. https://github.com/fish-shell/fish-shell/issues/389 */
-                        tok->buff--;
+                        this->buff--;
                         do_loop = 0;
                     }
                 }
 
-                tok->buff++;
+                this->buff++;
                 continue;
             }
 
@@ -230,7 +189,7 @@ static void read_string(tokenizer_t *tok)
             {
                 case mode_regular_text:
                 {
-                    switch (*tok->buff)
+                    switch (*this->buff)
                     {
                         case L'(':
                         {
@@ -241,7 +200,7 @@ static void read_string(tokenizer_t *tok)
 
                         case L'[':
                         {
-                            if (tok->buff != start)
+                            if (this->buff != start)
                                 mode = mode_array_brackets;
                             break;
                         }
@@ -250,19 +209,18 @@ static void read_string(tokenizer_t *tok)
                         case L'"':
                         {
 
-                            const wchar_t *end = quote_end(tok->buff);
-                            tok->last_quote = *tok->buff;
+                            const wchar_t *end = quote_end(this->buff);
                             if (end)
                             {
-                                tok->buff=(wchar_t *)end;
+                                this->buff=end;
                             }
                             else
                             {
-                                tok->buff += wcslen(tok->buff);
+                                this->buff += wcslen(this->buff);
 
-                                if (! tok->accept_unfinished)
+                                if (! this->accept_unfinished)
                                 {
-                                    TOK_CALL_ERROR(tok, TOK_UNTERMINATED_QUOTE, QUOTE_ERROR);
+                                    TOK_CALL_ERROR(this, TOK_UNTERMINATED_QUOTE, QUOTE_ERROR);
                                     return;
                                 }
                                 do_loop = 0;
@@ -273,7 +231,7 @@ static void read_string(tokenizer_t *tok)
 
                         default:
                         {
-                            if (! tok_is_string_character(*(tok->buff), is_first))
+                            if (! tok_is_string_character(*(this->buff), is_first))
                             {
                                 do_loop=0;
                             }
@@ -284,22 +242,22 @@ static void read_string(tokenizer_t *tok)
 
                 case mode_array_brackets_and_subshell:
                 case mode_subshell:
-                    switch (*tok->buff)
+                    switch (*this->buff)
                     {
                         case L'\'':
                         case L'\"':
                         {
-                            const wchar_t *end = quote_end(tok->buff);
+                            const wchar_t *end = quote_end(this->buff);
                             if (end)
                             {
-                                tok->buff=(wchar_t *)end;
+                                this->buff = end;
                             }
                             else
                             {
-                                tok->buff += wcslen(tok->buff);
-                                if ((!tok->accept_unfinished))
+                                this->buff += wcslen(this->buff);
+                                if ((!this->accept_unfinished))
                                 {
-                                    TOK_CALL_ERROR(tok, TOK_UNTERMINATED_QUOTE, QUOTE_ERROR);
+                                    TOK_CALL_ERROR(this, TOK_UNTERMINATED_QUOTE, QUOTE_ERROR);
                                     return;
                                 }
                                 do_loop = 0;
@@ -325,7 +283,7 @@ static void read_string(tokenizer_t *tok)
                     break;
 
                 case mode_array_brackets:
-                    switch (*tok->buff)
+                    switch (*this->buff)
                     {
                         case L'(':
                             paran_count=1;
@@ -348,20 +306,20 @@ static void read_string(tokenizer_t *tok)
         if (!do_loop)
             break;
 
-        tok->buff++;
+        this->buff++;
         is_first = false;
     }
 
-    if ((!tok->accept_unfinished) && (mode != mode_regular_text))
+    if ((!this->accept_unfinished) && (mode != mode_regular_text))
     {
         switch (mode)
         {
             case mode_subshell:
-                TOK_CALL_ERROR(tok, TOK_UNTERMINATED_SUBSHELL, PARAN_ERROR);
+                TOK_CALL_ERROR(this, TOK_UNTERMINATED_SUBSHELL, PARAN_ERROR);
                 break;
             case mode_array_brackets:
             case mode_array_brackets_and_subshell:
-                TOK_CALL_ERROR(tok, TOK_UNTERMINATED_SUBSHELL, SQUARE_BRACKET_ERROR); // TOK_UNTERMINATED_SUBSHELL is a lie but nobody actually looks at it
+                TOK_CALL_ERROR(this, TOK_UNTERMINATED_SUBSHELL, SQUARE_BRACKET_ERROR); // TOK_UNTERMINATED_SUBSHELL is a lie but nobody actually looks at it
                 break;
             default:
                 assert(0 && "Unexpected mode in read_string");
@@ -371,27 +329,24 @@ static void read_string(tokenizer_t *tok)
     }
 
 
-    len = tok->buff - start;
+    len = this->buff - start;
 
-    tok->last_token.assign(start, len);
-    tok->last_type = TOK_STRING;
+    this->last_token.assign(start, len);
+    this->last_type = TOK_STRING;
 }
 
 /**
    Read the next token as a comment.
 */
-static void read_comment(tokenizer_t *tok)
+void tokenizer_t::read_comment()
 {
-    const wchar_t *start;
+    const wchar_t *start = this->buff;
+    while (*(this->buff)!= L'\n' && *(this->buff)!= L'\0')
+        this->buff++;
 
-    start = tok->buff;
-    while (*(tok->buff)!= L'\n' && *(tok->buff)!= L'\0')
-        tok->buff++;
-
-
-    size_t len = tok->buff - start;
-    tok->last_token.assign(start, len);
-    tok->last_type = TOK_COMMENT;
+    size_t len = this->buff - start;
+    this->last_token.assign(start, len);
+    this->last_type = TOK_COMMENT;
 }
 
 
@@ -553,45 +508,31 @@ static bool my_iswspace(wchar_t c)
     return c != L'\n' && iswspace(c);
 }
 
-
-const wchar_t *tok_get_desc(int type)
+void tokenizer_t::tok_next()
 {
-    if (type < 0 || (size_t)type >= (sizeof tok_desc / sizeof *tok_desc))
+    if (this->last_type == TOK_ERROR)
     {
-        return _(L"Invalid token type");
-    }
-    return _(tok_desc[type]);
-}
-
-void tok_next(tokenizer_t *tok)
-{
-
-    CHECK(tok,);
-    CHECK(tok->buff,);
-
-    if (tok_last_type(tok) == TOK_ERROR)
-    {
-        tok->has_next=false;
+        this->has_next=false;
         return;
     }
 
-    if (!tok->has_next)
+    if (!this->has_next)
     {
         /*    wprintf( L"EOL\n" );*/
-        tok->last_type = TOK_END;
+        this->last_type = TOK_END;
         return;
     }
 
     while (1)
     {
-        if (tok->buff[0] == L'\\' && tok->buff[1] == L'\n')
+        if (this->buff[0] == L'\\' && this->buff[1] == L'\n')
         {
-            tok->buff += 2;
-            tok->continue_line_after_comment = true;
+            this->buff += 2;
+            this->continue_line_after_comment = true;
         }
-        else if (my_iswspace(tok->buff[0]))
+        else if (my_iswspace(this->buff[0]))
         {
-            tok->buff++;
+            this->buff++;
         }
         else
         {
@@ -600,68 +541,68 @@ void tok_next(tokenizer_t *tok)
     }
 
 
-    while (*tok->buff == L'#')
+    while (*this->buff == L'#')
     {
-        if (tok->show_comments)
+        if (this->show_comments)
         {
-            tok->last_pos = tok->buff - tok->orig_buff;
-            read_comment(tok);
+            this->last_pos = this->buff - this->orig_buff;
+            this->read_comment();
 
-            if (tok->buff[0] == L'\n' && tok->continue_line_after_comment)
-                tok->buff++;
+            if (this->buff[0] == L'\n' && this->continue_line_after_comment)
+                this->buff++;
 
             return;
         }
         else
         {
-            while (*(tok->buff)!= L'\n' && *(tok->buff)!= L'\0')
-                tok->buff++;
+            while (*(this->buff)!= L'\n' && *(this->buff)!= L'\0')
+                this->buff++;
 
-            if (tok->buff[0] == L'\n' && tok->continue_line_after_comment)
-                tok->buff++;
+            if (this->buff[0] == L'\n' && this->continue_line_after_comment)
+                this->buff++;
         }
 
-        while (my_iswspace(*(tok->buff))) {
-            tok->buff++;
+        while (my_iswspace(*(this->buff))) {
+            this->buff++;
         }
     }
 
-    tok->continue_line_after_comment = false;
+    this->continue_line_after_comment = false;
 
-    tok->last_pos = tok->buff - tok->orig_buff;
+    this->last_pos = this->buff - this->orig_buff;
 
-    switch (*tok->buff)
+    switch (*this->buff)
     {
         case L'\0':
-            tok->last_type = TOK_END;
+            this->last_type = TOK_END;
             /*fwprintf( stderr, L"End of string\n" );*/
-            tok->has_next = false;
+            this->has_next = false;
             break;
         case 13: // carriage return
         case L'\n':
         case L';':
-            tok->last_type = TOK_END;
-            tok->buff++;
+            this->last_type = TOK_END;
+            this->buff++;
             // Hack: when we get a newline, swallow as many as we can
             // This compresses multiple subsequent newlines into a single one
-            if (! tok->show_blank_lines)
+            if (! this->show_blank_lines)
             {
-                while (*tok->buff == L'\n' || *tok->buff == 13 /* CR */ || *tok->buff == ' ' || *tok->buff == '\t')
+                while (*this->buff == L'\n' || *this->buff == 13 /* CR */ || *this->buff == ' ' || *this->buff == '\t')
                 {
-                    tok->buff++;
+                    this->buff++;
                 }
             }
-            tok->last_token.clear();
+            this->last_token.clear();
             break;
         case L'&':
-            tok->last_type = TOK_BACKGROUND;
-            tok->buff++;
+            this->last_type = TOK_BACKGROUND;
+            this->buff++;
             break;
 
         case L'|':
-            tok->last_token = L"1";
-            tok->last_type = TOK_PIPE;
-            tok->buff++;
+            this->last_token = L"1";
+            this->last_type = TOK_PIPE;
+            this->buff++;
             break;
 
         case L'>':
@@ -671,16 +612,16 @@ void tok_next(tokenizer_t *tok)
             /* There's some duplication with the code in the default case below. The key difference here is that we must never parse these as a string; a failed redirection is an error! */
             enum token_type mode = TOK_NONE;
             int fd = -1;
-            size_t consumed = read_redirection_or_fd_pipe(tok->buff, &mode, &fd);
+            size_t consumed = read_redirection_or_fd_pipe(this->buff, &mode, &fd);
             if (consumed == 0 || fd < 0)
             {
-                TOK_CALL_ERROR(tok, TOK_OTHER, REDIRECT_ERROR);
+                TOK_CALL_ERROR(this, TOK_OTHER, REDIRECT_ERROR);
             }
             else
             {
-                tok->buff += consumed;
-                tok->last_type = mode;
-                tok->last_token = to_string(fd);
+                this->buff += consumed;
+                this->last_type = mode;
+                this->last_token = to_string(fd);
             }
         }
         break;
@@ -691,78 +632,44 @@ void tok_next(tokenizer_t *tok)
             size_t consumed = 0;
             enum token_type mode = TOK_NONE;
             int fd = -1;
-            if (iswdigit(*tok->buff))
-                consumed = read_redirection_or_fd_pipe(tok->buff, &mode, &fd);
+            if (iswdigit(*this->buff))
+                consumed = read_redirection_or_fd_pipe(this->buff, &mode, &fd);
 
             if (consumed > 0)
             {
                 /* It looks like a redirection or a pipe. But we don't support piping fd 0. Note that fd 0 may be -1, indicating overflow; but we don't treat that as a tokenizer error. */
                 if (mode == TOK_PIPE && fd == 0)
                 {
-                    TOK_CALL_ERROR(tok, TOK_OTHER, PIPE_ERROR);
+                    TOK_CALL_ERROR(this, TOK_OTHER, PIPE_ERROR);
                 }
                 else
                 {
-                    tok->buff += consumed;
-                    tok->last_type = mode;
-                    tok->last_token = to_string(fd);
+                    this->buff += consumed;
+                    this->last_type = mode;
+                    this->last_token = to_string(fd);
                 }
             }
             else
             {
                 /* Not a redirection or pipe, so just a string */
-                read_string(tok);
+                this->read_string();
             }
         }
         break;
-
     }
 
 }
 
-wcstring tok_first(const wchar_t *str)
+wcstring tok_first(const wcstring &str)
 {
     wcstring result;
-    if (str)
+    tokenizer_t t(str.c_str(), TOK_SQUASH_ERRORS);
+    tok_t token;
+    if (t.next(&token) && token.type == TOK_STRING)
     {
-        tokenizer_t t(str, TOK_SQUASH_ERRORS);
-        switch (tok_last_type(&t))
-        {
-            case TOK_STRING:
-            {
-                const wchar_t *tmp = tok_last(&t);
-                if (tmp != NULL)
-                    result = tmp;
-                break;
-            }
-            default:
-                break;
-        }
+        result.swap(token.text);
     }
     return result;
-}
-
-int tok_get_pos(const tokenizer_t *tok)
-{
-    CHECK(tok, 0);
-    return (int)tok->last_pos;
-}
-
-size_t tok_get_extent(const tokenizer_t *tok)
-{
-    CHECK(tok, 0);
-    size_t current_pos = tok->buff - tok->orig_buff;
-    return current_pos > tok->last_pos ? current_pos - tok->last_pos : 0;
-}
-
-
-void tok_set_pos(tokenizer_t *tok, int pos)
-{
-    CHECK(tok,);
-
-    tok->buff = tok->orig_buff + pos;
-    tok->has_next = true;
-    tok_next(tok);
 }
 
 bool move_word_state_machine_t::consume_char_punctuation(wchar_t c)

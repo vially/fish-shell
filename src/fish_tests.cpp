@@ -436,57 +436,40 @@ static void test_convert_nulls(void)
 */
 static void test_tok()
 {
-
     say(L"Testing tokenizer");
-
-
-    say(L"Testing invalid input");
-    tokenizer_t t(NULL, 0);
-
-    if (tok_last_type(&t) != TOK_ERROR)
-    {
-        err(L"Invalid input to tokenizer was undetected");
-    }
-
-    say(L"Testing use of broken tokenizer");
-    if (!tok_has_next(&t))
-    {
-        err(L"tok_has_next() should return 1 once on broken tokenizer");
-    }
-
-    tok_next(&t);
-    if (tok_last_type(&t) != TOK_ERROR)
-    {
-        err(L"Invalid input to tokenizer was undetected");
-    }
-
-    /*
-      This should crash if there is a bug. No reliable way to detect otherwise.
-    */
-    say(L"Test destruction of broken tokenizer");
     {
 
         const wchar_t *str = L"string <redirection  2>&1 'nested \"quoted\" '(string containing subshells ){and,brackets}$as[$well (as variable arrays)] not_a_redirect^ ^ ^^is_a_redirect Compress_Newlines\n  \n\t\n   \nInto_Just_One";
         const int types[] =
         {
-            TOK_STRING, TOK_REDIRECT_IN, TOK_STRING, TOK_REDIRECT_FD, TOK_STRING, TOK_STRING, TOK_STRING, TOK_REDIRECT_OUT, TOK_REDIRECT_APPEND, TOK_STRING, TOK_STRING, TOK_END, TOK_STRING, TOK_END
+            TOK_STRING, TOK_REDIRECT_IN, TOK_STRING, TOK_REDIRECT_FD, TOK_STRING, TOK_STRING, TOK_STRING, TOK_REDIRECT_OUT, TOK_REDIRECT_APPEND, TOK_STRING, TOK_STRING, TOK_END, TOK_STRING
         };
 
         say(L"Test correct tokenization");
 
         tokenizer_t t(str, 0);
-        for (size_t i=0; i < sizeof types / sizeof *types; i++, tok_next(&t))
+        tok_t token;
+        size_t i = 0;
+        while (t.next(&token))
         {
-            if (types[i] != tok_last_type(&t))
+            if (i > sizeof types / sizeof *types)
+            {
+                err(L"Too many tokens returned from tokenizer");
+                break;
+            }
+            if (types[i] != token.type)
             {
                 err(L"Tokenization error:");
-                wprintf(L"Token number %d of string \n'%ls'\n, expected token type %ls, got token '%ls' of type %ls\n",
+                wprintf(L"Token number %d of string \n'%ls'\n, got token type %ld\n",
                         i+1,
                         str,
-                        tok_get_desc(types[i]),
-                        tok_last(&t),
-                        tok_get_desc(tok_last_type(&t)));
+                        (long)token.type);
             }
+            i++;
+        }
+        if (i < sizeof types / sizeof *types)
+        {
+            err(L"Too few tokens returned from tokenizer");
         }
     }
 
@@ -757,7 +740,7 @@ static void test_parser()
 
     say(L"Testing eval_args");
     completion_list_t comps;
-    parser_t::principal_parser().expand_argument_list(L"alpha 'beta gamma' delta", comps);
+    parser_t::principal_parser().expand_argument_list(L"alpha 'beta gamma' delta", &comps);
     do_test(comps.size() == 3);
     do_test(comps.at(0).completion == L"alpha");
     do_test(comps.at(1).completion == L"beta gamma");
@@ -1362,7 +1345,7 @@ static bool expand_test(const wchar_t *in, expand_flags_t flags, ...)
     wchar_t *arg;
     parse_error_list_t errors;
 
-    if (expand_string(in, output, flags, &errors) == EXPAND_ERROR)
+    if (expand_string(in, &output, flags, &errors) == EXPAND_ERROR)
     {
         if (errors.empty())
         {
@@ -1601,7 +1584,7 @@ static void test_pager_navigation()
     completion_list_t completions;
     for (size_t i=0; i < 19; i++)
     {
-        append_completion(completions, L"abcdefghij");
+        append_completion(&completions, L"abcdefghij");
     }
 
     pager_t pager;
@@ -2055,7 +2038,11 @@ static void test_complete(void)
     
     /* File completions */
     char saved_wd[PATH_MAX + 1] = {};
-    getcwd(saved_wd, sizeof saved_wd);
+    if (!getcwd(saved_wd, sizeof saved_wd))
+    {
+        perror("getcwd");
+        exit(-1);
+    }
     if (system("mkdir -p '/tmp/complete_test/'")) err(L"mkdir failed");
     if (system("touch '/tmp/complete_test/testfile'")) err(L"touch failed");
     if (chdir("/tmp/complete_test/")) err(L"chdir failed");
@@ -2063,6 +2050,26 @@ static void test_complete(void)
     do_test(completions.size() == 1);
     do_test(completions.at(0).completion == L"stfile");
     completions.clear();
+    complete(L"something --abc=te", completions, COMPLETION_REQUEST_DEFAULT);
+    do_test(completions.size() == 1);
+    do_test(completions.at(0).completion == L"stfile");
+    completions.clear();
+    complete(L"something -abc=te", completions, COMPLETION_REQUEST_DEFAULT);
+    do_test(completions.size() == 1);
+    do_test(completions.at(0).completion == L"stfile");
+    completions.clear();
+    complete(L"something abc=te", completions, COMPLETION_REQUEST_DEFAULT);
+    do_test(completions.size() == 1);
+    do_test(completions.at(0).completion == L"stfile");
+    completions.clear();
+    complete(L"something abc=stfile", completions, COMPLETION_REQUEST_DEFAULT);
+    do_test(completions.size() == 0);
+    completions.clear();
+    complete(L"something abc=stfile", completions, COMPLETION_REQUEST_FUZZY_MATCH);
+    do_test(completions.size() == 1);
+    do_test(completions.at(0).completion == L"abc=testfile");
+    completions.clear();
+
     complete(L"cat /tmp/complete_test/te", completions, COMPLETION_REQUEST_DEFAULT);
     do_test(completions.size() == 1);
     do_test(completions.at(0).completion == L"stfile");
@@ -4009,7 +4016,11 @@ int main(int argc, char **argv)
     while (access("./tests/test.fish", F_OK) != 0)
     {
         char wd[PATH_MAX + 1] = {};
-        getcwd(wd, sizeof wd);
+        if (!getcwd(wd, sizeof wd))
+        {
+            perror("getcwd");
+            exit(-1);
+        }
         if (! strcmp(wd, "/"))
         {
             fprintf(stderr, "Unable to find 'tests' directory, which should contain file test.fish\n");

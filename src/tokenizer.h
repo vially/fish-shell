@@ -36,6 +36,7 @@ enum token_type
 */
 enum tokenizer_error
 {
+    TOK_ERROR_NONE,
     TOK_UNTERMINATED_QUOTE,
     TOK_UNTERMINATED_SUBSHELL,
     TOK_UNTERMINATED_ESCAPE,
@@ -67,11 +68,35 @@ enum tokenizer_error
 
 typedef unsigned int tok_flags_t;
 
+struct tok_t
+{
+    /* The text of the token, or an error message for type error */
+    wcstring text;
+    
+    /* The type of the token */
+    token_type type;
+    
+    /* If an error, this is the error code */
+    enum tokenizer_error error;
+    
+    /* Offset of the token */
+    size_t offset;
+    
+    /* Length of the token */
+    size_t length;
+    
+    tok_t() : type(TOK_NONE), error(TOK_ERROR_NONE), offset(-1), length(-1) {}
+};
+
 /**
    The tokenizer struct.
 */
-struct tokenizer_t
+class tokenizer_t
 {
+    /* No copying, etc. */
+    tokenizer_t(const tokenizer_t&);
+    void operator=(const tokenizer_t&);
+
     /** A pointer into the original string, showing where the next token begins */
     const wchar_t *buff;
     /** A copy of the original string */
@@ -92,20 +117,20 @@ struct tokenizer_t
     bool show_comments;
     /** Whether all blank lines are returned */
     bool show_blank_lines;
-    /** Type of last quote, can be either ' or ".*/
-    wchar_t last_quote;
     /** Last error */
-    int error;
+    tokenizer_error error;
     /* Whether we are squashing errors */
     bool squash_errors;
 
-    /* Cached line number information */
-    size_t cached_lineno_offset;
-    int cached_lineno_count;
-
     /* Whether to continue the previous line after the comment */
     bool continue_line_after_comment;
-
+    
+    void call_error(enum tokenizer_error error_type, const wchar_t *error_message);
+    void read_string();
+    void read_comment();
+    void tok_next();
+    
+public:
     /**
       Constructor for a tokenizer. b is the string that is to be
       tokenized. It is not copied, and should not be freed by the caller
@@ -118,35 +143,11 @@ struct tokenizer_t
 
     */
     tokenizer_t(const wchar_t *b, tok_flags_t flags);
+    
+    /** Returns the next token by reference. Returns true if we got one, false if we're at the end. */
+    bool next(struct tok_t *result);
 };
 
-/**
-  Jump to the next token.
-*/
-void tok_next(tokenizer_t *tok);
-
-/**
-  Returns the type of the last token. Must be one of the values in the token_type enum.
-*/
-enum token_type tok_last_type(tokenizer_t *tok);
-
-/**
-  Returns the last token string. The string should not be freed by the caller. This returns nonsense results for some token types, like TOK_END.
-*/
-const wchar_t *tok_last(tokenizer_t *tok);
-
-/**
-  Returns true as long as there are more tokens left
-*/
-int tok_has_next(tokenizer_t *tok);
-
-/**
-  Returns the position of the beginning of the current token in the original string
-*/
-int tok_get_pos(const tokenizer_t *tok);
-
-/** Returns the extent of the current token */
-size_t tok_get_extent(const tokenizer_t *tok);
 
 /**
    Returns only the first token from the specified string. This is a
@@ -155,30 +156,7 @@ size_t tok_get_extent(const tokenizer_t *tok);
 
    On failure, returns the empty string.
 */
-wcstring tok_first(const wchar_t *str);
-
-/**
-   Indicates whether a character can be part of a string, or is a string separator.
-   Separators include newline, tab, |, ^, >, <, etc.
-
-   is_first should indicate whether this is the first character in a potential string.
-*/
-bool tok_is_string_character(wchar_t c, bool is_first);
-
-/**
-   Move tokenizer position
-*/
-void tok_set_pos(tokenizer_t *tok, int pos);
-
-/**
-   Returns a string description of the specified token type
-*/
-const wchar_t *tok_get_desc(int type);
-
-/**
-   Get tokenizer error type. Should only be called if tok_last_tope returns TOK_ERROR.
-*/
-int tok_get_error(tokenizer_t *tok);
+wcstring tok_first(const wcstring &str);
 
 /* Helper function to determine redirection type from a string, or TOK_NONE if the redirection is invalid. Also returns the fd by reference. */
 enum token_type redirection_type_for_string(const wcstring &str, int *out_fd = NULL);
