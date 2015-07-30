@@ -5,30 +5,22 @@
 #include <string>
 #include <vector>
 #include <map>
-#include <memory>
 #include <stdint.h>
 
 namespace docopt_fish
-{
+OPEN_DOCOPT_IMPL
 
-using std::auto_ptr;
 using std::vector;
 
 /* Usage grammar:
  
- usage = <empty> |
-         WORD usage |
-         WORD alternation_list usage
+ usages = [usage]
  
- alternation_list = expression_list or_continuation
+ usage = WORD alternation_list
+
+ alternation_list = [expression_list] # logical ORs of values
  
- or_continuation = <empty> |
-                   VERT_BAR alternation_list
- 
- expression_list = expression opt_expression_list
- 
- opt_expression_list = <empty> |
-                       expression_list
+ expression_list = [expression] # concatenation
  
  expression = simple_clause opt_ellipsis |
               OPEN_PAREN alternation_list CLOSE_PAREN opt_ellipsis |
@@ -43,10 +35,9 @@ using std::vector;
  fixed_clause = WORD
  variable_clause = WORD
                  
- opt_ellipsis = <empty> |
- ELLIPSIS
+ opt_ellipsis = <empty> | ELLIPSIS
  
- options_shortcut = OPEN_SQUARE WORD CLOSE_SQUARE
+ options_shortcut = "[options]"
  
  */
 
@@ -56,90 +47,105 @@ using std::vector;
 
 struct alternation_list;
 struct expression_list_t;
-struct opt_expression_list_t;
 struct expression_t;
-struct or_continuation_t;
 struct simple_clause_t;
 struct opt_ellipsis_t;
 struct option_clause_t;
 struct fixed_clause_t;
 struct variable_clause_t;
 
-/* Base class of all intermediate states */
-struct base_t {
-    // Which production was used
-    uint8_t production;
+/* Our sort of auto_ptr ripoff. It has the property that copying the pointer copies the underlying object. */
+template<typename T>
+class deep_ptr {
+    T* val_;
+public:
     
-    // Range of tokens used
-    range_t token_range;
+    // We own our pointer
+    ~deep_ptr() { delete val_; }
     
-    // Constructors. The default production index is 0. The second constructor specifies a production.
-    base_t() : production(0){}
-    base_t(uint8_t p) : production(p) {}
+    // Getters
+    T* get() { return val_; }
+    const T* get() const { return val_; }
+    
+    T& operator*() { return *val_; }
+    const T& operator*() const { return *val_; }
+    
+    // Constructors
+    deep_ptr() : val_(NULL) {}
+    explicit deep_ptr(T* v) : val_(v) {}
+    deep_ptr(const deep_ptr &rhs) :val_(rhs.val_ ? new T(*rhs.val_) : NULL) {}
+
+    // We support assignment
+    void operator=(const deep_ptr<T> &rhs) {
+        if (this != &rhs) {
+            if (val_ && rhs.val_) {
+                // Use operator= to avoid new allocations
+                *val_ = *rhs.val_;
+            } else {
+                delete val_;
+                val_ = rhs.val_ ? new T(*rhs.val_) : NULL;
+            }
+        }
+    }
+    
+    void reset(T* v) {
+        if (val_ != v) {
+            delete val_;
+            val_ = v;
+        }
+    }
+    
+#if __cplusplus > 199711L
+    // Move semantics
+    deep_ptr(deep_ptr<T> &&rhs) : val_(rhs.val_) {
+        rhs.val_ = NULL;
+    }
+    
+    void operator=(deep_ptr<T> &&rhs) {
+        if (this != &rhs) {
+            delete val_;
+            val_ = rhs.val_;
+            rhs.val_ = NULL;
+        }
+    }
+#endif
 };
 
-struct expression_list_t : public base_t {
-    auto_ptr<expression_t> expression;
-    auto_ptr<opt_expression_list_t> opt_expression_list;
+struct expression_list_t {
+    vector<expression_t> expressions;
     
     // expression_list = expression opt_expression_list
-    expression_list_t(auto_ptr<expression_t> c1, auto_ptr<opt_expression_list_t> c2) : expression(c1), opt_expression_list(c2) {}
+    expression_list_t() {}
     std::string name() const { return "expression_list"; }
     
     template<typename T>
     void visit_children(T *v) const {
-        v->visit(expression);
-        v->visit(opt_expression_list);
+        for (size_t i=0; i < expressions.size(); i++) {
+            v->visit(expressions.at(i));
+        }
     }
     
     template<typename T>
     expression_list_t *parse(T *);
 };
 
-struct alternation_list_t : public base_t {
-    auto_ptr<expression_list_t> expression_list;
-    auto_ptr<or_continuation_t> or_continuation;
+struct alternation_list_t {
+    vector<expression_list_t> alternations;
     
-    alternation_list_t(auto_ptr<expression_list_t> el, auto_ptr<or_continuation_t> o) : expression_list(el), or_continuation(o) {}
     std::string name() const { return "alternation_list"; }
     
     template<typename T>
     void visit_children(T *v) const {
-        v->visit(expression_list);
-        v->visit(or_continuation);
+        for (size_t i=0; i < alternations.size(); i++) {
+            v->visit(alternations.at(i));
+        }
     }
 
 };
 
-struct opt_expression_list_t : public base_t {
-    auto_ptr<expression_list_t> expression_list;
-    
-    // opt_expression_list = empty
-    opt_expression_list_t() {}
-    
-    // opt_expression_list = expression_list
-    opt_expression_list_t(auto_ptr<expression_list_t> c) : base_t(1), expression_list(c) {}
-    std::string name() const { return "opt_expression_list"; }
-    
-    template<typename T>
-    void visit_children(T *v) const {
-        v->visit(expression_list);
-    }
-};
-
-struct usage_t : public base_t {
+struct usage_t {
     token_t prog_name;
-    auto_ptr<alternation_list_t> alternation_list;
-    auto_ptr<usage_t> next_usage;
-    
-    // usage = <empty>
-    usage_t() : base_t(0) {}
-
-    // usage = word usage
-    usage_t(const token_t &name, auto_ptr<usage_t> next) : base_t(1), prog_name(name), next_usage(next) {}
-    
-    // usage = word alternation_list usage
-    usage_t(token_t t, auto_ptr<alternation_list_t> c, auto_ptr<usage_t> next) : base_t(2), prog_name(t), alternation_list(c), next_usage(next) {}
+    alternation_list_t alternation_list;
     
     std::string name() const { return "usage"; }
     
@@ -147,35 +153,27 @@ struct usage_t : public base_t {
     void visit_children(T *v) const {
         v->visit(prog_name);
         v->visit(alternation_list);
-        v->visit(next_usage);
     }
 };
 
-struct or_continuation_t : public base_t {
-    token_t vertical_bar;
-    auto_ptr<alternation_list_t> alternation_list;
+struct usages_t {
+    vector<usage_t> usages;
     
-    // or_continuation = <empty>
-    or_continuation_t() {}
-    
-    // or_continuation =  VERT_BAR or_clause
-    or_continuation_t(token_t b, auto_ptr<alternation_list_t> al) : base_t(1), vertical_bar(b), alternation_list(al) {}
-    
-    std::string name() const { return "or_continuation"; }
+    std::string name() const { return "usages"; }
     
     template<typename T>
     void visit_children(T *v) const {
-        v->visit(vertical_bar);
-        v->visit(alternation_list);
+        for (size_t i=0; i < this->usages.size(); i++) {
+            v->visit(this->usages.at(i));
+        }
     }
 };
 
-struct opt_ellipsis_t : public base_t {
+struct opt_ellipsis_t {
+    bool present;
     token_t ellipsis;
 
-    // opt_ellipsis = <empty>
-    // opt_ellipsis = ELLIPSIS
-    opt_ellipsis_t(token_t t) : base_t(t.empty() ? 0 : 1), ellipsis(t) {}
+    opt_ellipsis_t() : present(false) {}
     
     std::string name() const { return "opt_ellipsis"; }
     template<typename T>
@@ -184,23 +182,21 @@ struct opt_ellipsis_t : public base_t {
     }
 };
 
-struct options_shortcut_t : public base_t {
+struct options_shortcut_t {
     // The options shortcut does not need to remember its token, since we never use it
-    options_shortcut_t() : base_t() {}
+    // It's always assuemd to be present
+    bool present;
+    options_shortcut_t() : present(false) {}
     
     std::string name() const { return "options_shortcut"; }
     template<typename T>
     void visit_children(T *v UNUSED) const {}
 };
 
-struct simple_clause_t : public base_t {
-    auto_ptr<option_clause_t> option;
-    auto_ptr<fixed_clause_t> fixed;
-    auto_ptr<variable_clause_t> variable;
-    
-    simple_clause_t(auto_ptr<option_clause_t> &o) : base_t(0), option(o) {}
-    simple_clause_t(auto_ptr<fixed_clause_t> &f) : base_t(1), fixed(f) {}
-    simple_clause_t(auto_ptr<variable_clause_t> &v) : base_t(2), variable(v) {}
+struct simple_clause_t {
+    deep_ptr<option_clause_t> option;
+    deep_ptr<fixed_clause_t> fixed;
+    deep_ptr<variable_clause_t> variable;
     
     std::string name() const { return "simple_clause"; }
     template<typename T>
@@ -209,35 +205,27 @@ struct simple_clause_t : public base_t {
         v->visit(fixed);
         v->visit(variable);
     }
-    
 };
 
-struct expression_t : public base_t {
+struct expression_t {
     // production 0
-    auto_ptr<simple_clause_t> simple_clause;
+    deep_ptr<simple_clause_t> simple_clause;
     
     // Collapsed for productions 1 and 2
     token_t open_token;
-    auto_ptr<alternation_list_t> alternation_list;
+    deep_ptr<alternation_list_t> alternation_list;
     token_t close_token;
     
     // Collapsed for all
-    auto_ptr<opt_ellipsis_t> opt_ellipsis;
+    opt_ellipsis_t opt_ellipsis;
     
-    auto_ptr<options_shortcut_t> options_shortcut;
+    // may or may not be present
+    options_shortcut_t options_shortcut;
     
-    //expression = simple_clause
-    expression_t(auto_ptr<simple_clause_t> c, auto_ptr<opt_ellipsis_t> e) : base_t(0), simple_clause(c), opt_ellipsis(e) {}
+    // Invariant: at most one of (simple_clause, alternation_list) may be set
+    uint8_t production;
     
-    //expression = OPEN_PAREN expression_list CLOSE_PAREN opt_ellipsis |
-    //expression = OPEN_SQUARE expression_list CLOSE_SQUARE opt_ellipsis
-    expression_t(token_t a, bool is_paren, auto_ptr<alternation_list_t> el, token_t b, auto_ptr<opt_ellipsis_t> e)
-    : base_t(is_paren ? 1  : 2), open_token(a), alternation_list(el), close_token(b), opt_ellipsis(e)
-    {}
-    
-    //expression = options_shortcut
-    expression_t(auto_ptr<options_shortcut_t> os) : base_t(3), options_shortcut(os)
-    {}
+    expression_t() : production(-1) {}
     
     std::string name() const { return "expression"; }
     template<typename T>
@@ -252,10 +240,9 @@ struct expression_t : public base_t {
 };
 
 // An option like '--track', optionally with a value
-struct option_clause_t : public base_t {
-    const token_t word;
-    const option_t option;
-    option_clause_t(const token_t &t, const option_t &o) : word(t), option(o) {}
+struct option_clause_t {
+    token_t word;
+    option_t option;
     std::string name() const { return "option"; }
     template<typename T>
     void visit_children(T *v) const {
@@ -264,9 +251,8 @@ struct option_clause_t : public base_t {
 };
 
 // Fixed like 'checkout'
-struct fixed_clause_t : public base_t {
-    const token_t word;
-    fixed_clause_t(const token_t &t) : word(t) {}
+struct fixed_clause_t {
+    token_t word;
     std::string name() const { return "fixed"; }
     template<typename T>
     void visit_children(T *v) const {
@@ -276,9 +262,9 @@ struct fixed_clause_t : public base_t {
 };
 
 // Variable like '<branch>'
-struct variable_clause_t : public base_t {
-    const token_t word;
-    variable_clause_t(const token_t &t) : word(t) {}
+struct variable_clause_t {
+    token_t word;
+    variable_clause_t() {}
     std::string name() const { return "variable"; }
     template<typename T>
     void visit_children(T *v) const {
@@ -286,10 +272,8 @@ struct variable_clause_t : public base_t {
     }
 };
 
-
-
 template<typename string_t>
-usage_t *parse_usage(const string_t &src, const range_t &src_range, const option_list_t &shortcut_options, vector<error_t<string_t> > *out_errors);
+usages_t *parse_usage(const string_t &src, const range_t &src_range, const option_list_t &shortcut_options, vector<error_t<string_t> > *out_errors);
 
 // Node visitor class, using CRTP. Child classes should override accept().
 template<typename T>
@@ -303,14 +287,20 @@ struct node_visitor_t {
         node.visit_children(derived_this);
     }
     
+    template<typename NODE_TYPE>
+    void visit_internal(const deep_ptr<NODE_TYPE> &node)
+    {
+        if (node.get()) {
+            this->visit_internal(*node);
+        }
+    }
+    
     
     /* Function called from overrides of visit_children. We invoke an override of accept(), and then recurse to children. */
     template<typename NODE_TYPE>
     void visit(const NODE_TYPE &t)
     {
-        if (t.get() != NULL) {
-            this->visit_internal(*t);
-        }
+        this->visit_internal(t);
     }
     
     /* Visit is called from node visit_children implementations. A token has no children. */
@@ -326,6 +316,7 @@ struct node_visitor_t {
 };
 
 
-};
+CLOSE_DOCOPT_IMPL
+
 
 #endif

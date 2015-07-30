@@ -9,22 +9,17 @@
 #include <numeric>
 #include <algorithm>
 #include <set>
+#include <vector>
 
 using std::vector;
 using std::string;
 using std::wstring;
 
-UNUSED
-static const wstring &widen(const wstring &t) {
-    return t;
-}
-
-UNUSED
-static wstring widen(const string &t) {
-    wstring result;
-    result.insert(result.begin(), t.begin(), t.end());
-    return result;
-}
+enum parse_result_t {
+    parsed_ok,
+    parsed_error,
+    parsed_done
+};
 
 namespace docopt_fish
 OPEN_DOCOPT_IMPL
@@ -35,9 +30,7 @@ OPEN_DOCOPT_IMPL
 
 struct alternation_list;
 struct expression_list_t;
-struct opt_expression_list_t;
 struct expression_t;
-struct or_continuation_t;
 struct simple_clause_t;
 struct opt_ellipsis_t;
 
@@ -74,16 +67,18 @@ struct parse_context_t {
 
     template<typename T>
     static range_t scan_while(const string_t &str, range_t *remaining, T func) {
-        range_t result(remaining->start, 0);
-        while (result.end() < remaining->end() && func(str.at(result.end()))) {
-            result.length += 1;
-            remaining->start += 1;
-            remaining->length -= 1;
+        size_t idx = remaining->start;
+        const size_t end = remaining->end();
+        assert(end <= str.size());
+        while (idx < end && func(str[idx])) {
+            idx++;
         }
+        range_t result(remaining->start, idx - remaining->start);
+        remaining->start = result.end();
+        remaining->length -= result.length;
         return result;
     }
-
-    
+        
      // Note unowned pointer reference. A parse context is stack allocated and transient.
     const string_t *source;
     const option_list_t *shortcut_options;
@@ -257,79 +252,76 @@ struct parse_context_t {
         remaining_range = saved_range;
         return tok;
     }
-
-    /* Helpers to parse when the productions are fixed. */
     
-    template<typename PARENT, typename REQ_CHILD, typename OPT_CHILD>
-    bool parse_required_then_optional(auto_ptr<PARENT> *result) {
-        auto_ptr<REQ_CHILD> child1;
-        if (! parse(&child1)) {
-            return false;
+    // Given a vector of T, try parsing and then appending a T
+    template<typename T>
+    inline parse_result_t try_parse_appending(std::vector<T> *vec) {
+        vec->resize(vec->size() + 1);
+        parse_result_t status = this->parse(&vec->back());
+        if (status != parsed_ok) {
+            vec->pop_back();
         }
-        if (child1.get() == NULL) {
-            return true;
-        }
-        
-        auto_ptr<OPT_CHILD> child2;
-        if (! parse(&child2)) {
-            return false;
-        }
-        result->reset(new PARENT(child1, child2));
-        return true;
-    }
-
-    template<typename PARENT, typename CHILD>
-    bool parse_1_disallowing_null(auto_ptr<PARENT> *result) {
-        bool success = false;
-        auto_ptr<CHILD> child;
-        if (parse(&child)) {
-            // This variant requires that successful parses return non-null
-            assert(child.get() != NULL);
-            result->reset(new PARENT(child));
-            success = true;
-        }
-        return success;
+        return status;
     }
     
-    // Like parse1, except if the child comes back NULL we provide NULL too
-    template<typename PARENT, typename CHILD>
-    bool parse_1_or_empty(auto_ptr<PARENT> *result) {
-        auto_ptr<CHILD> child;
-        if (! parse(&child)) {
-            return false;
-        }
-        if (child.get()) {
-            result->reset(new PARENT(child));
-        }
-        return true;
+    // Given a deep_ptr, try parsing it
+    template<typename T>
+    inline parse_result_t try_parse_auto(deep_ptr<T> *p) {
+        p->reset(new T());
+        return this->parse(p->get());
     }
     
     #pragma mark Parse functions
     
-    bool parse(auto_ptr<alternation_list_t> *result) {
-        return parse_required_then_optional<alternation_list_t, expression_list_t, or_continuation_t>(result);
-    }
-    
-    bool parse(auto_ptr<expression_list_t> *result)
-    {
-        return parse_required_then_optional<expression_list_t, expression_t, opt_expression_list_t>(result);
-    }
-    
-    bool parse(auto_ptr<opt_expression_list_t> *result)
-    {
-        // Only return if we are able to parse a non-null expression_list
-        auto_ptr<expression_list_t> child;
-        if (! parse(&child)) {
-            return false;
+    parse_result_t parse(alternation_list_t *result) {
+        parse_result_t status = parsed_ok;
+        bool first = true;
+        // We expect only one alternation, but need to reserve one more for try_parse_appending
+        result->alternations.reserve(2);
+        while (status == parsed_ok) {
+            // Scan a vert bar if we're not first
+            token_t bar;
+            if (! first && ! this->scan('|', &bar)) {
+                status = parsed_done;
+                break;
+            }
+            status = try_parse_appending(&result->alternations);
+            if (status == parsed_done) {
+                if (! first) {
+                    append_error(&this->errors, bar.range.start, error_trailing_vertical_bar, "Trailing vertical bar");
+                    status = parsed_error;
+                }
+                break;
+            }
+            first = false;
         }
-        if (child.get()) {
-            result->reset(new opt_expression_list_t(child));
+        if (status == parsed_done) {
+            /* We may get an empty alternation list if we are just the program name. In that case, ensure we have at least one. */
+            if (result->alternations.empty()) {
+                result->alternations.resize(1);
+            }
+            status = parsed_ok;
         }
-        return true;
+        return status;
     }
     
-    bool parse(auto_ptr<usage_t> *result, bool first)
-    {
+    parse_result_t parse(expression_list_t *result) {
+        result->expressions.reserve(6);
+        parse_result_t status = parsed_ok;
+        size_t count = -1;
+        while (status == parsed_ok) {
+            status = try_parse_appending(&result->expressions);
+            count++;
+        }
+        // Return OK if we got at least one thing
+        if (status == parsed_done && count > 0) {
+            status = parsed_ok;
+        }
+        return status;
+    }
+    
+    // Parse a usage_t
+    parse_result_t parse(usage_t *result) {
         // Suck up empty lines.
         while (scan('\n')) {
             continue;
@@ -339,202 +331,191 @@ struct parse_context_t {
         this->initial_indent = this->indent_for_current_line();
         
         consume_leading_whitespace();
-        if (this->is_at_end() && ! first) {
-            return true;
+        if (this->is_at_end()) {
+            return parsed_done;
         }
         
-        bool success = false;
-        token_t word;
-        if (! this->scan_word(&word)) {
+        if (! this->scan_word(&result->prog_name)) {
             append_error(&this->errors, this->remaining_range.start, error_missing_program_name, "Missing program name");
+            return parsed_error;
         } else {
-            auto_ptr<alternation_list_t> el;
-            bool parsed_el = parse(&el);
-            // Consume as many newlines as we can, and then try to generate the tail
-            while (scan('\n')) {
-                continue;
-            }
-            auto_ptr<usage_t> next;
-            if (parse(&next, false /* not initial */)) {
-                if (parsed_el) {
-                    result->reset(new usage_t(word, el, next));
-                } else {
-                    result->reset(new usage_t(word, next));
-                }
-                success = true;
-            }
+            return parse(&result->alternation_list);
         }
-        return success;
     }
-
-    bool parse(auto_ptr<or_continuation_t> *result) {
-        token_t bar;
-        if (this->scan('|', &bar)) {
-            auto_ptr<alternation_list_t> al;
-            if (parse(&al) && al.get()) {
-                result->reset(new or_continuation_t(bar, al));
+    
+    // Parse a usages_t
+    parse_result_t parse(usages_t *result) {
+        // Our usages are quite small, but copying them is expensive
+        result->usages.reserve(8);
+        parse_result_t status = parsed_ok;
+        while (status == parsed_ok) {
+            status = try_parse_appending(&result->usages);
+        }
+        if (status == parsed_done) {
+            if (result->usages.empty()) {
+                append_error(&this->errors, this->remaining_range.start, error_missing_program_name, "Missing program name");
+                status = parsed_error;
             } else {
-                append_error(&this->errors, bar.range.start, error_trailing_vertical_bar, "Extra vertical bar");
-                return false;
+                status = parsed_ok;
             }
         }
-        // result may be left as null if there's no bar
-        return true;
+        return status;
     }
 
-    bool parse(auto_ptr<opt_ellipsis_t> *result) {
-        token_t ellipsis;
-        if (this->scan("...", &ellipsis)) {
-            result->reset(new opt_ellipsis_t(ellipsis));
-        }
-        return true; // can't fail
+    // Parse ellipsis
+    parse_result_t parse(opt_ellipsis_t *result) {
+        result->present = this->scan("...", &result->ellipsis);
+        return parsed_ok; // can't fail
     }
     
-    bool parse(auto_ptr<options_shortcut_t> *result) {
-        result->reset(new options_shortcut_t());
-        return true; // can't fail
+    // "Parse" [options]
+    parse_result_t parse(options_shortcut_t *result) {
+        result->present = true;
+        return parsed_ok; // can't fail
     }
     
-    bool parse(auto_ptr<simple_clause_t> *result) {
+    // Parse a simple clause
+    parse_result_t parse(simple_clause_t *result) {
         token_t word = this->peek_word();
         if (word.range.empty()) {
             // Nothing remaining to parse
-            return true;
+            return parsed_done;
         }
         
         char_t c = this->source->at(word.range.start);
         if (c == '<') {
-            return parse_1_disallowing_null<simple_clause_t, variable_clause_t>(result);
+            return this->try_parse_auto(&result->variable);
         } else if (c == '-' && word.range.length > 1) {
             // A naked '-', is to be treated as a fixed value
-            return parse_1_disallowing_null<simple_clause_t, option_clause_t>(result);
+            return this->try_parse_auto(&result->option);
         } else {
-            return parse_1_disallowing_null<simple_clause_t, fixed_clause_t>(result);
+            return this->try_parse_auto(&result->fixed);
         }
     }
-    
-    bool parse(auto_ptr<option_clause_t> *result) {
+
+    // Parse options clause
+    parse_result_t parse(option_clause_t *result) {
         token_t word;
-        if (this->scan_word(&word)) {
-            /* Hack to support specifying parameter names inline.
-             
-             Consider usage like this:
-               "usage: prog [-m <msg>]"
-             
-            There's two ways we can interpret this:
-             1. An optional -m flag, followed by a positional parameter
-             2. An -m option whose value is <msg>
+        if (! this->scan_word(&word)) {
+            return parsed_done;
+        }
+        
+        // TODO: handle --
+        
+        /* Hack to support specifying parameter names inline.
+         
+         Consider usage like this:
+           "usage: prog [-m <msg>]"
+         
+        There's two ways we can interpret this:
+         1. An optional -m flag, followed by a positional parameter
+         2. An -m option whose value is <msg>
+        
+        The Python reference docopt resolves this ambiguity by looking at the Options: section. If it finds a declaration of -m with a variable, then <msg> is assumed to be the value (interpretation #2); otherwise it's a positional (interpretation #1).
+         
+        But requiring a required positional after a flag seems very unlikely, so in this version we always use interpretation #2. We do this by treating it as one token '-m <msg>'. Note this token contains a space.
+         
+         One exception is if a delimeter is found, e.g.:
+         
+         "usage: prog [-m=<foo> <msg>]"
+         
+         Now <foo> is the value of the option m, and <msg> is positional.
+         
+         The second exception is if the option is also found in the Options: section without a variable:
+         
+            usage: prog -m <msg>
+            options: -m
+        
+        Then we ignore the option.
+         
+        Also, if you really want interpretation #1, you can use parens:
+         
+           "usage: prog [-m (<msg>)]"
+        */
+        const string_t &src = *this->source;
+        range_t range = word.range;
+        // This second test is to avoid matching '--'
+        if (range.length > 1 && src.at(range.start) == '-' && ! (range.length == 2 && src.at(range.start + 1) == '-')) {
+            // It's an option
+            option_t opt_from_usage_section = option_t::parse_from_string(src, &range, &this->errors);
             
-            The Python reference docopt resolves this ambiguity by looking at the Options: section. If it finds a declaration of -m with a variable, then <msg> is assumed to be the value (interpretation #2); otherwise it's a positional (interpretation #1).
-             
-            But requiring a required positional after a flag seems very unlikely, so in this version we always use interpretation #2. We do this by treating it as one token '-m <msg>'. Note this token contains a space.
-             
-             One exception is if a delimeter is found, e.g.:
-             
-             "usage: prog [-m=<foo> <msg>]"
-             
-             Now <foo> is the value of the option m, and <msg> is positional.
-             
-             The second exception is if the option is also found in the Options: section without a variable:
-             
-                usage: prog -m <msg>
-                options: -m
-            
-            Then we ignore the option.
-             
-            Also, if you really want interpretation #1, you can use parens:
-             
-               "usage: prog [-m (<msg>)]"
-            */
-            const string_t &src = *this->source;
-            range_t range = word.range;
-            // This second test is to avoid matching '--'
-            if (range.length > 1 && src.at(range.start) == '-' && ! (range.length == 2 && src.at(range.start + 1) == '-')) {
-                // It's an option
-                option_t opt_from_usage_section = option_t::parse_from_string(src, &range, &this->errors);
-                
-                // See if we have a corresponding option in the options section
-                const option_t *opt_from_options_section = NULL;
-                for (size_t i=0; i < this->shortcut_options->size(); i++) {
-                    const option_t &test_op = this->shortcut_options->at(i);
-                    if (opt_from_usage_section.has_same_name(test_op, src)) {
-                        opt_from_options_section = &test_op;
-                        break;
-                    }
+            // See if we have a corresponding option in the options section
+            const option_t *opt_from_options_section = NULL;
+            for (size_t i=0; i < this->shortcut_options->size(); i++) {
+                const option_t &test_op = this->shortcut_options->at(i);
+                if (opt_from_usage_section.has_same_name(test_op, src)) {
+                    opt_from_options_section = &test_op;
+                    break;
                 }
-                
-                // We may have to parse a variable
-                if (opt_from_usage_section.name.length > 0 && opt_from_usage_section.separator == option_t::sep_space) {
-                    // Looks like an option without a separator. See if the next token is a variable
-                    range_t next = this->peek_word().range;
-                    if (next.length > 2 && src.at(next.start) == '<' && src.at(next.end() - 1) == '>') {
-                        // It's a variable. See if we have a presence in options.
-                        bool options_section_implies_no_value = (opt_from_options_section && opt_from_options_section->value.empty());
-                        if (! options_section_implies_no_value) {
-                            token_t variable;
-                            bool scanned = this->scan_word(&variable);
-                            assert(scanned); // Should always succeed, since we peeked at the word
-                            word.range.merge(variable.range);
-                            opt_from_usage_section.value = variable.range;
-                        }
-                    }
-                }
-                
-                // Use the option from the Options section in preference to the one from the Usage section, since the options one has more information like the corresponding long name and description
-                result->reset(new option_clause_t(word, opt_from_options_section ? *opt_from_options_section : opt_from_usage_section));
             }
+            
+            // We may have to parse a variable
+            if (opt_from_usage_section.name.length > 0 && opt_from_usage_section.separator == option_t::sep_space) {
+                // Looks like an option without a separator. See if the next token is a variable
+                range_t next = this->peek_word().range;
+                if (next.length > 2 && src.at(next.start) == '<' && src.at(next.end() - 1) == '>') {
+                    // It's a variable. See if we have a presence in options.
+                    bool options_section_implies_no_value = (opt_from_options_section && opt_from_options_section->value.empty());
+                    if (! options_section_implies_no_value) {
+                        token_t variable;
+                        bool scanned = this->scan_word(&variable);
+                        assert(scanned); // Should always succeed, since we peeked at the word
+                        word.range.merge(variable.range);
+                        opt_from_usage_section.value = variable.range;
+                    }
+                }
+            }
+            
+            // Use the option from the Options section in preference to the one from the Usage section, since the options one has more information like the corresponding long name and description
+            result->word = word;
+            result->option = opt_from_options_section ? *opt_from_options_section : opt_from_usage_section;
         }
-        return true;
+        return parsed_ok;
     }
     
-    bool parse(auto_ptr<fixed_clause_t> *result) {
-        token_t word;
-        if (this->scan_word(&word)) {
+    // Parse a fixed argument
+    parse_result_t parse(fixed_clause_t *result) {
+        if (this->scan_word(&result->word)) {
             // TODO: handle invalid commands like foo<bar>
-            result->reset(new fixed_clause_t(word));
+            return parsed_ok;
+        } else {
+            return parsed_done;
         }
-        return true;
     }
     
-    bool parse(auto_ptr<variable_clause_t> *result) {
-        token_t word;
-        if (this->scan_word(&word)) {
+    // Parse a variable argument
+    parse_result_t parse(variable_clause_t *result) {
+        if (this->scan_word(&result->word)) {
             // TODO: handle invalid variables like foo<bar>
-            result->reset(new variable_clause_t(word));
+            return parsed_ok;
+        } else {
+            return parsed_done;
         }
-        return true;
     }
 
     
-    bool parse(auto_ptr<expression_t> *result) {
+    // Parse a general expression
+    parse_result_t parse(expression_t *result) {
         if (this->is_at_end()) {
-            return true;
+            return parsed_done;
         }
         
-        bool success = true;
+        parse_result_t status; // should be set in every branch
         token_t token;
         // Note that options must come before trying to parse it as a list, because "[options]" itself looks like a list
         if (this->scan("[options]", &token)) {
-            auto_ptr<options_shortcut_t> shortcut;
-            if (! parse(&shortcut)) {
-                success = false;
-            } else {
-                result->reset(new expression_t(shortcut));
-            }
+            result->production = 3;
+            status = this->parse(&result->options_shortcut);
         } else if (this->scan('(', &token) || this->scan('[', &token)) {
-            auto_ptr<alternation_list_t> contents;
-            if (! parse(&contents)) {
-                success = false;
-            } else {
+            status = this->try_parse_auto(&result->alternation_list);
+            if (status != parsed_error) {
                 char_t c = this->source->at(token.range.start);
                 assert(c == char_t('(') || c == char_t('['));
                 bool is_paren = (c == char_t('('));
                 token_t close_token;
                 if (this->scan(char_t(is_paren ? ')' : ']'), &close_token)) {
-                    auto_ptr<opt_ellipsis_t> ellipsis;
-                    bool p = parse(&ellipsis);
-                    assert(p); // should never fail
-                    result->reset(new expression_t(token, is_paren, contents, close_token, ellipsis));
+                    result->production = is_paren ? 1 : 2;
+                    parse(&result->opt_ellipsis); // never fails
                 } else {
                     // No closing bracket or paren
                     if (is_paren) {
@@ -542,46 +523,50 @@ struct parse_context_t {
                     } else {
                         append_error(&this->errors, token.range.start, error_missing_close_bracket, "Missing ']' to match opening '['");
                     }
-                    success = false;
+                    status = parsed_error;
                 }
             }
         } else if (this->scan("...", &token)) {
-            // Indicates leading ellipsis
-            // TODO: generate error
-            success = false;
+            append_error(&this->errors, token.range.start, error_leading_ellipsis, "Ellipsis may only follow an expression");
+            status = parsed_error;
         } else if (this->peek("|")) {
             // End of an alternation list
+            status = parsed_done;
         } else {
-            success = parse_required_then_optional<expression_t, simple_clause_t, opt_ellipsis_t>(result);
+            // Simple clause
+            status = try_parse_auto(&result->simple_clause);
+            if (status != parsed_error) {
+                result->production = 0;
+                parse(&result->opt_ellipsis); // never fails
+            }
         }
-        
-        return success;
+        return status;
     }
 };
 
 template<typename string_t>
-usage_t *parse_usage(const string_t &src, const range_t &src_range, const option_list_t &shortcut_options, vector<error_t<string_t> > *out_errors)
+usages_t *parse_usage(const string_t &src, const range_t &src_range, const option_list_t &shortcut_options, vector<error_t<string_t> > *out_errors)
 {
     parse_context_t<string_t> ctx(src, src_range, shortcut_options);
-    auto_ptr<usage_t> result;
-    bool parsed = ctx.template parse(&result, true /* initial */);
+    usages_t *result = new usages_t();
+    parse_result_t status = ctx.template parse(result);
+    if (status == parsed_error) {
+        delete result;
+        result = NULL;
+    }
     
-    // If we get NULL back, it should return false
-    assert(! (result.get() == NULL && parsed));
-    // If we get NULL back, we should always have an error
-    assert(! (result.get() == NULL && ctx.errors.empty()));
-    
+    // Error statuses should have error messages
+    assert(! (status == parsed_error && ctx.errors.empty()));
     if (out_errors) {
         out_errors->insert(out_errors->end(), ctx.errors.begin(), ctx.errors.end());
     }
     
-    usage_t *usage = result.release();
-    return usage;
+    return result; // transfers ownership
 }
 
 // Force template instantiation
-template usage_t *parse_usage<string>(const string &, const range_t &, const option_list_t &, vector<error_t<string> > *);
-template usage_t *parse_usage<wstring>(const wstring &, const range_t &, const option_list_t &shortcut_options, vector<error_t<wstring> > *);
+template usages_t *parse_usage<string>(const string &, const range_t &, const option_list_t &, vector<error_t<string> > *);
+template usages_t *parse_usage<wstring>(const wstring &, const range_t &, const option_list_t &shortcut_options, vector<error_t<wstring> > *);
 
 
 CLOSE_DOCOPT_IMPL /* namespace */

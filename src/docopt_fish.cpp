@@ -1,7 +1,6 @@
 #include "docopt_fish.h"
 #include "docopt_fish_types.h"
 #include "docopt_fish_grammar.h"
-#include <memory>
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
@@ -14,33 +13,48 @@
 namespace docopt_fish
 OPEN_DOCOPT_IMPL
 
-using std::auto_ptr;
-
 static const size_t npos = (size_t)(-1);
 
 // Narrow implementation
-static size_t find_case_insensitive(const std::string &haystack, const char *needle, size_t haystack_start) {
-    assert(haystack_start < haystack.size());
+static inline size_t find_case_insensitive(const std::string &haystack, const char *needle, const range_t &haystack_range) {
+    size_t start = haystack_range.start, end = haystack_range.end();
+    assert(end <= haystack.size());
     const char *haystack_cstr = haystack.c_str();
-    const char *found = strcasestr(haystack_cstr + haystack_start, needle);
-    return found ? found - haystack_cstr : std::string::npos;
+    char first_down = tolower(needle[0]);
+    char first_up = toupper(needle[0]);
+    for (size_t i = start; i < end; i++) {
+        if (haystack_cstr[i] == first_up || haystack_cstr[i] == first_down) {
+            if (0==strcasecmp(needle + 1, haystack_cstr + i + 1)) {
+                return i;
+            }
+        }
+    }
+    return std::string::npos;
 }
 
 // Nasty wide implementation
-static size_t find_case_insensitive(const std::wstring &haystack, const char *needle, size_t haystack_start) {
+static inline size_t find_case_insensitive(const std::wstring &haystack, const char *needle, const range_t &haystack_range) {
     // Nasty implementation
     // The assumption here is that needle is always ASCII; thus it suffices to do an ugly tolower comparison
-    assert(haystack_start < haystack.size());
+    assert(haystack_range.end() <= haystack.size());
     const size_t needle_len = strlen(needle);
-    if (needle_len > haystack.size()) {
+    if (needle_len > haystack_range.length) {
         // needle is longer than haystack, no possible match
         return std::wstring::npos;
     }
 
     const wchar_t *haystack_cstr = haystack.c_str();
-    size_t search_end = haystack.size() - needle_len;
+    size_t search_end = haystack_range.end() - needle_len;
+    const char first_down = tolower(needle[0]);
+    const char first_up = toupper(needle[0]);
     
-    for (size_t i=haystack_start; i < search_end; i++) {
+    for (size_t i=haystack_range.start; i <= search_end; i++) {
+        // Common case
+        wchar_t wc = haystack_cstr[i];
+        if (wc != first_down && wc != first_up) {
+            continue;
+        }
+        
         // See if we have a match at i
         size_t j;
         for (j = 0; j < needle_len; j++) {
@@ -324,7 +338,7 @@ docopt_impl(const string_t &s) : source(s), parse_tree(NULL) {}
 #pragma mark -
 
 /* The usage parse tree */
-usage_t *parse_tree;
+usages_t *parse_tree;
 
 /* The list of options parsed from the "Options:" section. Referred to as "shortcut options" because the "[options]" directive can be used as a shortcut to reference them. */
 option_list_t shortcut_options;
@@ -535,7 +549,7 @@ option_list_t parse_one_option_spec(const range_t &range, error_list_t *errors) 
     if (! description_range.empty()) {
         // TODO: handle the case where there's more than one
         const char *default_prefix = "[default:";
-        size_t default_prefix_loc = find_case_insensitive(this->source, default_prefix, description_range.start);
+        size_t default_prefix_loc = find_case_insensitive(this->source, default_prefix, description_range);
         if (default_prefix_loc < description_range.end()) {
             // Note: the above check handles npos too
             size_t default_value_start = default_prefix_loc + strlen(default_prefix);
@@ -679,9 +693,9 @@ range_list_t source_ranges_for_section(const char *name, bool include_other_top_
     range_t line_range;
     size_t current_header_indent = -1; //note: is huge
     while (get_next_line(this->source, &line_range)) {
-        range_t trimmed_line_range = trim_whitespace(line_range, this->source);
+        const range_t trimmed_line_range = trim_whitespace(line_range, this->source);
         assert(trimmed_line_range.start >= line_range.start);
-        size_t trimmed_line_start = trimmed_line_range.start;
+        const size_t trimmed_line_start = trimmed_line_range.start;
         size_t line_indent = compute_indent(this->source, line_range.start, trimmed_line_start - line_range.start);
         
         // It's a header line if its indent is not greater than the previous header and it's empty
@@ -703,7 +717,7 @@ range_list_t source_ranges_for_section(const char *name, bool include_other_top_
             
             // Check to see if the name is found before the first colon
             // Note that if name is not found at all, name_pos will have value npos, which is huge (and therefore not smaller than line_end)
-            size_t name_pos = find_case_insensitive(source, name, trimmed_line_start);
+            size_t name_pos = find_case_insensitive(source, name, trimmed_line_range);
             size_t line_end = trimmed_line_range.end();
             in_desired_section = (name_pos < line_end && name_pos < colon_pos);
 
@@ -1374,17 +1388,10 @@ static void state_append_to(const match_state_t *state, match_state_list_t *dest
 }
 
 
-template<typename T>
-void try_match(T& ptr, match_state_t *state, match_context_t *ctx, match_state_list_t *resulting_states) const {
-    if (ptr.get()) {
-        this->match(*ptr, state, ctx, resulting_states);
-    }
-}
-
 // TODO: comment me
 template<typename T>
-void try_match(T& ptr, match_state_list_t *incoming_state_list, match_context_t *ctx, match_state_list_t *resulting_states, bool require_progress = false) const {
-    if (ptr.get() && ! incoming_state_list->empty()) {
+void match_list(const T& node, match_state_list_t *incoming_state_list, match_context_t *ctx, match_state_list_t *resulting_states, bool require_progress = false) const {
+    if (! incoming_state_list->empty()) {
         for (size_t i=0; i < incoming_state_list->size(); i++) {
             match_state_t *state = &incoming_state_list->at(i);
             /* If we require that this makes progress, then get the current progress so we can compare */
@@ -1395,7 +1402,7 @@ void try_match(T& ptr, match_state_list_t *incoming_state_list, match_context_t 
                 init_size = resulting_states->size();
             }
             
-            this->match(*ptr, state, ctx, resulting_states);
+            this->match(node, state, ctx, resulting_states);
             
             if (require_progress) {
                 /* Keep only those results that have increased in progress. States after init_size are new. */
@@ -1415,6 +1422,34 @@ void try_match(T& ptr, match_state_list_t *incoming_state_list, match_context_t 
 }
 
 /* Match overrides */
+void match(const usages_t &node, match_state_t *state, match_context_t *ctx, match_state_list_t *resulting_states) const {
+    // Elide the copy in the last one
+    size_t count = node.usages.size();
+    if (count == 0) {
+        return;
+    }
+    
+    bool fully_consumed = false;
+    for (size_t i=0; i + 1 < count && ! fully_consumed; i++) {
+        match_state_t copied_state = *state;
+        match(node.usages.at(i), &copied_state, ctx, resulting_states);
+        
+        if (ctx->flags & flag_stop_after_consuming_everything) {
+            size_t idx = resulting_states->size();
+            while (idx--) {
+                if (resulting_states->at(idx).fully_consumed) {
+                    fully_consumed = true;
+                    break;
+                }
+            }
+        }
+    }
+    if (! fully_consumed) {
+        match(node.usages.at(count-1), state, ctx, resulting_states);
+    }
+}
+
+/* Match overrides */
 void match(const usage_t &node, match_state_t *state, match_context_t *ctx, match_state_list_t *resulting_states) const {
     if (! ctx->has_more_positionals(state)) {
         // todo: error handling
@@ -1426,78 +1461,51 @@ void match(const usage_t &node, match_state_t *state, match_context_t *ctx, matc
         return;
     }
     
-    /* Must duplicate the state for the next usage */
-    match_state_t copied_state = *state;
-    
     // Program name
     ctx->acquire_next_positional(state);
     
-    if (node.alternation_list.get()) {
-        // Match against our contents
-        try_match(node.alternation_list, state, ctx, resulting_states);
-    } else {
-        // Usage is just the program name
-        // Merely append this state
-        state_destructive_append_to(state, resulting_states);
-    }
-    
-    // Check to see if we have a perfect match
-    // If not, go to the next branch
-    bool fully_consumed_match = false;
-    if (ctx->flags & flag_stop_after_consuming_everything) {
-        size_t idx = resulting_states->size();
-        while (idx--) {
-            if (resulting_states->at(idx).fully_consumed) {
-                fully_consumed_match = true;
-                break;
-            }
-        }
-    }
-    if (! fully_consumed_match) {
-        try_match(node.next_usage, &copied_state, ctx, resulting_states);
-    }
+    // Match against our contents
+    match(node.alternation_list, state, ctx, resulting_states);
 }
 
 void match(const expression_list_t &node, match_state_t *state, match_context_t *ctx, match_state_list_t *resulting_states) const {
-    match_state_list_t intermed_state_list;
-    if (node.opt_expression_list.get() == NULL) {
-        // This is the last expression
-        try_match(node.expression, state, ctx, resulting_states);
-    } else {
-        // More to come. We must use an intermediates state list.
-        try_match(node.expression, state, ctx, &intermed_state_list);
-        try_match(node.opt_expression_list, &intermed_state_list, ctx, resulting_states);
-    }
-}
-
-void match(const opt_expression_list_t &node, match_state_t *state, match_context_t *ctx, match_state_list_t *resulting_states) const {
-    if (node.expression_list.get()) {
-        try_match(node.expression_list, state, ctx, resulting_states);
-    } else {
-        // end of the list
+    size_t count = node.expressions.size();
+    if (count == 0) {
+        // Merely append this state
         state_destructive_append_to(state, resulting_states);
+    } else if (count == 1) {
+        // Just one expression, trivial
+        match(node.expressions.at(0), state, ctx, resulting_states);
+    } else {
+        // First expression
+        match_state_list_t intermed_state_list;
+        match(node.expressions.at(0), state, ctx, &intermed_state_list);
+        // Middle expressions
+        for (size_t i=1; i + 1 < count; i++) {
+            match_state_list_t new_states;
+            match_list(node.expressions.at(i), &intermed_state_list, ctx, &new_states);
+            intermed_state_list.swap(new_states);
+        }
+        // Last expression
+        match_list(node.expressions.at(count-1), &intermed_state_list, ctx, resulting_states);
     }
 }
 
 void match(const alternation_list_t &node, match_state_t *state, match_context_t *ctx, match_state_list_t *resulting_states) const {
-    if (node.or_continuation.get() == NULL) {
-        // No second branch, no need to copy the state
-        try_match(node.expression_list, state, ctx, resulting_states);
-    } else {
-        // Must duplicate the state for the second branch
-        match_state_t copied_state = *state;
-        try_match(node.expression_list, state, ctx, resulting_states);
-        try_match(node.or_continuation, &copied_state, ctx, resulting_states);
+    size_t count = node.alternations.size();
+    if (count == 0) {
+        return;
     }
-}
-
-void match(const or_continuation_t &node, match_state_t *state, match_context_t *ctx, match_state_list_t *resulting_states) const {
-    try_match(node.alternation_list, state, ctx, resulting_states);
+    for (size_t i=0; i + 1 < count; i++) {
+        match_state_t copied_state = *state;
+        match(node.alternations.at(i), &copied_state, ctx, resulting_states);
+    }
+    match(node.alternations.at(count-1), state, ctx, resulting_states);
 }
 
 void match(const expression_t &node, match_state_t *state, match_context_t *ctx, match_state_list_t *resulting_states) const {
     // Check to see if we have ellipsis. If so, we keep going as long as we can.
-    bool has_ellipsis = (node.opt_ellipsis.get() != NULL && node.opt_ellipsis->production > 0);
+    bool has_ellipsis = node.opt_ellipsis.present;
     
     switch (node.production) {
         case 0:
@@ -1509,14 +1517,15 @@ void match(const expression_t &node, match_state_t *state, match_context_t *ctx,
                match one time, two times, three times...
                We stop when we get no more matches, which usually happens when we run out of positionals.
             */
+            assert(node.simple_clause.get() != NULL);
             size_t prior_state_count = resulting_states->size();
-            try_match(node.simple_clause, state, ctx, resulting_states);
+            match(*node.simple_clause, state, ctx, resulting_states);
             /* Now we know that all states starting at state_count_before are newly added. If we have ellipsis, go until we run out. */
             if (has_ellipsis) {
                 while (prior_state_count < resulting_states->size()) {
                     match_state_list_t intermediate_states(resulting_states->begin() + prior_state_count, resulting_states->end());
                     prior_state_count = resulting_states->size();
-                    try_match(node.simple_clause, &intermediate_states, ctx, resulting_states, true /* require progress */);
+                    match_list(*node.simple_clause, &intermediate_states, ctx, resulting_states, true /* require progress */);
                 }
             }
             break;
@@ -1529,12 +1538,13 @@ void match(const expression_t &node, match_state_t *state, match_context_t *ctx,
                TODO: this may loop forever with states that do not consume any values, e.g. ([foo])...
             */
             size_t prior_state_count = resulting_states->size();
-            try_match(node.alternation_list, state, ctx, resulting_states);
+            assert(node.alternation_list.get() != NULL);
+            match(*node.alternation_list, state, ctx, resulting_states);
             if (has_ellipsis) {
                 while (prior_state_count < resulting_states->size()) {
                     match_state_list_t intermediate_states(resulting_states->begin() + prior_state_count, resulting_states->end());
                     prior_state_count = resulting_states->size();
-                    try_match(node.alternation_list, &intermediate_states, ctx, resulting_states, true /* require progress */);
+                    match_list(*node.alternation_list, &intermediate_states, ctx, resulting_states, true /* require progress */);
                 }
             }
             break;
@@ -1545,14 +1555,15 @@ void match(const expression_t &node, match_state_t *state, match_context_t *ctx,
             /* This is a square-bracketed clause which may have ellipsis, like [foo]...
                Same algorithm as the simple clause above, except that we also append the initial state as a not-taken branch.
             */
+            assert(node.alternation_list.get() != NULL);
             state_append_to(state, resulting_states);  // append the not-taken-branch
             size_t prior_state_count = resulting_states->size();
-            try_match(node.alternation_list, state, ctx, resulting_states);
+            match(*node.alternation_list, state, ctx, resulting_states);
             if (has_ellipsis) {
                 while (prior_state_count < resulting_states->size()) {
                     match_state_list_t intermediate_states(resulting_states->begin() + prior_state_count, resulting_states->end());
                     prior_state_count = resulting_states->size();
-                    try_match(node.alternation_list, &intermediate_states, ctx, resulting_states, true /* require progress */);
+                    match_list(*node.alternation_list, &intermediate_states, ctx, resulting_states, true /* require progress */);
                 }
             }
             break;
@@ -1561,7 +1572,7 @@ void match(const expression_t &node, match_state_t *state, match_context_t *ctx,
         case 3:
         {
             // This is the [options] clause. It does not have ellipsis.
-            
+            assert(node.options_shortcut.present);
             if (! this->match_options(this->shortcut_options, state, ctx, resulting_states)) {
                 // No match, but matches are not required
                 if (ctx->flags & flag_generate_suggestions) {
@@ -1902,7 +1913,7 @@ bool preflight() {
        
        What Python docopt does is assert, if an option appears anywhere in any usage, it may not be matched by [options]. This seems reasonable, because it means that that option has more particular use cases. So remove all items from shortcut_options() that appear in usage_options.
        
-       TODO: this currently onlt removes the matched variant. For example, prog -a --alpha would still be allowed.
+       TODO: this currently only removes the matched variant. For example, prog -a --alpha would still be allowed.
     */
     
     for (size_t i=0; i < this->shortcut_options.size(); i++) {
@@ -2044,17 +2055,18 @@ string_t description_for_option(const string_t &given_option_name) const {
 std::vector<string_t> get_command_names() const {
     /* Get the command names. We store a set of seen names so we only return tha names once, but in the order matching their appearance in the usage spec. */
     std::vector<string_t> result;
-    std::set<string_t> seen;
-    usage_t *cursor = this->parse_tree;
-    while (cursor != NULL) {
-        range_t name_range = cursor->prog_name.range;
-        if (! name_range.empty()) {
-            const string_t name(this->source, name_range.start, name_range.length);
-            if (seen.insert(name).second) {
-                result.push_back(name);
+    if (this->parse_tree) {
+        std::set<string_t> seen;
+        for (size_t i=0; i < this->parse_tree->usages.size(); i++) {
+            const usage_t &usage = this->parse_tree->usages.at(i);
+            range_t name_range = usage.prog_name.range;
+            if (! name_range.empty()) {
+                const string_t name(this->source, name_range.start, name_range.length);
+                if (seen.insert(name).second) {
+                    result.push_back(name);
+                }
             }
         }
-        cursor = cursor->next_usage.get();
     }
     return result;
 
