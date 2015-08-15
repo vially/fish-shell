@@ -2247,7 +2247,7 @@ static void test_docopt_complete(void)
     L"       <dynval>  (echo ONE\\nTWO\\nTHREE)\n"
     ;
     
-    docopt_register_usage(cmd, L"fish_test", usage, L"", NULL);
+    docopt_register_usage(cmd, L"", usage, L"", NULL);
     completion_list_t completions;
 
     complete(L"flea --c", completions, COMPLETION_REQUEST_DEFAULT);
@@ -2274,7 +2274,7 @@ static void test_docopt_complete(void)
     L"       leaf [<pid>]\n"
     L"       leaf --help\n"
     ;
-    docopt_register_usage(L"", L"fish_test", desc2, L"", NULL);
+    docopt_register_usage(L"", L"", desc2, L"", NULL);
     completions.clear();
     complete(L"leaf --he ", completions, COMPLETION_REQUEST_DEFAULT);
     do_test(completions.size() == 1);
@@ -2305,8 +2305,8 @@ static void test_docopt_args(void)
     L"       -h, --help  Help\n"
     ;
     
-    docopt_register_usage(L"", L"fish_test", usage1, L"", NULL);
-    docopt_register_usage(L"", L"fish_test", usage2, L"", NULL);
+    docopt_register_usage(L"", L"", usage1, L"", NULL);
+    docopt_register_usage(L"", L"", usage2, L"", NULL);
     
     wcstring_list_t argv;
     argv.push_back(cmd);
@@ -2317,7 +2317,7 @@ static void test_docopt_args(void)
     docopt_arguments_t arguments;
     std::vector<size_t> unused_args;
     parse_error_list_t errors;
-    bool ret = docopt_parse_arguments(cmd, argv, &arguments, &errors, &unused_args);
+    bool ret = docopt_get_registrations(cmd).parse_arguments(argv, &arguments, &errors, &unused_args);
     do_test(ret == true);
     do_test(arguments.size() == 2);
     do_test(arguments.has(L"--command"));

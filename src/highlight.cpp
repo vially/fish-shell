@@ -1514,8 +1514,8 @@ void highlighter_t::apply_docopt_coloring(const parse_node_t &statement_node)
         argv.push_back(args.at(i)->get_source(this->buff));
     }
     
-    const wcstring &cmd_name = argv.at(0);
-    const std::vector<docopt_argument_status_t> statuses = docopt_validate_arguments(cmd_name, argv, flag_match_allow_incomplete);
+    docopt_registration_set_t regs = docopt_get_registrations(argv.at(0));
+    const std::vector<docopt_argument_status_t> statuses = regs.validate_arguments(argv, flag_match_allow_incomplete);
     if (! statuses.empty())
     {
         /* Apply these to the nodes. Ignore the program name. */

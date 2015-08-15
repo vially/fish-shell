@@ -21,7 +21,6 @@ Functions for handling the set of docopt descriptions
 typedef docopt_fish::argument_parser_t<wcstring> docopt_parser_t;
 typedef docopt_fish::error_t<wcstring> docopt_error_t;
 typedef std::vector<docopt_error_t> docopt_error_list_t;
-typedef std::vector<const docopt_parser_t *> parser_ref_list_t;
 typedef docopt_parser_t::argument_map_t docopt_argument_map_t;
 
 /* Weird function. Given a parser status and an existing argument status, convert the parser status to the argument status and return the "more valid" of the two. This supports our design for multiple parsers, where if any parser declares an argument valid, that argument is marked valid. */
@@ -77,26 +76,14 @@ static void append_parse_error(parse_error_list_t *out_errors, size_t where, con
     }
 }
 
-// Name, value, parser triplet
-struct registration_t {
-    wcstring name;
-    wcstring usage;
-    wcstring description;
-    docopt_parser_t parser;
-    
-    registration_t()
-    {}
-};
-
 // Class that holds a mapping from command name to list of docopt descriptions
 class doc_register_t {
-    typedef std::list<registration_t> registration_list_t;
-    typedef std::map<wcstring, registration_list_t> registration_map_t;
+    typedef std::map<wcstring, docopt_registration_set_t> registration_map_t;
     registration_map_t cmd_to_registration;
     mutex_lock_t lock;
     
     // Looks for errors in the parser conditions
-    bool validate_parser(const docopt_parser_t &parser, parse_error_list_t *out_errors)
+    static bool validate_parser(const docopt_parser_t &parser, parse_error_list_t *out_errors)
     {
         bool success = true;
         const wcstring_list_t vars = parser.get_variables();
@@ -122,7 +109,7 @@ class doc_register_t {
     }
     
     public:
-    bool register_usage(const wcstring &cmd_or_empty, const wcstring &name, const wcstring &usage, const wcstring &description, parse_error_list_t *out_errors)
+    bool register_usage(const wcstring &cmd_or_empty, const wcstring &condition, const wcstring &usage, const wcstring &description, parse_error_list_t *out_errors)
     {
         // Try to parse it
         docopt_parser_t parser;
@@ -168,250 +155,52 @@ class doc_register_t {
         
         if (success)
         {
+            // Ok, we're going to insert it!
             scoped_lock locker(lock);
-            registration_list_t &regs = cmd_to_registration[effective_cmd];
+            docopt_registration_set_t &regs = cmd_to_registration[effective_cmd];
             
-            // If we have one with the same usage, we modify it. Otherwise we prepend a new one, which gives it precedence in the case of conflicts
-            // TODO: need to figure out an actual lifecycle - how do these get removed?
-            registration_t *registration = NULL;
-            for (registration_list_t::iterator iter = regs.begin(); iter != regs.end(); ++iter)
+            // Remove any with a matching usage
+            typedef std::vector<shared_ptr<const docopt_registration_t> >::iterator reg_iter_t;
+            for (reg_iter_t iter = regs.registrations.begin(); iter != regs.registrations.end();)
             {
-                if (iter->usage == usage)
+                if ((*iter)->usage == usage)
                 {
-                    registration = &*iter;
-                    break;
+                    iter = regs.registrations.erase(iter);
+                }
+                else
+                {
+                    ++iter;
                 }
             }
             
-            if (registration == NULL)
-            {
-                // Prepend a new one
-                regs.push_front(registration_t());
-                registration = &regs.front();
-            }
-        
-            registration->name = name;
-            registration->usage = usage;
-            // Don't overwrite a valid description
-            if (! description.empty())
-            {
-                registration->description = description;
-            }
-            registration->parser = parser;
+            // Create our registration
+            // We will transfer ownership to a shared_ptr
+            docopt_registration_t *reg = new docopt_registration_t();
+            reg->usage = usage;
+            reg->description = description;
+            reg->condition = condition;
+            reg->parser = new docopt_parser_t(parser); // todo: avoid this copy
+            
+            // insert in the front
+            // this transfers ownership!
+            regs.registrations.insert(regs.registrations.begin(), shared_ptr<const docopt_registration_t>(reg));
         }
         return success;
     }
     
-    const docopt_parser_t *first_parser(const wcstring &cmd) const
+    docopt_registration_set_t get_registrations(const wcstring &cmd)
     {
-        ASSERT_IS_LOCKED(lock);
-        const docopt_parser_t *result = NULL;
+        scoped_lock locker(lock);
         registration_map_t::const_iterator where = this->cmd_to_registration.find(cmd);
-        if (where != this->cmd_to_registration.end() && ! where->second.empty())
+        if (where == this->cmd_to_registration.end())
         {
-            result = &where->second.front().parser;
+            return docopt_registration_set_t();
         }
-        return result;
+        else
+        {
+            return where->second;
+        }
     }
-    
-    parser_ref_list_t get_parsers(const wcstring &cmd) const
-    {
-        ASSERT_IS_LOCKED(lock);
-        parser_ref_list_t result;
-        registration_map_t::const_iterator where = this->cmd_to_registration.find(cmd);
-        if (where != this->cmd_to_registration.end())
-        {
-            registration_list_t::const_iterator iter;
-            for (iter = where->second.begin(); iter != where->second.end(); ++iter)
-            {
-                result.push_back(&iter->parser);
-            }
-        }
-        return result;
-    }
-    
-    const registration_list_t *get_registrations(const wcstring &cmd) const
-    {
-        ASSERT_IS_LOCKED(lock);
-        const registration_list_t *result = NULL;
-        registration_map_t::const_iterator where = this->cmd_to_registration.find(cmd);
-        if (where != this->cmd_to_registration.end())
-        {
-            // this looks terrifying - returning a pointer to a local? But iterators remain valid.
-            result = &where->second;
-        }
-        return result;
-    }
-
-    std::vector<docopt_argument_status_t> validate_arguments(const wcstring &cmd, const wcstring_list_t &argv, docopt_fish::parse_flags_t flags)
-    {
-        scoped_lock locker(lock);
-        std::vector<docopt_argument_status_t> result;
-        result.reserve(argv.size());
-        
-        // For each parser, have it validate the arguments. Mark an argument as the most valid that any parser declares it to be.
-        const parser_ref_list_t parsers = this->get_parsers(cmd);
-        for (size_t i=0; i < parsers.size(); i++)
-        {
-            const docopt_parser_t *p = parsers.at(i);
-            const std::vector<docopt_fish::argument_status_t> parser_statuses = p->validate_arguments(argv, flags);
-            
-            // Fill result with status_invalid until it's the right size
-            if (result.size() <= parser_statuses.size())
-            {
-                result.insert(result.end(), parser_statuses.size() - result.size(), status_invalid);
-            }
-            assert(result.size() >= parser_statuses.size());
-
-            for (size_t i=0; i < parser_statuses.size(); i++)
-            {
-                result.at(i) = more_valid_status(parser_statuses.at(i), result.at(i));
-            }
-        }
-        return result;
-    }
-
-    wcstring_list_t suggest_next_argument(const wcstring &cmd, const wcstring_list_t &argv, docopt_fish::parse_flags_t flags)
-    {
-        scoped_lock locker(lock);
-        wcstring_list_t result;
-        
-        /* Include results from all registered parsers */
-        parser_ref_list_t parsers = this->get_parsers(cmd);
-        for (size_t i=0; i < parsers.size(); i++)
-        {
-            const wcstring_list_t tmp = parsers.at(i)->suggest_next_argument(argv, flags);
-            result.insert(result.end(), tmp.begin(), tmp.end());
-        }
-
-        /* Sort and remove duplicates */
-        std::sort(result.begin(), result.end());
-        result.erase(std::unique(result.begin(), result.end()), result.end());
-        
-        return result;
-    }
-
-    wcstring conditions_for_variable(const wcstring &cmd, const wcstring &var, wcstring *out_description)
-    {
-        scoped_lock locker(lock);
-        wcstring result;
-        
-        /* We use the first parser that has a condition */
-        const registration_list_t *regs = this->get_registrations(cmd);
-        if (regs != NULL)
-        {
-            for (registration_list_t::const_iterator iter = regs->begin(); iter != regs->end(); ++iter)
-            {
-                const docopt_parser_t *p = &iter->parser;
-                result = p->conditions_for_variable(var);
-                if (! result.empty())
-                {
-                    // Return the description if requested
-                    if (out_description != NULL)
-                    {
-                        if (! iter->description.empty())
-                        {
-                            // Explicit description
-                            out_description->assign(iter->description);
-                        }
-                        else
-                        {
-                            // We use the variable name as the description
-                            out_description->assign(description_from_variable_name(var));
-                        }
-                    }
-                    break;
-                }
-            }
-        }
-        return result;
-    }
-
-    wcstring description_for_option(const wcstring &cmd, const wcstring &option)
-    {
-        scoped_lock locker(lock);
-        wcstring result;
-        /* We use the first parser that has a condition */
-        parser_ref_list_t parsers = this->get_parsers(cmd);
-        for (size_t i=0; i < parsers.size(); i++)
-        {
-            result = parsers.at(i)->description_for_option(option);
-            if (! result.empty())
-            {
-                break;
-            }
-        }
-        return result;
-    }
-    
-    bool parse_arguments(const wcstring &cmd, const wcstring_list_t &argv, docopt_arguments_t *out_arguments, parse_error_list_t *out_errors, std::vector<size_t> *out_unused_arguments)
-    {
-        scoped_lock locker(lock);
-        parser_ref_list_t parsers = this->get_parsers(cmd);
-        
-        // Common case
-        if (parsers.empty())
-        {
-            return false;
-        }
-        
-        // An argument is unused if it is unused in all cases
-        // This is the union of all unused arguments.
-        // Initially all are unused - prepopulate it with every index.
-        const size_t argv_size = argv.size();
-        std::vector<size_t> total_unused_args;
-        docopt_arguments_t total_args;
-        
-        total_unused_args.reserve(argv_size);
-        for (size_t i=0; i < argv_size; i++)
-        {
-            total_unused_args.push_back(i);
-        }
-        
-        // Now run over the docopt parser list
-        // TODO: errors!
-        for (size_t i=0; i < parsers.size(); i++)
-        {
-            docopt_error_list_t errors;
-            std::vector<size_t> local_unused_args;
-            docopt_argument_map_t args = parsers.at(i)->parse_arguments(argv, docopt_fish::flags_default, &errors, &local_unused_args);
-            
-            // Insert values from the argument map. Don't overwrite, so that earlier docopts take precedence
-            docopt_argument_map_t::const_iterator iter;
-            for (iter = args.begin(); iter != args.end(); ++iter)
-            {
-                // We could use insert() to avoid the two lookups, but the code is very ugly
-                const wcstring &key = iter->first;
-                if (total_args.has(key))
-                {
-                    // The argument was already present, and we don't overwrite.
-                    continue;
-                }
-                
-                // Store the list of values associated with the argument. This may be empty.
-                total_args.vals[key] = iter->second.values;
-            }
-            
-            // Intersect unused arguments
-            std::vector<size_t> intersected_unused_args;
-            std::set_intersection(local_unused_args.begin(), local_unused_args.end(),
-                                  total_unused_args.begin(), total_unused_args.end(),
-                                  std::back_inserter(intersected_unused_args));
-            total_unused_args.swap(intersected_unused_args);
-        }
-        
-        if (out_arguments != NULL)
-        {
-            out_arguments->swap(total_args);
-        }
-        if (out_unused_arguments != NULL)
-        {
-            out_unused_arguments->swap(total_unused_args);
-        }
-        
-        return true;
-    }
-
 };
 static doc_register_t default_register;
 
@@ -420,29 +209,167 @@ bool docopt_register_usage(const wcstring &cmd, const wcstring &name, const wcst
     return default_register.register_usage(cmd, name, usage, description, out_errors);
 }
 
-std::vector<docopt_argument_status_t> docopt_validate_arguments(const wcstring &cmd, const wcstring_list_t &argv, docopt_parse_flags_t flags)
+docopt_registration_set_t docopt_get_registrations(const wcstring &cmd)
 {
-    return default_register.validate_arguments(cmd, argv, flags);
+    return default_register.get_registrations(cmd);
 }
 
-wcstring_list_t docopt_suggest_next_argument(const wcstring &cmd, const wcstring_list_t &argv, docopt_parse_flags_t flags)
+docopt_registration_t::~docopt_registration_t()
 {
-    return default_register.suggest_next_argument(cmd, argv, flags);
+    delete this->parser; // we own it
 }
 
-wcstring docopt_conditions_for_variable(const wcstring &cmd, const wcstring &var, wcstring *out_description)
+std::vector<docopt_argument_status_t> docopt_registration_set_t::validate_arguments(const wcstring_list_t &argv, docopt_parse_flags_t flags) const
 {
-    return default_register.conditions_for_variable(cmd, var, out_description);
+    std::vector<docopt_argument_status_t> result;
+    result.reserve(argv.size());
+    
+    // For each parser, have it validate the arguments. Mark an argument as the most valid that any parser declares it to be.
+    for (size_t i=0; i < registrations.size(); i++)
+    {
+        const docopt_parser_t *p = registrations.at(i)->parser;
+        const std::vector<docopt_fish::argument_status_t> parser_statuses = p->validate_arguments(argv, flags);
+        
+        // Fill result with status_invalid until it's the right size
+        if (result.size() <= parser_statuses.size())
+        {
+            result.insert(result.end(), parser_statuses.size() - result.size(), status_invalid);
+        }
+        assert(result.size() >= parser_statuses.size());
+        
+        for (size_t i=0; i < parser_statuses.size(); i++)
+        {
+            result.at(i) = more_valid_status(parser_statuses.at(i), result.at(i));
+        }
+    }
+    return result;
 }
 
-wcstring docopt_description_for_option(const wcstring &cmd, const wcstring &option)
+wcstring_list_t docopt_registration_set_t::suggest_next_argument(const wcstring_list_t &argv, docopt_parse_flags_t flags) const
 {
-    return default_register.description_for_option(cmd, option);
+    /* Include results from all registered parsers */
+    wcstring_list_t result;
+    for (size_t i=0; i < registrations.size(); i++)
+    {
+        const wcstring_list_t tmp = registrations.at(i)->parser->suggest_next_argument(argv, flags);
+        result.insert(result.end(), tmp.begin(), tmp.end());
+    }
+    
+    /* Sort and remove duplicates */
+    std::sort(result.begin(), result.end());
+    result.erase(std::unique(result.begin(), result.end()), result.end());
+    
+    return result;
 }
 
-bool docopt_parse_arguments(const wcstring &cmd, const wcstring_list_t &argv, docopt_arguments_t *out_arguments, parse_error_list_t *out_errors, std::vector<size_t> *out_unused_arguments)
+wcstring docopt_registration_set_t::conditions_for_variable(const wcstring &var, wcstring *out_description) const
 {
-    return default_register.parse_arguments(cmd, argv, out_arguments, out_errors, out_unused_arguments);
+    /* We use the first parser that has a condition */
+    wcstring result;
+    for (size_t i=0; i < registrations.size(); i++)
+    {
+        const docopt_registration_t *reg = registrations.at(i).get();
+        result = reg->parser->conditions_for_variable(var);
+        if (! result.empty())
+        {
+            // Return the description if requested
+            if (out_description != NULL)
+            {
+                if (! reg->description.empty())
+                {
+                    // Explicit description
+                    out_description->assign(reg->description);
+                }
+                else
+                {
+                    // We use the variable name as the description
+                    out_description->assign(description_from_variable_name(var));
+                }
+            }
+            break;
+        }
+    }
+    return result;
+}
+
+wcstring docopt_registration_set_t::description_for_option(const wcstring &option) const
+{
+    wcstring result;
+    /* We use the first parser that has a condition */
+    for (size_t i=0; i < registrations.size(); i++)
+    {
+        result = registrations.at(i)->parser->description_for_option(option);
+        if (! result.empty())
+        {
+            break;
+        }
+    }
+    return result;
+}
+
+bool docopt_registration_set_t::parse_arguments(const wcstring_list_t &argv, docopt_arguments_t *out_arguments, parse_error_list_t *out_errors, std::vector<size_t> *out_unused_arguments) const
+{
+    // Common case?
+    if (this->registrations.empty())
+    {
+        return false;
+    }
+    
+    // An argument is unused if it is unused in all cases
+    // This is the union of all unused arguments.
+    // Initially all are unused - prepopulate it with every index.
+    const size_t argv_size = argv.size();
+    std::vector<size_t> total_unused_args;
+    docopt_arguments_t total_args;
+    
+    total_unused_args.reserve(argv_size);
+    for (size_t i=0; i < argv_size; i++)
+    {
+        total_unused_args.push_back(i);
+    }
+    
+    // Now run over the docopt parser list
+    // TODO: errors!
+    for (size_t i=0; i < registrations.size(); i++)
+    {
+        docopt_error_list_t errors;
+        std::vector<size_t> local_unused_args;
+        docopt_argument_map_t args = registrations.at(i)->parser->parse_arguments(argv, docopt_fish::flags_default, &errors, &local_unused_args);
+        
+        // Insert values from the argument map. Don't overwrite, so that earlier docopts take precedence
+        docopt_argument_map_t::const_iterator iter;
+        for (iter = args.begin(); iter != args.end(); ++iter)
+        {
+            // We could use insert() to avoid the two lookups, but the code is very ugly
+            const wcstring &key = iter->first;
+            if (total_args.has(key))
+            {
+                // The argument was already present, and we don't overwrite.
+                continue;
+            }
+            
+            // Store the list of values associated with the argument. This may be empty.
+            total_args.vals[key] = iter->second.values;
+        }
+        
+        // Intersect unused arguments
+        std::vector<size_t> intersected_unused_args;
+        std::set_intersection(local_unused_args.begin(), local_unused_args.end(),
+                              total_unused_args.begin(), total_unused_args.end(),
+                              std::back_inserter(intersected_unused_args));
+        total_unused_args.swap(intersected_unused_args);
+    }
+    
+    if (out_arguments != NULL)
+    {
+        out_arguments->swap(total_args);
+    }
+    if (out_unused_arguments != NULL)
+    {
+        out_unused_arguments->swap(total_unused_args);
+    }
+    
+    return true;
 }
 
 /* Returns a reference to the value in the map for the given key, or NULL */

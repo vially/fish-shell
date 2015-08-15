@@ -1592,7 +1592,8 @@ bool completer_t::complete_from_docopt(const wcstring &cmd_unescape, const parse
         argv.pop_back();
     }
     
-    const wcstring_list_t suggestions = docopt_suggest_next_argument(cmd_unescape, argv, flag_match_allow_incomplete);
+    docopt_registration_set_t regs = docopt_get_registrations(cmd_unescape);
+    const wcstring_list_t suggestions = regs.suggest_next_argument(argv, flag_match_allow_incomplete);
     for (size_t i=0; i < suggestions.size(); i++)
     {
         const wcstring &suggestion = suggestions.at(i);
@@ -1600,7 +1601,7 @@ bool completer_t::complete_from_docopt(const wcstring &cmd_unescape, const parse
         {
             // Variable. Handle any conditions. If there are no conditions, we may return false, which allows for file completions.
             wcstring description;
-            const wcstring conditions = docopt_conditions_for_variable(cmd_unescape, suggestion, &description);
+            const wcstring conditions = regs.conditions_for_variable(suggestion, &description);
             if (! conditions.empty())
             {
                 this->complete_from_args(last_arg, conditions, description, local_flags);
@@ -1614,7 +1615,7 @@ bool completer_t::complete_from_docopt(const wcstring &cmd_unescape, const parse
             if (last_arg.empty())
             {
                 // No partial argument to complete, just dump it in
-                append_completion(&this->completions, suggestion, docopt_description_for_option(cmd_unescape, suggestion), local_flags);
+                append_completion(&this->completions, suggestion, regs.description_for_option(suggestion), local_flags);
                 success = true;
             }
             else
@@ -1624,12 +1625,12 @@ bool completer_t::complete_from_docopt(const wcstring &cmd_unescape, const parse
                 {
                     if (match_type_requires_full_replacement(match.type))
                     {
-                        append_completion(&this->completions, suggestion, docopt_description_for_option(cmd_unescape, suggestion), local_flags | COMPLETE_REPLACES_TOKEN, match);
+                        append_completion(&this->completions, suggestion, regs.description_for_option(suggestion), local_flags | COMPLETE_REPLACES_TOKEN, match);
                     }
                     else
                     {
                         // Append a prefix completion that starts after the last argument
-                        append_completion(&this->completions, wcstring(suggestion, last_arg.size()), docopt_description_for_option(cmd_unescape, suggestion), local_flags, match);
+                        append_completion(&this->completions, wcstring(suggestion, last_arg.size()), regs.description_for_option(suggestion), local_flags, match);
                     }
                     success = true;
                 }

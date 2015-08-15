@@ -383,7 +383,7 @@ static bool parse_argv_or_show_help(parser_t &parser, const wchar_t * const * ar
     parse_error_list_t errors;
     const wcstring_list_t argv_list = wcstring_list_t(argv, argv + argcount);
     const wcstring &cmd = argv_list.at(0);
-    bool parsed = docopt_parse_arguments(cmd, argv_list, out_args, &errors, NULL /* unused_args */);
+    bool parsed = docopt_get_registrations(cmd).parse_arguments(argv_list, out_args, &errors, NULL /* unused_args */);
     if (! parsed)
     {
         // TODO: error handling
