@@ -9,10 +9,6 @@ parts of fish.
 
 #include <unistd.h>
 
-#ifdef HAVE_STROPTS_H
-#include <stropts.h>
-#endif
-
 #ifdef HAVE_SIGINFO_H
 #include <siginfo.h>
 #endif
@@ -22,53 +18,35 @@ parts of fish.
 #include <wchar.h>
 #include <string.h>
 #include <stdio.h>
-#include <dirent.h>
 #include <sys/types.h>
+#include <assert.h>
+#include <math.h>
+#include <signal.h>
+
 
 #ifdef HAVE_SYS_IOCTL_H
 #include <sys/ioctl.h>
 #endif
 
 #include <sys/stat.h>
-#include <unistd.h>
 #include <wctype.h>
 #include <errno.h>
 #include <limits.h>
 #include <stdarg.h>
 #include <locale.h>
-#include <time.h>
 #include <sys/time.h>
-#include <fcntl.h>
 #include <algorithm>
 
 #ifdef HAVE_EXECINFO_H
 #include <execinfo.h>
 #endif
 
-#if HAVE_NCURSES_H
-#include <ncurses.h>
-#elif HAVE_NCURSES_CURSES_H
-#include <ncurses/curses.h>
-#else
-#include <curses.h>
-#endif
-
-#if HAVE_TERM_H
-#include <term.h>
-#elif HAVE_NCURSES_TERM_H
-#include <ncurses/term.h>
-#endif
-
 #include "fallback.h"
-#include "util.h"
 
 #include "wutil.h"
 #include "common.h"
 #include "expand.h"
-#include "proc.h"
 #include "wildcard.h"
-#include "parser.h"
-#include "complete.h"
 
 #include "util.cpp"
 #include "fallback.cpp"
@@ -547,13 +525,10 @@ wcstring wsetlocale(int category, const wchar_t *locale)
     /*
       Use ellipsis if on known unicode system, otherwise use $
     */
-    char *ctype = setlocale(LC_CTYPE, NULL);
-    bool unicode = (strstr(ctype, ".UTF") || strstr(ctype, ".utf"));
-
-    ellipsis_char = unicode ? L'\x2026' : L'$';
+    ellipsis_char = (wcwidth(L'\x2026') > 0) ? L'\x2026' : L'$';
 
     // U+23CE is the "return" character
-    omitted_newline_char = unicode ? L'\x23CE' : L'~';
+    omitted_newline_char = (wcwidth(L'\x23CE') > 0) ? L'\x23CE' : L'~';
 
     if (!res)
         return wcstring();

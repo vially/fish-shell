@@ -6,29 +6,14 @@
 #ifndef FISH_WUTIL_H
 #define FISH_WUTIL_H
 
-#include <stdlib.h>
 #include <stdio.h>
-#include <wchar.h>
 #include <dirent.h>
-#include <unistd.h>
-#include <sys/stat.h>
 #include <sys/types.h>
-#include <stdarg.h>
+#include <stddef.h>
+#include <time.h>
 #include <string>
-#include <utility>
 #include <stdint.h>
 #include "common.h"
-
-/**
-   Call this function on startup to create internal wutil
-   resources. This function doesn't do anything.
-*/
-void wutil_init();
-
-/**
-   Call this function on exit to free internal wutil resources
-*/
-void wutil_destroy();
 
 /**
    Wide character version of fopen(). This sets CLO_EXEC.
@@ -108,6 +93,14 @@ wchar_t *wrealpath(const wcstring &pathname, wchar_t *resolved_path);
 */
 bool wreaddir(DIR *dir, std::wstring &out_name);
 bool wreaddir_resolving(DIR *dir, const std::wstring &dir_path, std::wstring &out_name, bool *out_is_dir);
+
+/**
+ Like wreaddir, but skip items that are known to not be directories.
+ If this requires a stat (i.e. the file is a symlink), then return it.
+ Note that this does not guarantee that everything returned is a directory,
+ it's just an optimization for cases where we would check for directories anyways.
+*/
+bool wreaddir_for_dirs(DIR *dir, wcstring *out_name);
 
 /**
    Wide character version of dirname()

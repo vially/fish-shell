@@ -1,9 +1,18 @@
+#include <assert.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <wchar.h>
+#include <string>
+#include "common.h"
+#include "parse_constants.h"
 #include "parse_productions.h"
+#include "parse_tree.h"
 #include "tokenizer.h"
 #include "fallback.h"
-#include "wutil.h"
+#include "wutil.h" // IWYU pragma: keep - needed for wgettext
 #include "proc.h"
-#include "expand.h"
 #include <vector>
 #include <algorithm>
 
@@ -632,7 +641,7 @@ public:
     void accept_tokens(parse_token_t token1, parse_token_t token2);
 
     /* Report tokenizer errors */
-    void report_tokenizer_error(parse_token_t token, int tok_err, const wcstring &tok_error);
+    void report_tokenizer_error(const tok_t &tok);
 
     /* Indicate if we hit a fatal error */
     bool has_fatal_error(void) const
@@ -887,10 +896,10 @@ void parse_ll_t::parse_error_failed_production(struct parse_stack_element_t &sta
     }
 }
 
-void parse_ll_t::report_tokenizer_error(parse_token_t token, int tok_err_code, const wcstring &tok_error)
+void parse_ll_t::report_tokenizer_error(const tok_t &tok)
 {
     parse_error_code_t parse_error_code;
-    switch (tok_err_code)
+    switch (tok.error)
     {
         case TOK_UNTERMINATED_QUOTE:
             parse_error_code = parse_error_tokenizer_unterminated_quote;
@@ -898,6 +907,10 @@ void parse_ll_t::report_tokenizer_error(parse_token_t token, int tok_err_code, c
 
         case TOK_UNTERMINATED_SUBSHELL:
             parse_error_code = parse_error_tokenizer_unterminated_subshell;
+            break;
+            
+        case TOK_UNTERMINATED_SLICE:
+            parse_error_code = parse_error_tokenizer_unterminated_slice;
             break;
 
         case TOK_UNTERMINATED_ESCAPE:
@@ -910,7 +923,7 @@ void parse_ll_t::report_tokenizer_error(parse_token_t token, int tok_err_code, c
             break;
 
     }
-    this->parse_error(token, parse_error_code, L"%ls", tok_error.c_str());
+    this->parse_error_at_location(tok.offset + tok.error_offset, parse_error_code, L"%ls", tok.text.c_str());
 }
 
 void parse_ll_t::parse_error_unexpected_token(const wchar_t *expected, parse_token_t token)
@@ -1327,7 +1340,7 @@ bool parse_tree_from_string(const wcstring &str, parse_tree_flags_t parse_flags,
         /* Handle tokenizer errors. This is a hack because really the parser should report this for itself; but it has no way of getting the tokenizer message */
         if (queue[1].type == parse_special_type_tokenizer_error)
         {
-            parser.report_tokenizer_error(queue[1], tokenizer_token.error, tokenizer_token.text);
+            parser.report_tokenizer_error(tokenizer_token);
         }
 
         /* Handle errors */

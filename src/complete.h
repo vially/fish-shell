@@ -12,11 +12,9 @@
 */
 #define FISH_COMPLETE_H
 
-
-#include <wchar.h>
+#include <vector>
 #include <stdint.h>
 
-#include "util.h"
 #include "common.h"
 /**
  * Use all completions
@@ -49,11 +47,6 @@
  * Separator between completion and description
  */
 #define COMPLETE_SEP L'\004'
-
-/**
- * Separator between completion and description
- */
-#define COMPLETE_SEP_STR L"\004"
 
 /**
  * Character that separates the completion and description on
@@ -127,6 +120,9 @@ public:
     /* "Naturally less than" means in a natural ordering, where digits are treated as numbers. For example, foo10 is naturally greater than foo2 (but alphabetically less than it) */
     static bool is_naturally_less_than(const completion_t &a, const completion_t &b);
     static bool is_alphabetically_equal_to(const completion_t &a, const completion_t &b);
+    
+    /* If this completion replaces the entire token, prepend a prefix. Otherwise do nothing. */
+    void prepend_token_prefix(const wcstring &prefix);
 };
 
 enum

@@ -12,10 +12,8 @@
 */
 #define FISH_WILDCARD_H
 
-#include <wchar.h>
 #include <vector>
 
-#include "util.h"
 #include "common.h"
 #include "expand.h"
 #include "complete.h"
@@ -26,7 +24,6 @@
 
 #define WILDCARD_RESERVED 0xf400
 
-class completion_t;
 /**
    Enumeration of all wildcard types
 */
@@ -62,7 +59,7 @@ enum
 
   \param wc The wildcard string
   \param base_dir The base directory of the filesystem to perform the match against
-  \param flags flags for the search. Can be any combination of ACCEPT_INCOMPLETE and EXECUTABLES_ONLY
+  \param flags flags for the search. Can be any combination of EXPAND_FOR_COMPLETIONS and EXECUTABLES_ONLY
   \param out The list in which to put the output
 
   \return 1 if matches where found, 0 otherwise. Return -1 on abort (I.e. ^C was pressed).
@@ -78,6 +75,9 @@ int wildcard_expand_string(const wcstring &wc, const wcstring &base_dir, expand_
    \return true if the wildcard matched
 */
 bool wildcard_match(const wcstring &str, const wcstring &wc, bool leading_dots_fail_to_match = false);
+
+/* Like wildcard_match, but returns a fuzzy match type */
+enum fuzzy_match_type_t wildcard_match_fuzzy(const wcstring &str, const wcstring &wc, bool leading_dots_fail_to_match = false, enum fuzzy_match_type_t max_type = fuzzy_match_none);
 
 /** Check if the specified string contains wildcards */
 bool wildcard_has(const wcstring &, bool internal);

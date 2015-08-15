@@ -63,6 +63,7 @@
 #include "parse_util.h"
 #include "pager.h"
 #include "input.h"
+#include "wildcard.h"
 #include "utf8.h"
 #include "env_universal_common.h"
 #include "docopt_registration.h"
@@ -114,11 +115,6 @@ static bool should_test_function(const char *func_name)
    Number of laps to run performance testing loop
 */
 #define LAPS 50
-
-/**
-   The result of one of the test passes
-*/
-#define NUM_ANS L"-7 99999999 1234567 deadbeef DEADBEEFDEADBEEF"
 
 /**
    Number of encountered errors
@@ -471,6 +467,36 @@ static void test_tok()
         {
             err(L"Too few tokens returned from tokenizer");
         }
+    }
+    
+    /* Test some errors */
+    {
+        tok_t token;
+        tokenizer_t t(L"abc\\", 0);
+        do_test(t.next(&token));
+        do_test(token.type == TOK_ERROR);
+        do_test(token.error == TOK_UNTERMINATED_ESCAPE);
+        do_test(token.error_offset == 3);
+    }
+    
+    {
+        tok_t token;
+        tokenizer_t t(L"abc defg(hij (klm)", 0);
+        do_test(t.next(&token));
+        do_test(t.next(&token));
+        do_test(token.type == TOK_ERROR);
+        do_test(token.error == TOK_UNTERMINATED_SUBSHELL);
+        do_test(token.error_offset == 4);
+    }
+    
+    {
+        tok_t token;
+        tokenizer_t t(L"abc defg[hij (klm)", 0);
+        do_test(t.next(&token));
+        do_test(t.next(&token));
+        do_test(token.type == TOK_ERROR);
+        do_test(token.error == TOK_UNTERMINATED_SLICE);
+        do_test(token.error_offset == 4);
     }
 
     /* Test redirection_type_for_string */
@@ -1366,25 +1392,22 @@ static bool expand_test(const wchar_t *in, expand_flags_t flags, ...)
         expected.push_back(wcstring(arg));
     }
     va_end(va);
-
-    wcstring_list_t::const_iterator exp_it = expected.begin(), exp_end = expected.end();
+    
+    std::set<wcstring> remaining(expected.begin(), expected.end());
     std::vector<completion_t>::const_iterator out_it = output.begin(), out_end = output.end();
-    for (; exp_it != exp_end || out_it != out_end; ++exp_it, ++out_it)
+    for (; out_it != out_end; ++out_it)
     {
-        if (exp_it == exp_end || out_it == out_end)
-        {
-            // sizes don't match
-            res = false;
-            break;
-        }
-
-        if (out_it->completion != *exp_it)
+        if (! remaining.erase(out_it->completion))
         {
             res = false;
             break;
         }
     }
-
+    if (! remaining.empty())
+    {
+        res = false;
+    }
+    
     if (!res)
     {
         if ((arg = va_arg(va, wchar_t *)) != 0)
@@ -1436,22 +1459,86 @@ static void test_expand()
     expand_test(L"a*", EXPAND_SKIP_WILDCARDS, L"a*", 0,
                 L"Cannot skip wildcard expansion");
 
-    expand_test(L"/bin/l\\0", ACCEPT_INCOMPLETE, 0,
+    expand_test(L"/bin/l\\0", EXPAND_FOR_COMPLETIONS, 0,
                 L"Failed to handle null escape in expansion");
 
     expand_test(L"foo\\$bar", EXPAND_SKIP_VARIABLES, L"foo$bar", 0,
                 L"Failed to handle dollar sign in variable-skipping expansion");
+    
 
+    /*
+       b
+          x
+       bar
+       baz
+          xxx
+          yyy
+       bax
+          xxx
+       .foo
+     */
+    
     if (system("mkdir -p /tmp/fish_expand_test/")) err(L"mkdir failed");
+    if (system("mkdir -p /tmp/fish_expand_test/b/")) err(L"mkdir failed");
+    if (system("mkdir -p /tmp/fish_expand_test/baz/")) err(L"mkdir failed");
+    if (system("mkdir -p /tmp/fish_expand_test/bax/")) err(L"mkdir failed");
     if (system("touch /tmp/fish_expand_test/.foo")) err(L"touch failed");
+    if (system("touch /tmp/fish_expand_test/b/x")) err(L"touch failed");
     if (system("touch /tmp/fish_expand_test/bar")) err(L"touch failed");
+    if (system("touch /tmp/fish_expand_test/bax/xxx")) err(L"touch failed");
+    if (system("touch /tmp/fish_expand_test/baz/xxx")) err(L"touch failed");
+    if (system("touch /tmp/fish_expand_test/baz/yyy")) err(L"touch failed");
 
     // This is checking that .* does NOT match . and .. (https://github.com/fish-shell/fish-shell/issues/270). But it does have to match literal components (e.g. "./*" has to match the same as "*"
-    expand_test(L"/tmp/fish_expand_test/.*", 0, L"/tmp/fish_expand_test/.foo", 0,
+    const wchar_t * const wnull = NULL;
+    expand_test(L"/tmp/fish_expand_test/.*", 0,
+                L"/tmp/fish_expand_test/.foo", wnull,
                 L"Expansion not correctly handling dotfiles");
-    expand_test(L"/tmp/fish_expand_test/./.*", 0, L"/tmp/fish_expand_test/./.foo", 0,
+    
+    expand_test(L"/tmp/fish_expand_test/./.*", 0,
+                L"/tmp/fish_expand_test/./.foo", wnull,
                 L"Expansion not correctly handling literal path components in dotfiles");
+    
+    expand_test(L"/tmp/fish_expand_test/*/xxx", 0,
+                L"/tmp/fish_expand_test/bax/xxx", L"/tmp/fish_expand_test/baz/xxx", wnull,
+                L"Glob did the wrong thing 1");
+    
+    expand_test(L"/tmp/fish_expand_test/*z/xxx", 0,
+                L"/tmp/fish_expand_test/baz/xxx", wnull,
+                L"Glob did the wrong thing 2");
+    
+    expand_test(L"/tmp/fish_expand_test/**z/xxx", 0,
+                L"/tmp/fish_expand_test/baz/xxx", wnull,
+                L"Glob did the wrong thing 3");
+    
+    expand_test(L"/tmp/fish_expand_test/b**", 0,
+                L"/tmp/fish_expand_test/b", L"/tmp/fish_expand_test/b/x", L"/tmp/fish_expand_test/bar", L"/tmp/fish_expand_test/bax", L"/tmp/fish_expand_test/bax/xxx", L"/tmp/fish_expand_test/baz", L"/tmp/fish_expand_test/baz/xxx", L"/tmp/fish_expand_test/baz/yyy", wnull,
+                L"Glob did the wrong thing 4");
+    
+    expand_test(L"/tmp/fish_expand_test/BA", EXPAND_FOR_COMPLETIONS,
+                L"/tmp/fish_expand_test/bar", L"/tmp/fish_expand_test/bax/",  L"/tmp/fish_expand_test/baz/", wnull,
+                L"Case insensitive test did the wrong thing");
 
+    expand_test(L"/tmp/fish_expand_test/BA", EXPAND_FOR_COMPLETIONS,
+                L"/tmp/fish_expand_test/bar", L"/tmp/fish_expand_test/bax/",  L"/tmp/fish_expand_test/baz/", wnull,
+                L"Case insensitive test did the wrong thing");
+
+    expand_test(L"/tmp/fish_expand_test/b/yyy", EXPAND_FOR_COMPLETIONS,
+                /* nothing! */ wnull,
+                L"Wrong fuzzy matching 1");
+
+    expand_test(L"/tmp/fish_expand_test/b/x", EXPAND_FOR_COMPLETIONS | EXPAND_FUZZY_MATCH,
+                L"", wnull, // We just expect the empty string since this is an exact match
+                L"Wrong fuzzy matching 2");
+    
+    expand_test(L"/tmp/fish_expand_test/b/xx*", EXPAND_FOR_COMPLETIONS | EXPAND_FUZZY_MATCH,
+                format_string(L"/tmp/fish_expand_test/bax/xx%lc", (wint_t)ANY_STRING).c_str(), format_string(L"/tmp/fish_expand_test/baz/xx%lc", (wint_t)ANY_STRING).c_str(), wnull,
+                L"Wrong fuzzy matching 3");
+    
+    expand_test(L"/tmp/fish_expand_test/b/yyy", EXPAND_FOR_COMPLETIONS | EXPAND_FUZZY_MATCH,
+                L"/tmp/fish_expand_test/baz/yyy", wnull,
+                L"Wrong fuzzy matching 4");
+    
     if (! expand_test(L"/tmp/fish_expand_test/.*", 0, L"/tmp/fish_expand_test/.foo", 0))
     {
         err(L"Expansion not correctly handling dotfiles");
@@ -1460,7 +1547,30 @@ static void test_expand()
     {
         err(L"Expansion not correctly handling literal path components in dotfiles");
     }
+    
+    char saved_wd[PATH_MAX] = {};
+    if (NULL == getcwd(saved_wd, sizeof saved_wd))
+    {
+        err(L"getcwd failed");
+        return;
+    }
 
+    if (chdir("/tmp/fish_expand_test"))
+    {
+        err(L"chdir failed");
+        return;
+    }
+    
+    expand_test(L"b/xx", EXPAND_FOR_COMPLETIONS | EXPAND_FUZZY_MATCH,
+                L"bax/xxx", L"baz/xxx", wnull,
+                L"Wrong fuzzy matching 5");
+    
+    if (chdir(saved_wd))
+    {
+        err(L"chdir failed");
+    }
+
+    
     if (system("rm -Rf /tmp/fish_expand_test")) err(L"rm failed");
 }
 
@@ -4115,7 +4225,6 @@ int main(int argc, char **argv)
 
     reader_destroy();
     builtin_destroy();
-    wutil_destroy();
     event_destroy();
     proc_destroy();
 

@@ -12,23 +12,16 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <wchar.h>
-#include <wctype.h>
 #include <string.h>
 #include <dirent.h>
-#include <stdarg.h>
 #include <limits.h>
 #include <libgen.h>
 #include <pthread.h>
+#include <assert.h>
 #include <string>
 #include <map>
 
-
-#if HAVE_LIBINTL_H
-#include <libintl.h>
-#endif
-
 #include "fallback.h"
-#include "util.h"
 
 #include "common.h"
 #include "wutil.h"
@@ -36,11 +29,6 @@
 typedef std::string cstring;
 
 const file_id_t kInvalidFileID = {(dev_t)-1LL, (ino_t)-1LL, (uint64_t)-1LL, -1, -1, (uint32_t)-1};
-
-/**
-   Minimum length of the internal covnersion buffers
-*/
-#define TMP_LEN_MIN 256
 
 #ifndef PATH_MAX
 #ifdef MAXPATHLEN
@@ -59,14 +47,6 @@ static pthread_mutex_t wgettext_lock;
 /* Maps string keys to (immortal) pointers to string values. */
 typedef std::map<wcstring, const wchar_t *> wgettext_map_t;
 static wgettext_map_t wgettext_map;
-
-void wutil_init()
-{
-}
-
-void wutil_destroy()
-{
-}
 
 bool wreaddir_resolving(DIR *dir, const std::wstring &dir_path, std::wstring &out_name, bool *out_is_dir)
 {
@@ -128,6 +108,40 @@ bool wreaddir(DIR *dir, std::wstring &out_name)
 
     out_name = str2wcstring(d->d_name);
     return true;
+}
+
+bool wreaddir_for_dirs(DIR *dir, wcstring *out_name)
+{
+    struct dirent *result = NULL;
+    while (result == NULL)
+    {
+        struct dirent *d = readdir(dir);
+        if (!d) break;
+        
+#if HAVE_STRUCT_DIRENT_D_TYPE
+        switch (d->d_type)
+        {
+            // These may be directories
+            case DT_DIR:
+            case DT_LNK:
+            case DT_UNKNOWN:
+                result = d;
+                break;
+                
+            // Nothing else can
+            default:
+                break;
+        }
+#else
+        /* We can't determine if it's a directory or not, so just return it */
+        result = d;
+#endif
+    }
+    if (result && out_name)
+    {
+        *out_name = str2wcstring(result->d_name);
+    }
+    return result != NULL;
 }
 
 

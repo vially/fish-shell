@@ -22,20 +22,21 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
 
 #include "config.h"
 
-
+#include <limits.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <sys/stat.h>
+#include <string>
+#include <vector>
 #include <stdlib.h>
 #include <stdio.h>
 #include <wchar.h>
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
-#include <unistd.h>
-#include <termios.h>
 #include <fcntl.h>
-#include <sys/param.h>
-#include <sys/socket.h>
+#include <sys/socket.h> // IWYU pragma: keep - suggests internal header
 #include <sys/un.h>
-#include <sys/types.h>
 #include <pwd.h>
 
 #ifdef HAVE_GETOPT_H
@@ -43,29 +44,24 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
 #endif
 
 #include <locale.h>
-#include <signal.h>
 
-#include "fallback.h"
-#include "util.h"
+#include "fallback.h" // IWYU pragma: keep
 
 #include "common.h"
 #include "reader.h"
 #include "builtin.h"
 #include "function.h"
-#include "complete.h"
 #include "wutil.h"
 #include "env.h"
-#include "sanity.h"
 #include "proc.h"
 #include "parser.h"
 #include "expand.h"
 #include "intern.h"
-#include "exec.h"
 #include "event.h"
-#include "output.h"
 #include "history.h"
 #include "path.h"
 #include "input.h"
+#include "io.h"
 #include "fish_version.h"
 
 /* PATH_MAX may not exist */
@@ -527,7 +523,6 @@ int main(int argc, char **argv)
 
     proc_init();
     event_init();
-    wutil_init();
     builtin_init();
     function_init();
     env_init(&paths);
@@ -640,7 +635,6 @@ int main(int argc, char **argv)
     proc_destroy();
     builtin_destroy();
     reader_destroy();
-    wutil_destroy();
     event_destroy();
 
     if (g_log_forks)

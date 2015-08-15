@@ -6,19 +6,8 @@
 
 #include "config.h"
 
-#include <stdlib.h>
-#include <stdio.h>
 #include <assert.h>
-#include <string.h>
 #include <errno.h>
-#include <termios.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-
-#ifdef HAVE_SYS_IOCTL_H
-#include <sys/ioctl.h>
-#endif
-
 #include <unistd.h>
 #include <wchar.h>
 
@@ -36,30 +25,21 @@
 #include <ncurses/term.h>
 #endif
 
-#include <signal.h>
-#include <dirent.h>
 #include <wctype.h>
 
-
-
-#include "fallback.h"
-#include "util.h"
-
-#include "wutil.h"
+#include "fallback.h" // IWYU pragma: keep
+#include "wutil.h" // IWYU pragma: keep - needed for wgettext
 #include "reader.h"
 #include "proc.h"
 #include "common.h"
-#include "sanity.h"
 #include "input_common.h"
 #include "input.h"
 #include "parser.h"
 #include "env.h"
-#include "expand.h"
 #include "event.h"
-#include "signal.h"
-
+#include "signal.h" // IWYU pragma: keep - needed for CHECK_BLOCK
+#include "io.h"
 #include "output.h"
-#include "intern.h"
 #include <vector>
 #include <algorithm>
 
@@ -572,7 +552,7 @@ static void input_mapping_execute(const input_mapping_t &m, bool allow_commands)
        has_commands: there are shell commands that need to be evaluated */
     bool has_commands = false, has_functions = false;
 
-    for (wcstring_list_t::const_iterator it = m.commands.begin(), end = m.commands.end(); it != end; it++)
+    for (wcstring_list_t::const_iterator it = m.commands.begin(), end = m.commands.end(); it != end; ++it)
     {
         if (input_function_get_code(*it) != -1)
             has_functions = true;
@@ -601,7 +581,7 @@ static void input_mapping_execute(const input_mapping_t &m, bool allow_commands)
     else if (has_functions && !has_commands)
     {
         /* functions are added at the head of the input queue */
-        for (wcstring_list_t::const_reverse_iterator it = m.commands.rbegin(), end = m.commands.rend (); it != end; it++)
+        for (wcstring_list_t::const_reverse_iterator it = m.commands.rbegin(), end = m.commands.rend(); it != end; ++it)
         {
             wchar_t code = input_function_get_code(*it);
             input_function_push_args(code);
@@ -616,7 +596,7 @@ static void input_mapping_execute(const input_mapping_t &m, bool allow_commands)
            -f execute), we won't see that until all other commands have also
            been run. */
         int last_status = proc_get_last_status();
-        for (wcstring_list_t::const_iterator it = m.commands.begin(), end = m.commands.end(); it != end; it++)
+        for (wcstring_list_t::const_iterator it = m.commands.begin(), end = m.commands.end(); it != end; ++it)
         {
             parser_t::principal_parser().eval(it->c_str(), io_chain_t(), TOP);
         }

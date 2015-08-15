@@ -11,12 +11,8 @@ efficient way for transforming that to the desired screen content.
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <errno.h>
-#include <termios.h>
-#include <sys/types.h>
 
 #include <unistd.h>
-#include <wctype.h>
 
 #if HAVE_NCURSES_H
 #include <ncurses.h>
@@ -36,13 +32,14 @@ efficient way for transforming that to the desired screen content.
 #include <time.h>
 
 #include <assert.h>
+#include <algorithm>
+#include <string>
 #include <vector>
 
 
 #include "fallback.h"
 #include "common.h"
 #include "util.h"
-#include "wutil.h"
 #include "output.h"
 #include "highlight.h"
 #include "screen.h"
@@ -1427,6 +1424,7 @@ void s_reset(screen_t *s, screen_reset_mode_t mode)
         wcstring abandon_line_string;
         abandon_line_string.reserve(screen_width + 32); //should be enough
 
+	/* Don't need to check for wcwidth errors; this is done when setting up omitted_newline_char in common.cpp */
         int non_space_width = wcwidth(omitted_newline_char);
         if (screen_width >= non_space_width)
         {

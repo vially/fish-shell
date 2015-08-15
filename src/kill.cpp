@@ -6,41 +6,19 @@
   with the X clipboard.
 */
 
-#include "config.h"
+#include "config.h" // IWYU pragma: keep
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <wchar.h>
-#include <termios.h>
-#include <unistd.h>
-#include <signal.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <dirent.h>
+#include <stddef.h>
 #include <algorithm>
+#include <list>
+#include <string>
 
-#include "fallback.h"
-#include "util.h"
-
-#include "wutil.h"
+#include "fallback.h" // IWYU pragma: keep
 #include "kill.h"
-#include "proc.h"
-#include "sanity.h"
 #include "common.h"
 #include "env.h"
 #include "exec.h"
 #include "path.h"
-
-/**
-   Maximum entries in killring
-*/
-#define KILL_MAX 8192
-
-/** Last kill string */
-//static ll_node_t *kill_last=0;
-
-/** Current kill string */
-//static ll_node_t *kill_current=0;
 
 /** Kill ring */
 typedef std::list<wcstring> kill_list_t;

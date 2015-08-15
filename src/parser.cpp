@@ -4,62 +4,35 @@ The fish parser. Contains functions for parsing and evaluating code.
 
 */
 
-#include "config.h"
+#include "config.h" // IWYU pragma: keep
 
-#include <stdlib.h>
 #include <stdio.h>
 #include <wchar.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <termios.h>
-#include <pwd.h>
-#include <dirent.h>
+#include <assert.h>
+#include <string>
 #include <algorithm>
 
 #include "fallback.h"
-#include "util.h"
-
 #include "common.h"
 #include "wutil.h"
 #include "proc.h"
 #include "parser.h"
-#include "parser_keywords.h"
-#include "tokenizer.h"
-#include "exec.h"
-#include "wildcard.h"
 #include "function.h"
-#include "builtin.h"
 #include "env.h"
 #include "expand.h"
 #include "reader.h"
 #include "sanity.h"
 #include "event.h"
 #include "intern.h"
+#include "signal.h" // IWYU pragma: keep - needed for CHECK_BLOCK
 #include "parse_util.h"
-#include "path.h"
-#include "signal.h"
-#include "complete.h"
 #include "parse_tree.h"
 #include "parse_execution.h"
-
-/**
-   Error message for tokenizer error. The tokenizer message is
-   appended to this message.
-*/
-#define TOK_ERR_MSG _( L"Tokenizer error: '%ls'")
 
 /**
    Error for evaluating in illegal scope
 */
 #define INVALID_SCOPE_ERR_MSG _( L"Tried to evaluate commands using invalid block type '%ls'" )
-
-/**
-   Error for wrong token type
-*/
-#define UNEXPECTED_TOKEN_ERR_MSG _( L"Unexpected token of type '%ls'")
 
 /**
    While block description

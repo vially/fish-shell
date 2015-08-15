@@ -4,6 +4,15 @@
 */
 
 #include <fcntl.h>
+#include <errno.h>
+#include <signal.h>
+#include <stdio.h>
+#include <string.h>
+#include <time.h>
+#include <memory> // IWYU pragma: keep - suggests <tr1/memory> instead
+#include "common.h"
+#include "proc.h"
+#include "wutil.h"
 #include "signal.h"
 #include "postfork.h"
 #include "iothread.h"
@@ -500,7 +509,7 @@ void safe_report_exec_error(int err, const char *actual_cmd, const char * const 
 
             if (arg_max > 0)
             {
-                format_size_safe(sz2, sz);
+                format_size_safe(sz2, static_cast<unsigned long long>(arg_max));
                 debug_safe(0, "The total size of the argument and environment lists %s exceeds the operating system limit of %s.", sz1, sz2);
             }
             else
