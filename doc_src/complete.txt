@@ -3,7 +3,7 @@
 \subsection complete-synopsis Synopsis
 \fish{synopsis}
 complete ( -c | --command | -p | --path ) COMMAND
-        [(-g|--signature) SIGNATURE]
+        [( -g | --signature) SIGNATURE]
         [( -s | --short-option ) SHORT_OPTION]
         [( -l | --long-option | -o | --old-option ) LONG_OPTION]
         [( -a | --arguments ) OPTION_ARGUMENTS]
@@ -48,6 +48,8 @@ the fish manual.
 - `-A` or `--authoritative` implies that there may be no more options than the ones specified, and that fish should assume that options not listed are spelling errors.
 
 - `-x` or `--exclusive` implies both `-r` and `-f`.
+
+- `-g` or `--signature` adds a docopt signature to the command.
 
 Command specific tab-completions in `fish` are based on the notion of options and arguments. An option is a parameter which begins with a hyphen, such as '`-h`', '`-help`' or '`--help`'. Arguments are parameters that do not begin with a hyphen. Fish recognizes three styles of options, the same styles as the GNU version of the getopt library. These styles are:
 
