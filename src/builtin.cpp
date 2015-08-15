@@ -1996,6 +1996,9 @@ int define_function(parser_t &parser, const wcstring_list_t &c_args, const wcstr
     wcstring_list_t inherit_vars;
 
     bool shadows = true;
+    
+    wcstring signature;
+    bool do_signature = false;
 
     wcstring_list_t wrap_targets;
     
@@ -2019,6 +2022,7 @@ int define_function(parser_t &parser, const wcstring_list_t &c_args, const wcstr
         { L"argument-names", no_argument, 0, 'a' },
         { L"no-scope-shadowing", no_argument, 0, 'S' },
         { L"inherit-variable", required_argument, 0, 'V' },
+        { L"signature", required_argument, 0, 'g' },
         { 0, 0, 0, 0 }
     };
 
@@ -2029,7 +2033,7 @@ int define_function(parser_t &parser, const wcstring_list_t &c_args, const wcstr
         // The leading - here specifies RETURN_IN_ORDER
         int opt = w.wgetopt_long(argc,
                                  argv,
-                                 L"-d:s:j:p:v:e:haSV:",
+                                 L"-d:s:j:p:v:e:haSV:g:",
                                  long_options,
                                  &opt_index);
         if (opt == -1)
@@ -2196,6 +2200,20 @@ int define_function(parser_t &parser, const wcstring_list_t &c_args, const wcstr
                 inherit_vars.push_back(w.woptarg);
                 break;
             }
+                
+            case 'g':
+            {
+                if (do_signature)
+                {
+                    append_format(*out_err, _(L"%ls: Multiple function signatures\n"), argv[0]);
+                    res = STATUS_BUILTIN_ERROR;
+                    break;
+                }
+                assert(w.woptarg != NULL);
+                signature = w.woptarg;
+                do_signature = true;
+                break;
+            }
 
             case 'h':
                 builtin_print_help(parser, argv[0], stdout_buffer);
@@ -2215,10 +2233,10 @@ int define_function(parser_t &parser, const wcstring_list_t &c_args, const wcstr
 
     }
 
+    wcstring function_name;
     if (!res)
     {
         /* Determine the function name, and remove it from the list of positionals */
-        wcstring function_name;
         bool name_is_missing = positionals.empty();
         if (! name_is_missing)
         {
@@ -2291,10 +2309,30 @@ int define_function(parser_t &parser, const wcstring_list_t &c_args, const wcstr
                               _(L"%ls: Expected one argument, got %d\n"),
                               argv[0],
                               positionals.size() + 1);
-                res=1;
+                res = STATUS_BUILTIN_ERROR;
             }
         }
-
+    }
+    
+    if (! res && do_signature)
+    {
+        // Handle a signature
+        // If this fails, we don't want to define the function
+        parse_error_list_t doc_errors;
+        bool success = docopt_register_usage(function_name, L"" /* condition */, signature, L"" /* description */, &doc_errors);
+        if (! success)
+        {
+            assert(! doc_errors.empty());
+            const parse_error_t &err = doc_errors.front();
+            bool is_interactive = false, skip_caret = false;
+            wcstring err_desc = err.describe_with_prefix(signature, wcstring(), is_interactive, skip_caret);
+            append_format(*out_err, L"%ls: %ls\n", argv[0], err_desc.c_str());
+            res = STATUS_BUILTIN_ERROR;
+        }
+    }
+    
+    if (! res)
+    {
         /* Here we actually define the function! */
         function_data_t d;
 
@@ -2313,6 +2351,7 @@ int define_function(parser_t &parser, const wcstring_list_t &c_args, const wcstr
         }
 
         d.definition = contents.c_str();
+        
 
         function_add(d, parser, definition_line_offset);
 
