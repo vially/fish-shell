@@ -315,6 +315,8 @@ bool docopt_registration_set_t::parse_arguments(const wcstring_list_t &argv, doc
         return false;
     }
     
+    const bool wants_unused = (out_unused_arguments != NULL);
+    
     // An argument is unused if it is unused in all cases
     // This is the union of all unused arguments.
     // Initially all are unused - prepopulate it with every index.
@@ -334,7 +336,7 @@ bool docopt_registration_set_t::parse_arguments(const wcstring_list_t &argv, doc
     {
         docopt_error_list_t errors;
         std::vector<size_t> local_unused_args;
-        docopt_argument_map_t args = registrations.at(i)->parser->parse_arguments(argv, docopt_fish::flags_default, &errors, &local_unused_args);
+        docopt_argument_map_t args = registrations.at(i)->parser->parse_arguments(argv, docopt_fish::flags_default, &errors, (wants_unused ? &local_unused_args : NULL));
         
         // Insert values from the argument map. Don't overwrite, so that earlier docopts take precedence
         docopt_argument_map_t::const_iterator iter;
@@ -342,22 +344,35 @@ bool docopt_registration_set_t::parse_arguments(const wcstring_list_t &argv, doc
         {
             // We could use insert() to avoid the two lookups, but the code is very ugly
             const wcstring &key = iter->first;
+            const docopt_parser_t::argument_t &arg = iter->second;
             if (total_args.has(key))
             {
                 // The argument was already present, and we don't overwrite.
                 continue;
             }
             
-            // Store the list of values associated with the argument. This may be empty.
-            total_args.vals[key] = iter->second.values;
+            // Determine what value we want to store
+            if (string_prefixes_string(L"<", key))
+            {
+                // It's a variable. Store its values.
+                total_args.vals[key] = iter->second.values;
+            }
+            else
+            {
+                // It's an or a command option. Store its count.
+                total_args.vals[key] = wcstring_list_t(1, to_string(arg.count));
+            }
         }
         
-        // Intersect unused arguments
-        std::vector<size_t> intersected_unused_args;
-        std::set_intersection(local_unused_args.begin(), local_unused_args.end(),
-                              total_unused_args.begin(), total_unused_args.end(),
-                              std::back_inserter(intersected_unused_args));
-        total_unused_args.swap(intersected_unused_args);
+        if (wants_unused)
+        {
+            // Intersect unused arguments
+            std::vector<size_t> intersected_unused_args;
+            std::set_intersection(local_unused_args.begin(), local_unused_args.end(),
+                                  total_unused_args.begin(), total_unused_args.end(),
+                                  std::back_inserter(intersected_unused_args));
+            total_unused_args.swap(intersected_unused_args);
+        }
     }
     
     if (out_arguments != NULL)
@@ -426,4 +441,36 @@ wcstring docopt_arguments_t::dump() const
 void docopt_arguments_t::swap(docopt_arguments_t &rhs)
 {
     this->vals.swap(rhs.vals);
+}
+
+wcstring docopt_derive_variable_name(const wcstring &key)
+{
+    assert(! key.empty());
+    wcstring result = key;
+    if (result.at(0) == L'-')
+    {
+        // It's an option. Strip leading dashes, prepend 'opt_'
+        size_t first_non_dash = result.find_first_not_of(L'-');
+        if (first_non_dash == wcstring::npos)
+        {
+            first_non_dash = result.size(); //paranoia?
+        }
+        result.replace(0, first_non_dash, L"opt_");
+    }
+    else if (result.at(0) == L'<')
+    {
+        // Variable. Strip leading < and >
+        assert(result.at(result.size() - 1) == L'>');
+        result.erase(result.end() - 1);
+        result.erase(result.begin());
+    }
+    else
+    {
+        // A command. Prepend 'cmd_'.
+        result.insert(0, L"cmd_");
+    }
+    
+    // We always replace dashes with underscores
+    std::replace(result.begin(), result.end(), L'-', L'_');
+    return result;
 }

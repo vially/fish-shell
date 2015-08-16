@@ -81,6 +81,11 @@ public:
     
     /* Given a command and a list of arguments, parses it into an argument list. Returns by reference: a map from argument name to value, a list of errors, and a list of unused arguments. If there is no docopt registration, the result is false. */
     bool parse_arguments(const wcstring_list_t &argv, docopt_arguments_t *out_arguments, parse_error_list_t *out_errors, std::vector<size_t> *out_unused_arguments) const;
+    
+    bool empty() const
+    {
+        return this->registrations.empty();
+    }
 };
 
 /* Helper class for representing the result of parsing argv via docopt. */
@@ -103,6 +108,12 @@ class docopt_arguments_t
     size_t size() const
     {
         return vals.size();
+    }
+    
+    /* Returns the value dictionary */
+    const std::map<wcstring, wcstring_list_t> &values() const
+    {
+        return vals;
     }
     
     /* Returns the array of values for a given key, or an empty list if none */
@@ -134,5 +145,15 @@ bool docopt_register_usage(const wcstring &cmd, const wcstring &condition, const
 
 /** Get the set of registrations for a given command */
 docopt_registration_set_t docopt_get_registrations(const wcstring &cmd);
+
+/** Given a key name like -b, derive the docopt variable name like opt_b suitable for setting in a function.
+ 
+ The rules are:
+ 
+   - Commands get cmd prepended.  git checkout -> cmd_checkout
+   - Options get opt prepended. rm -r -> opt_r
+   - Variables are used as-is. echo <stuff> -> stuff
+*/
+wcstring docopt_derive_variable_name(const wcstring &key);
 
 #endif

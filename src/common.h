@@ -395,6 +395,7 @@ void debug_safe(int level, const char *msg, const char *param1 = NULL, const cha
 /** Writes out a long safely */
 void format_long_safe(char buff[64], long val);
 void format_long_safe(wchar_t buff[64], long val);
+void format_ullong_safe(wchar_t buff[64], unsigned long long val);
 
 
 template<typename T>
@@ -433,6 +434,14 @@ inline wcstring to_string(const long &x)
 }
 
 template<>
+inline wcstring to_string(const unsigned long long &x)
+{
+    wchar_t buff[128];
+    format_ullong_safe(buff, x);
+    return wcstring(buff);
+}
+
+template<>
 inline bool from_string(const std::string &x)
 {
     return ! x.empty() && strchr("YTyt1", x.at(0));
@@ -448,6 +457,12 @@ template<>
 inline wcstring to_string(const int &x)
 {
     return to_string(static_cast<long>(x));
+}
+
+template<>
+inline wcstring to_string(const size_t &x)
+{
+    return to_string(static_cast<unsigned long long>(x));
 }
 
 wchar_t **make_null_terminated_array(const wcstring_list_t &lst);

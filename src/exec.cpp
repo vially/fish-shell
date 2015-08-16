@@ -797,7 +797,7 @@ void exec_job(parser_t &parser, job_t *j)
                   signals.
                 */
                 signal_unblock();
-                function_prepare_environment(func_name, p->get_argv()+1, inherit_vars);
+                function_prepare_environment(func_name, p->get_argv(), inherit_vars);
                 signal_block();
 
                 parser.forbid_function(func_name);

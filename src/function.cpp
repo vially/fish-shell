@@ -26,8 +26,10 @@
 #include "common.h"
 #include "intern.h"
 #include "event.h"
+#include "expand.h"
 #include "reader.h"
 #include "parser_keywords.h"
+#include "docopt_registration.h"
 #include "env.h"
 
 /**
@@ -394,25 +396,66 @@ void function_prepare_environment(const wcstring &name, const wchar_t * const * 
      1. argv
      2. named arguments
      3. inherited variables
+     4. docopt
     */
-    env_set_argv(argv);
+    
+    // Argv
+    env_set_argv(argv + 1);
  
+    // Named arguments
     const wcstring_list_t named_arguments = function_get_named_arguments(name);
     if (! named_arguments.empty())
     {
-        const wchar_t * const *arg;
-        size_t i;
-        for (i=0, arg=argv; i < named_arguments.size(); i++)
+        const wchar_t * const *arg = argv + 1;
+        for (size_t i=0; i < named_arguments.size(); i++)
         {
-            env_set(named_arguments.at(i).c_str(), *arg, ENV_LOCAL | ENV_USER);
+            env_set(named_arguments.at(i), *arg, ENV_LOCAL | ENV_USER);
             
             if (*arg)
                 arg++;
         }
     }
     
+    // Inherited vars
     for (std::map<wcstring,env_var_t>::const_iterator it = inherited_vars.begin(), end = inherited_vars.end(); it != end; ++it)
     {
         env_set(it->first, it->second.missing() ? NULL : it->second.c_str(), ENV_LOCAL | ENV_USER);
+    }
+    
+    // Docopt
+    // TODO: argument validation / error handling
+    docopt_registration_set_t regs = docopt_get_registrations(name);
+    if (!regs.empty())
+    {
+        
+        size_t arg_count = 0;
+        while (argv[arg_count])
+        {
+            arg_count++;
+        }
+        const wcstring_list_t argv_strs(argv, argv + arg_count);
+        
+        docopt_arguments_t doc_args;
+        regs.parse_arguments(argv_strs, &doc_args, NULL, NULL);
+        
+        /* Set each argument in the environment. */
+        wcstring joined_val; // storage
+        typedef std::map<wcstring, wcstring_list_t> value_map_t;
+        const value_map_t &vals = doc_args.values();
+        for (value_map_t::const_iterator iter = vals.begin(); iter != vals.end(); ++iter)
+        {
+            const wcstring_list_t &vals = iter->second;
+            joined_val.clear();
+            for (size_t i=0; i < vals.size(); i++)
+            {
+                if (i > 0)
+                {
+                    joined_val.append(ARRAY_SEP_STR);
+                }
+                joined_val.append(vals.at(i));
+            }
+            int env_err = env_set(docopt_derive_variable_name(iter->first), joined_val.c_str(), ENV_LOCAL | ENV_USER);
+            assert(env_err == 0); //TODO!
+        }
     }
 }

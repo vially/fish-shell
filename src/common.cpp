@@ -806,6 +806,34 @@ void format_long_safe(wchar_t buff[64], long val)
     }
 }
 
+void format_ullong_safe(wchar_t buff[64], unsigned long long val)
+{
+    if (val == 0)
+    {
+        wcscpy(buff, L"0");
+    }
+    else
+    {
+        /* Generate the string in reverse */
+        size_t idx = 0;
+        while (val != 0)
+        {
+            unsigned long long rem = val % 10;
+            buff[idx++] = L'0' + (wchar_t)(rem);
+            val /= 10;
+        }
+        buff[idx] = 0;
+        
+        size_t left = 0, right = idx - 1;
+        while (left < right)
+        {
+            wchar_t tmp = buff[left];
+            buff[left++] = buff[right];
+            buff[right--] = tmp;
+        }
+    }
+}
+
 void write_screen(const wcstring &msg, wcstring &buff)
 {
     int line_width = 0;
