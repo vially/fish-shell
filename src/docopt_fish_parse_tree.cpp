@@ -11,10 +11,6 @@
 #include <set>
 #include <vector>
 
-using std::vector;
-using std::string;
-using std::wstring;
-
 enum parse_result_t {
     parsed_ok,
     parsed_error,
@@ -27,12 +23,6 @@ OPEN_DOCOPT_IMPL
 #pragma mark -
 #pragma mark Usage Grammar
 #pragma mark -
-
-struct alternation_list;
-struct expression_list_t;
-struct expression_t;
-struct simple_clause_t;
-struct opt_ellipsis_t;
 
 /* Context passed around in our recursive descent parser */
 template<typename string_t>
@@ -55,9 +45,9 @@ struct parse_context_t {
         return c == ' ' || c == '\t';
     }
 
-    static range_t scan_1_char(const string_t &str, range_t *remaining, char_t c) {
+    inline range_t scan_1_char(range_t *remaining, char_t c) {
         range_t result(remaining->start, 0);
-        if (result.end() < remaining->end() && str.at(result.end()) == c) {
+        if (result.end() < remaining->end() && this->source->at(result.end()) == c) {
             result.length += 1;
             remaining->start += 1;
             remaining->length -= 1;
@@ -66,11 +56,11 @@ struct parse_context_t {
     }
 
     template<typename T>
-    static range_t scan_while(const string_t &str, range_t *remaining, T func) {
+    inline range_t scan_while(range_t *remaining, T func) {
         size_t idx = remaining->start;
         const size_t end = remaining->end();
-        assert(end <= str.size());
-        while (idx < end && func(str[idx])) {
+        assert(end <= this->source->size());
+        while (idx < end && func((*this->source)[idx])) {
             idx++;
         }
         range_t result(remaining->start, idx - remaining->start);
@@ -98,9 +88,9 @@ struct parse_context_t {
     /* Consume leading whitespace. Newlines are meaningful if their associated lines are indented the same or less than initial_indent. If they are indented more, we swallow those. */
     void consume_leading_whitespace() {
         for (;;) {
-            scan_while(*source, &remaining_range, char_is_space_or_tab);
+            scan_while(&remaining_range, char_is_space_or_tab);
             const range_t saved_remaining = this->remaining_range;
-            if (scan_1_char(*source, &remaining_range, '\n').empty()) {
+            if (scan_1_char(&remaining_range, '\n').empty()) {
                 // Not a newline
                 remaining_range = saved_remaining;
                 break;
@@ -176,7 +166,7 @@ struct parse_context_t {
     bool scan(char_t c, token_t *tok = NULL) {
         this->consume_leading_whitespace();
         token_t storage;
-        storage.range = scan_1_char(*source, &remaining_range, c);
+        storage.range = scan_1_char(&remaining_range, c);
         if (tok) {
             *tok = storage;
         }
@@ -214,12 +204,12 @@ struct parse_context_t {
         range_t result;
         for (;;) {
             // Scan non-bracketed sequence. This may be empty (in which case the merge does nothing)
-            result.merge(scan_while(*source, &remaining_range, char_is_valid_in_word));
+            result.merge(scan_while(&remaining_range, char_is_valid_in_word));
             // Scan bracketed sequence
-            range_t bracket_start = scan_1_char(*source, &remaining_range, '<');
+            range_t bracket_start = scan_1_char(&remaining_range, '<');
             if (! bracket_start.empty()) {
-                scan_while(*source, &remaining_range, char_is_valid_in_bracketed_word);
-                range_t bracket_end = scan_1_char(*source, &remaining_range, '>');
+                scan_while(&remaining_range, char_is_valid_in_bracketed_word);
+                range_t bracket_end = scan_1_char(&remaining_range, '>');
                 if (bracket_end.empty()) {
                     // TODO: report unclosed bracket
                 } else {
@@ -255,7 +245,7 @@ struct parse_context_t {
     
     // Given a vector of T, try parsing and then appending a T
     template<typename T>
-    inline parse_result_t try_parse_appending(std::vector<T> *vec) {
+    inline parse_result_t try_parse_appending(vector<T> *vec) {
         vec->resize(vec->size() + 1);
         parse_result_t status = this->parse(&vec->back());
         if (status != parsed_ok) {
@@ -493,7 +483,6 @@ struct parse_context_t {
         }
     }
 
-    
     // Parse a general expression
     parse_result_t parse(expression_t *result) {
         if (this->is_at_end()) {
@@ -565,8 +554,8 @@ usages_t *parse_usage(const string_t &src, const range_t &src_range, const optio
 }
 
 // Force template instantiation
-template usages_t *parse_usage<string>(const string &, const range_t &, const option_list_t &, vector<error_t<string> > *);
-template usages_t *parse_usage<wstring>(const wstring &, const range_t &, const option_list_t &shortcut_options, vector<error_t<wstring> > *);
+template usages_t *parse_usage<std::string>(const std::string &, const range_t &, const option_list_t &, vector<error_t<std::string> > *);
+template usages_t *parse_usage<std::wstring>(const std::wstring &, const range_t &, const option_list_t &shortcut_options, vector<error_t<std::wstring> > *);
 
 
 CLOSE_DOCOPT_IMPL /* namespace */

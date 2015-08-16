@@ -725,13 +725,13 @@ static int builtin_bind(parser_t &parser, wchar_t **in_argv)
     
     if (args.has(L"--mode"))
     {
-        bind_mode = args.get(L"--mode").c_str();
+        bind_mode = args.get(L"<MODE>").c_str();
         bind_mode_given = true;
     }
     
     if (args.has(L"--sets-mode"))
     {
-        sets_bind_mode = args.get(L"--sets-mode").c_str();
+        sets_bind_mode = args.get(L"<NEW_MODE>").c_str();
         sets_bind_mode_given = true;
     }
     

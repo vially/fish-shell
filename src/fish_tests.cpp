@@ -2319,10 +2319,11 @@ static void test_docopt_args(void)
     parse_error_list_t errors;
     bool ret = docopt_get_registrations(cmd).parse_arguments(argv, &arguments, &errors, &unused_args);
     do_test(ret == true);
-    do_test(arguments.size() == 2);
+    do_test(arguments.size() == 3);
     do_test(arguments.has(L"--command"));
     do_test(arguments.has(L"--group"));
-    do_test(arguments.get_list(L"--group") == wcstring_list_t(1, L"grp"));
+    do_test(arguments.has(L"<val>"));
+    do_test(arguments.get_list(L"<val>") == wcstring_list_t(1, L"grp"));
 }
 
 static void test_1_completion(wcstring line, const wcstring &completion, complete_flags_t flags, bool append_only, wcstring expected, long source_line)

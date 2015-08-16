@@ -90,7 +90,6 @@ static int builtin_set_color(parser_t &parser, wchar_t **argv)
     if (! parse_argv_or_show_help(parser, argv, &args, &status))
     {
         return status;
-
     }
     
     if (args.has(L"--print_colors"))
@@ -100,7 +99,7 @@ static int builtin_set_color(parser_t &parser, wchar_t **argv)
     }
     
     wcstring_list_t fgcolor_strs = args.get_list(L"<color>");
-    const wchar_t *bgcolor_str = args.get_or_null(L"--background");
+    const wchar_t *bgcolor_str = args.get_or_null(L"<bgcolor>");
     bool bold = args.has(L"--bold");
     bool underline = args.has(L"--underline");
     int errret = -1;
