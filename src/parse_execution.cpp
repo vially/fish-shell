@@ -410,7 +410,8 @@ parse_execution_result_t parse_execution_context_t::run_function_statement(const
         const wcstring contents_str = wcstring(this->src, contents_start, contents_end - contents_start);
         int definition_line_offset = this->line_offset_of_character_at_offset(contents_start);
         wcstring error_str;
-        int err = define_function(*parser, argument_list, contents_str, definition_line_offset, &error_str);
+        io_streams_t streams;
+        int err = define_function(*parser, streams, argument_list, contents_str, definition_line_offset, &error_str);
         proc_set_last_status(err);
 
         if (! error_str.empty())
@@ -613,9 +614,8 @@ parse_execution_result_t parse_execution_context_t::run_switch_statement(const p
                     const wcstring &arg = case_args.at(i);
 
                     /* Unescape wildcards so they can be expanded again */
-                    wchar_t *unescaped_arg = parse_util_unescape_wildcards(arg.c_str());
+                    wcstring unescaped_arg = parse_util_unescape_wildcards(arg);
                     bool match = wildcard_match(switch_value_expanded, unescaped_arg);
-                    free(unescaped_arg);
 
                     /* If this matched, we're done */
                     if (match)
@@ -831,7 +831,7 @@ parse_execution_result_t parse_execution_context_t::handle_command_not_found(con
     {
         this->report_error(statement_node,
                            _(L"Variables may not be used as commands. In fish, please define a function or use 'eval %ls'."),
-                           cmd+1);
+                           cmd);
     }
     else if (wcschr(cmd, L'$'))
     {

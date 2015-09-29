@@ -1475,6 +1475,9 @@ static void test_expand()
           yyy
        bax
           xxx
+       lol
+          nub
+             q
        .foo
      */
     
@@ -1482,12 +1485,14 @@ static void test_expand()
     if (system("mkdir -p /tmp/fish_expand_test/b/")) err(L"mkdir failed");
     if (system("mkdir -p /tmp/fish_expand_test/baz/")) err(L"mkdir failed");
     if (system("mkdir -p /tmp/fish_expand_test/bax/")) err(L"mkdir failed");
+    if (system("mkdir -p /tmp/fish_expand_test/lol/nub/")) err(L"mkdir failed");
     if (system("touch /tmp/fish_expand_test/.foo")) err(L"touch failed");
     if (system("touch /tmp/fish_expand_test/b/x")) err(L"touch failed");
     if (system("touch /tmp/fish_expand_test/bar")) err(L"touch failed");
     if (system("touch /tmp/fish_expand_test/bax/xxx")) err(L"touch failed");
     if (system("touch /tmp/fish_expand_test/baz/xxx")) err(L"touch failed");
     if (system("touch /tmp/fish_expand_test/baz/yyy")) err(L"touch failed");
+    if (system("touch /tmp/fish_expand_test/lol/nub/q")) err(L"touch failed");
 
     // This is checking that .* does NOT match . and .. (https://github.com/fish-shell/fish-shell/issues/270). But it does have to match literal components (e.g. "./*" has to match the same as "*"
     const wchar_t * const wnull = NULL;
@@ -1514,6 +1519,19 @@ static void test_expand()
     expand_test(L"/tmp/fish_expand_test/b**", 0,
                 L"/tmp/fish_expand_test/b", L"/tmp/fish_expand_test/b/x", L"/tmp/fish_expand_test/bar", L"/tmp/fish_expand_test/bax", L"/tmp/fish_expand_test/bax/xxx", L"/tmp/fish_expand_test/baz", L"/tmp/fish_expand_test/baz/xxx", L"/tmp/fish_expand_test/baz/yyy", wnull,
                 L"Glob did the wrong thing 4");
+   
+    // a trailing slash should only produce directories
+    expand_test(L"/tmp/fish_expand_test/b*/", 0,
+                L"/tmp/fish_expand_test/b/", L"/tmp/fish_expand_test/baz/", L"/tmp/fish_expand_test/bax/", wnull,
+                L"Glob did the wrong thing 5");
+
+    expand_test(L"/tmp/fish_expand_test/b**/", 0,
+                L"/tmp/fish_expand_test/b/", L"/tmp/fish_expand_test/baz/", L"/tmp/fish_expand_test/bax/", wnull,
+                L"Glob did the wrong thing 6");
+ 
+    expand_test(L"/tmp/fish_expand_test/**/q", 0,
+                L"/tmp/fish_expand_test/lol/nub/q", wnull,
+                L"Glob did the wrong thing 7");
     
     expand_test(L"/tmp/fish_expand_test/BA", EXPAND_FOR_COMPLETIONS,
                 L"/tmp/fish_expand_test/bar", L"/tmp/fish_expand_test/bax/",  L"/tmp/fish_expand_test/baz/", wnull,
@@ -1531,8 +1549,10 @@ static void test_expand()
                 L"", wnull, // We just expect the empty string since this is an exact match
                 L"Wrong fuzzy matching 2");
     
+    // some vswprintfs refuse to append ANY_STRING in a format specifiers, so don't use format_string here
+    const wcstring any_str_str(1, ANY_STRING);
     expand_test(L"/tmp/fish_expand_test/b/xx*", EXPAND_FOR_COMPLETIONS | EXPAND_FUZZY_MATCH,
-                format_string(L"/tmp/fish_expand_test/bax/xx%lc", (wint_t)ANY_STRING).c_str(), format_string(L"/tmp/fish_expand_test/baz/xx%lc", (wint_t)ANY_STRING).c_str(), wnull,
+                (L"/tmp/fish_expand_test/bax/xx" + any_str_str).c_str(), (L"/tmp/fish_expand_test/baz/xx" + any_str_str).c_str(), wnull,
                 L"Wrong fuzzy matching 3");
     
     expand_test(L"/tmp/fish_expand_test/b/yyy", EXPAND_FOR_COMPLETIONS | EXPAND_FUZZY_MATCH,
@@ -1922,7 +1942,7 @@ static void test_is_potential_path()
 }
 
 /** Test the 'test' builtin */
-int builtin_test(parser_t &parser, wchar_t **argv);
+int builtin_test(parser_t &parser, io_streams_t &streams, wchar_t **argv);
 static bool run_one_test_test(int expected, wcstring_list_t &lst, bool bracket)
 {
     parser_t parser(PARSER_TYPE_GENERAL, true);
@@ -1939,7 +1959,8 @@ static bool run_one_test_test(int expected, wcstring_list_t &lst, bool bracket)
         i++;
     }
     argv[i+1] = NULL;
-    int result = builtin_test(parser, argv);
+    io_streams_t streams;
+    int result = builtin_test(parser, streams, argv);
     delete[] argv;
     return expected == result;
 }
@@ -1964,15 +1985,16 @@ static void test_test_brackets()
 {
     // Ensure [ knows it needs a ]
     parser_t parser(PARSER_TYPE_GENERAL, true);
+    io_streams_t streams;
 
     const wchar_t *argv1[] = {L"[", L"foo", NULL};
-    do_test(builtin_test(parser, (wchar_t **)argv1) != 0);
+    do_test(builtin_test(parser, streams, (wchar_t **)argv1) != 0);
 
     const wchar_t *argv2[] = {L"[", L"foo", L"]", NULL};
-    do_test(builtin_test(parser, (wchar_t **)argv2) == 0);
+    do_test(builtin_test(parser, streams, (wchar_t **)argv2) == 0);
 
     const wchar_t *argv3[] = {L"[", L"foo", L"]", L"bar", NULL};
-    do_test(builtin_test(parser, (wchar_t **)argv3) != 0);
+    do_test(builtin_test(parser, streams, (wchar_t **)argv3) != 0);
 
 }
 
@@ -4117,6 +4139,290 @@ static void test_wcstring_tok(void)
     }
 }
 
+int builtin_string(parser_t &parser, io_streams_t &streams, wchar_t **argv);
+static void run_one_string_test(const wchar_t **argv, int expected_rc, const wchar_t *expected_out)
+{
+    parser_t parser(PARSER_TYPE_GENERAL, true);
+    io_streams_t streams;
+    streams.stdin_is_directly_redirected = false; // read from argv instead of stdin
+    int rc = builtin_string(parser, streams, const_cast<wchar_t**>(argv));
+    wcstring args;
+    for (int i = 0; argv[i] != 0; i++)
+    {
+        args += escape_string(argv[i], ESCAPE_ALL) + L' ';
+    }
+    args.resize(args.size() - 1);
+    if (rc != expected_rc)
+    {
+        err(L"Test failed on line %lu: [%ls]: expected return code %d but got %d",
+                __LINE__, args.c_str(), expected_rc, rc);
+    }
+    else if (streams.out.buffer() != expected_out)
+    {
+        err(L"Test failed on line %lu: [%ls]: expected [%ls] but got [%ls]",
+                __LINE__, args.c_str(),
+                escape_string(expected_out, ESCAPE_ALL).c_str(),
+                escape_string(streams.out.buffer(), ESCAPE_ALL).c_str());
+    }
+}
+
+static void test_string(void)
+{
+    static struct string_test
+    {
+        const wchar_t *argv[15];
+        int expected_rc;
+        const wchar_t *expected_out;
+    }
+    string_tests[] =
+    {
+        { {L"string", L"escape", 0},                                1, L"" },
+        { {L"string", L"escape", L"", 0},                           0, L"''\n" },
+        { {L"string", L"escape", L"-n", L"", 0},                    0, L"\n" },
+        { {L"string", L"escape", L"a", 0},                          0, L"a\n" },
+        { {L"string", L"escape", L"\x07", 0},                       0, L"\\cg\n" },
+        { {L"string", L"escape", L"\"x\"", 0},                      0, L"'\"x\"'\n" },
+        { {L"string", L"escape", L"hello world", 0},                0, L"'hello world'\n" },
+        { {L"string", L"escape", L"-n", L"hello world", 0},         0, L"hello\\ world\n" },
+        { {L"string", L"escape", L"hello", L"world", 0},            0, L"hello\nworld\n" },
+        { {L"string", L"escape", L"-n", L"~", 0},                   0, L"\\~\n" },
+
+        { {L"string", L"join", 0},                                  2, L"" },
+        { {L"string", L"join", L"", 0},                             1, L"" },
+        { {L"string", L"join", L"", L"", L"", L"", 0},              0, L"\n" },
+        { {L"string", L"join", L"", L"a", L"b", L"c", 0},           0, L"abc\n" },
+        { {L"string", L"join", L".", L"fishshell", L"com", 0},      0, L"fishshell.com\n" },
+        { {L"string", L"join", L"/", L"usr", 0},                    1, L"usr\n" },
+        { {L"string", L"join", L"/", L"usr", L"local", L"bin", 0},  0, L"usr/local/bin\n" },
+        { {L"string", L"join", L"...", L"3", L"2", L"1", 0},        0, L"3...2...1\n" },
+        { {L"string", L"join", L"-q", 0},                           2, L"" },
+        { {L"string", L"join", L"-q", L".", 0},                     1, L"" },
+        { {L"string", L"join", L"-q", L".", L".", 0},               1, L"" },
+
+        { {L"string", L"length", 0},                                1, L"" },
+        { {L"string", L"length", L"", 0},                           1, L"0\n" },
+        { {L"string", L"length", L"", L"", L"", 0},                 1, L"0\n0\n0\n" },
+        { {L"string", L"length", L"a", 0},                          0, L"1\n" },
+        { {L"string", L"length", L"\U0002008A", 0},                 0, L"1\n" },
+        { {L"string", L"length", L"um", L"dois", L"três", 0},       0, L"2\n4\n4\n" },
+        { {L"string", L"length", L"um", L"dois", L"três", 0},       0, L"2\n4\n4\n" },
+        { {L"string", L"length", L"-q", 0},                         1, L"" },
+        { {L"string", L"length", L"-q", L"", 0},                    1, L"" },
+        { {L"string", L"length", L"-q", L"a", 0},                   0, L"" },
+
+        { {L"string", L"match", 0},                                         2, L"" },
+        { {L"string", L"match", L"", 0},                                    1, L"" },
+        { {L"string", L"match", L"", L"", 0},                               0, L"\n" },
+        { {L"string", L"match", L"?", L"a", 0},                             0, L"a\n" },
+        { {L"string", L"match", L"*", L"", 0},                              0, L"\n" },
+        { {L"string", L"match", L"**", L"", 0},                             0, L"\n" },
+        { {L"string", L"match", L"*", L"xyzzy", 0},                         0, L"xyzzy\n" },
+        { {L"string", L"match", L"**", L"plugh", 0},                        0, L"plugh\n" },
+        { {L"string", L"match", L"a*b", L"axxb", 0},                        0, L"axxb\n" },
+        { {L"string", L"match", L"a??b", L"axxb", 0},                       0, L"axxb\n" },
+        { {L"string", L"match", L"-i", L"a??B", L"axxb", 0},                0, L"axxb\n" },
+        { {L"string", L"match", L"-i", L"a??b", L"Axxb", 0},                0, L"Axxb\n" },
+        { {L"string", L"match", L"a*", L"axxb", 0},                         0, L"axxb\n" },
+        { {L"string", L"match", L"*a", L"xxa", 0},                          0, L"xxa\n" },
+        { {L"string", L"match", L"*a*", L"axa", 0},                         0, L"axa\n" },
+        { {L"string", L"match", L"*a*", L"xax", 0},                         0, L"xax\n" },
+        { {L"string", L"match", L"*a*", L"bxa", 0},                         0, L"bxa\n" },
+        { {L"string", L"match", L"*a", L"a", 0},                            0, L"a\n" },
+        { {L"string", L"match", L"a*", L"a", 0},                            0, L"a\n" },
+        { {L"string", L"match", L"a*b*c", L"axxbyyc", 0},                   0, L"axxbyyc\n" },
+        { {L"string", L"match", L"a*b?c", L"axxbyc", 0},                    0, L"axxbyc\n" },
+        { {L"string", L"match", L"*?", L"a", 0},                            0, L"a\n" },
+        { {L"string", L"match", L"*?", L"ab", 0},                           0, L"ab\n" },
+        { {L"string", L"match", L"?*", L"a", 0},                            0, L"a\n" },
+        { {L"string", L"match", L"?*", L"ab", 0},                           0, L"ab\n" },
+        { {L"string", L"match", L"\\*", L"*", 0},                           0, L"*\n" },
+        { {L"string", L"match", L"a*\\", L"abc\\", 0},                      0, L"abc\\\n" },
+        { {L"string", L"match", L"a*\\?", L"abc?", 0},                      0, L"abc?\n" },
+
+        { {L"string", L"match", L"?", L"", 0},                              1, L"" },
+        { {L"string", L"match", L"?", L"ab", 0},                            1, L"" },
+        { {L"string", L"match", L"??", L"a", 0},                            1, L"" },
+        { {L"string", L"match", L"?a", L"a", 0},                            1, L"" },
+        { {L"string", L"match", L"a?", L"a", 0},                            1, L"" },
+        { {L"string", L"match", L"a??B", L"axxb", 0},                       1, L"" },
+        { {L"string", L"match", L"a*b", L"axxbc", 0},                       1, L"" },
+        { {L"string", L"match", L"*b", L"bbba", 0},                         1, L"" },
+        { {L"string", L"match", L"0x[0-9a-fA-F][0-9a-fA-F]", L"0xbad", 0},  1, L"" },
+
+        { {L"string", L"match", L"-a", L"*", L"ab", L"cde", 0},             0, L"ab\ncde\n" },
+        { {L"string", L"match", L"*", L"ab", L"cde", 0},                    0, L"ab\ncde\n" },
+        { {L"string", L"match", L"-n", L"*d*", L"cde", 0},                  0, L"1 3\n" },
+        { {L"string", L"match", L"-n", L"*x*", L"cde", 0},                  1, L"" },
+        { {L"string", L"match", L"-q", L"a*", L"b", L"c", 0},               1, L"" },
+        { {L"string", L"match", L"-q", L"a*", L"b", L"a", 0},               0, L"" },
+
+        { {L"string", L"match", L"-r", 0},                                  2, L"" },
+        { {L"string", L"match", L"-r", L"", 0},                             1, L"" },
+        { {L"string", L"match", L"-r", L"", L"", 0},                        0, L"\n" },
+        { {L"string", L"match", L"-r", L".", L"a", 0},                      0, L"a\n" },
+        { {L"string", L"match", L"-r", L".*", L"", 0},                      0, L"\n" },
+        { {L"string", L"match", L"-r", L"a*b", L"b", 0},                    0, L"b\n" },
+        { {L"string", L"match", L"-r", L"a*b", L"aab", 0},                  0, L"aab\n" },
+        { {L"string", L"match", L"-r", L"-i", L"a*b", L"Aab", 0},           0, L"Aab\n" },
+        { {L"string", L"match", L"-r", L"-a", L"a[bc]", L"abadac", 0},      0, L"ab\nac\n" },
+        { {L"string", L"match", L"-r", L"a", L"xaxa", L"axax", 0},          0, L"a\na\n" },
+        { {L"string", L"match", L"-r", L"-a", L"a", L"xaxa", L"axax", 0},   0, L"a\na\na\na\n" },
+        { {L"string", L"match", L"-r", L"a[bc]", L"abadac", 0},             0, L"ab\n" },
+        { {L"string", L"match", L"-r", L"-q", L"a[bc]", L"abadac", 0},      0, L"" },
+        { {L"string", L"match", L"-r", L"-q", L"a[bc]", L"ad", 0},          1, L"" },
+        { {L"string", L"match", L"-r", L"(a+)b(c)", L"aabc", 0},            0, L"aabc\naa\nc\n" },
+        { {L"string", L"match", L"-r", L"-a", L"(a)b(c)", L"abcabc", 0},    0, L"abc\na\nc\nabc\na\nc\n" },
+        { {L"string", L"match", L"-r", L"(a)b(c)", L"abcabc", 0},           0, L"abc\na\nc\n" },
+        { {L"string", L"match", L"-r", L"(a|(z))(bc)", L"abc", 0},          0, L"abc\na\nbc\n" },
+        { {L"string", L"match", L"-r", L"-n", L"a", L"ada", L"dad", 0},     0, L"1 1\n2 1\n" },
+        { {L"string", L"match", L"-r", L"-n", L"-a", L"a", L"bacadae", 0},  0, L"2 1\n4 1\n6 1\n" },
+        { {L"string", L"match", L"-r", L"-n", L"(a).*(b)", L"a---b", 0},    0, L"1 5\n1 1\n5 1\n" },
+        { {L"string", L"match", L"-r", L"-n", L"(a)(b)", L"ab", 0}, 0, L"1 2\n1 1\n2 1\n" },
+        { {L"string", L"match", L"-r", L"-n", L"(a)(b)", L"abab", 0}, 0, L"1 2\n1 1\n2 1\n" },
+        { {L"string", L"match", L"-r", L"-n", L"-a", L"(a)(b)", L"abab", 0}, 0, L"1 2\n1 1\n2 1\n3 2\n3 1\n4 1\n" },
+        { {L"string", L"match", L"-r", L"*", L"", 0},                       2, L"" },
+        { {L"string", L"match", L"-r", L"-a", L"a*", L"b", 0},              0, L"\n\n" },
+        { {L"string", L"match", L"-r", L"foo\\Kbar", L"foobar", 0},         0, L"bar\n" },
+        { {L"string", L"match", L"-r", L"(foo)\\Kbar", L"foobar", 0},       0, L"bar\nfoo\n" },
+        { {L"string", L"match", L"-r", L"(?=ab\\K)", L"ab", 0},             0, L"\n" },
+        { {L"string", L"match", L"-r", L"(?=ab\\K)..(?=cd\\K)", L"abcd", 0}, 0, L"\n" },
+
+        { {L"string", L"replace", 0},                                       2, L"" },
+        { {L"string", L"replace", L"", 0},                                  2, L"" },
+        { {L"string", L"replace", L"", L"", 0},                             1, L"" },
+        { {L"string", L"replace", L"", L"", L"", 0},                        1, L"\n" },
+        { {L"string", L"replace", L"", L"", L" ", 0},                       1, L" \n" },
+        { {L"string", L"replace", L"a", L"b", L"", 0},                      1, L"\n" },
+        { {L"string", L"replace", L"a", L"b", L"a", 0},                     0, L"b\n" },
+        { {L"string", L"replace", L"a", L"b", L"xax", 0},                   0, L"xbx\n" },
+        { {L"string", L"replace", L"a", L"b", L"xax", L"axa", 0},           0, L"xbx\nbxa\n" },
+        { {L"string", L"replace", L"bar", L"x", L"red barn", 0},            0, L"red xn\n" },
+        { {L"string", L"replace", L"x", L"bar", L"red xn", 0},              0, L"red barn\n" },
+        { {L"string", L"replace", L"--", L"x", L"-", L"xyz", 0},            0, L"-yz\n" },
+        { {L"string", L"replace", L"--", L"y", L"-", L"xyz", 0},            0, L"x-z\n" },
+        { {L"string", L"replace", L"--", L"z", L"-", L"xyz", 0},            0, L"xy-\n" },
+        { {L"string", L"replace", L"-i", L"z", L"X", L"_Z_", 0},            0, L"_X_\n" },
+        { {L"string", L"replace", L"-a", L"a", L"A", L"aaa", 0},            0, L"AAA\n" },
+        { {L"string", L"replace", L"-i", L"a", L"z", L"AAA", 0},            0, L"zAA\n" },
+        { {L"string", L"replace", L"-q", L"x", L">x<", L"x", 0},            0, L"" },
+        { {L"string", L"replace", L"-a", L"x", L"", L"xxx", 0},             0, L"\n" },
+        { {L"string", L"replace", L"-a", L"***", L"_", L"*****", 0},        0, L"_**\n" },
+        { {L"string", L"replace", L"-a", L"***", L"***", L"******", 0},     0, L"******\n" },
+        { {L"string", L"replace", L"-a", L"a", L"b", L"xax", L"axa", 0},    0, L"xbx\nbxb\n" },
+
+        { {L"string", L"replace", L"-r", 0},                                2, L"" },
+        { {L"string", L"replace", L"-r", L"", 0},                           2, L"" },
+        { {L"string", L"replace", L"-r", L"", L"", 0},                      1, L"" },
+        { {L"string", L"replace", L"-r", L"", L"", L"", 0},                 0, L"\n" },  // pcre2 behavior
+        { {L"string", L"replace", L"-r", L"", L"", L" ", 0},                0, L" \n" }, // pcre2 behavior
+        { {L"string", L"replace", L"-r", L"a", L"b", L"", 0},               1, L"\n" },
+        { {L"string", L"replace", L"-r", L"a", L"b", L"a", 0},              0, L"b\n" },
+        { {L"string", L"replace", L"-r", L".", L"x", L"abc", 0},            0, L"xbc\n" },
+        { {L"string", L"replace", L"-r", L".", L"", L"abc", 0},             0, L"bc\n" },
+        { {L"string", L"replace", L"-r", L"(\\w)(\\w)", L"$2$1", L"ab", 0}, 0, L"ba\n" },
+        { {L"string", L"replace", L"-r", L"(\\w)", L"$1$1", L"ab", 0},      0, L"aab\n" },
+        { {L"string", L"replace", L"-r", L"-a", L".", L"x", L"abc", 0},     0, L"xxx\n" },
+        { {L"string", L"replace", L"-r", L"-a", L"(\\w)", L"$1$1", L"ab", 0}, 0, L"aabb\n" },
+        { {L"string", L"replace", L"-r", L"-a", L".", L"", L"abc", 0},      0, L"\n" },
+        { {L"string", L"replace", L"-r", L"a", L"x", L"bc", L"cd", L"de", 0}, 1, L"bc\ncd\nde\n" },
+        { {L"string", L"replace", L"-r", L"a", L"x", L"aba", L"caa", 0},    0, L"xba\ncxa\n" },
+        { {L"string", L"replace", L"-r", L"-a", L"a", L"x", L"aba", L"caa", 0}, 0, L"xbx\ncxx\n" },
+        { {L"string", L"replace", L"-r", L"-i", L"A", L"b", L"xax", 0},     0, L"xbx\n" },
+        { {L"string", L"replace", L"-r", L"-i", L"[a-z]", L".", L"1A2B", 0}, 0, L"1.2B\n" },
+        { {L"string", L"replace", L"-r", L"A", L"b", L"xax", 0},            1, L"xax\n" },
+        { {L"string", L"replace", L"-r", L"a", L"$1", L"a", 0},             2, L"" },
+        { {L"string", L"replace", L"-r", L"(a)", L"$2", L"a", 0},           2, L"" },
+        { {L"string", L"replace", L"-r", L"*", L".", L"a", 0},              2, L"" },
+        { {L"string", L"replace", L"-r", L"^(.)", L"\t$1", L"abc", L"x", 0}, 0, L"\tabc\n\tx\n" },
+
+        { {L"string", L"split", 0},                                         2, L"" },
+        { {L"string", L"split", L":", 0},                                   1, L"" },
+        { {L"string", L"split", L".", L"www.ch.ic.ac.uk", 0},               0, L"www\nch\nic\nac\nuk\n" },
+        { {L"string", L"split", L"..", L"....", 0},                         0, L"\n\n\n" },
+        { {L"string", L"split", L"-m", L"x", L"..", L"....", 0},            2, L"" },
+        { {L"string", L"split", L"-m1", L"..", L"....", 0},                 0, L"\n..\n" },
+        { {L"string", L"split", L"-m0", L"/", L"/usr/local/bin/fish", 0},   1, L"/usr/local/bin/fish\n" },
+        { {L"string", L"split", L"-m2", L":", L"a:b:c:d", L"e:f:g:h", 0},   0, L"a\nb\nc:d\ne\nf\ng:h\n" },
+        { {L"string", L"split", L"-m1", L"-r", L"/", L"/usr/local/bin/fish", 0}, 0, L"/usr/local/bin\nfish\n" },
+        { {L"string", L"split", L"-r", L".", L"www.ch.ic.ac.uk", 0},        0, L"www\nch\nic\nac\nuk\n" },
+        { {L"string", L"split", L"--", L"--", L"a--b---c----d", 0},         0, L"a\nb\n-c\n\nd\n" },
+        { {L"string", L"split", L"-r", L"..", L"....", 0},                  0, L"\n\n\n" },
+        { {L"string", L"split", L"-r", L"--", L"--", L"a--b---c----d", 0},  0, L"a\nb-\nc\n\nd\n" },
+        { {L"string", L"split", L"", L"", 0},                               1, L"\n" },
+        { {L"string", L"split", L"", L"a", 0},                              1, L"a\n" },
+        { {L"string", L"split", L"", L"ab", 0},                             0, L"a\nb\n" },
+        { {L"string", L"split", L"", L"abc", 0},                            0, L"a\nb\nc\n" },
+        { {L"string", L"split", L"-m1", L"", L"abc", 0},                    0, L"a\nbc\n" },
+        { {L"string", L"split", L"-r", L"", L"", 0},                        1, L"\n" },
+        { {L"string", L"split", L"-r", L"", L"a", 0},                       1, L"a\n" },
+        { {L"string", L"split", L"-r", L"", L"ab", 0},                      0, L"a\nb\n" },
+        { {L"string", L"split", L"-r", L"", L"abc", 0},                     0, L"a\nb\nc\n" },
+        { {L"string", L"split", L"-r", L"-m1", L"", L"abc", 0},             0, L"ab\nc\n" },
+        { {L"string", L"split", L"-q", 0},                                  2, L"" },
+        { {L"string", L"split", L"-q", L":", 0},                            1, L"" },
+        { {L"string", L"split", L"-q", L"x", L"axbxc", 0},                  0, L"" },
+
+        { {L"string", L"sub", 0},                                   1, L"" },
+        { {L"string", L"sub", L"abcde", 0},                         0, L"abcde\n"},
+        { {L"string", L"sub", L"-l", L"x", L"abcde", 0},            2, L""},
+        { {L"string", L"sub", L"-s", L"x", L"abcde", 0},            2, L""},
+        { {L"string", L"sub", L"-l0", L"abcde", 0},                 0, L"\n"},
+        { {L"string", L"sub", L"-l2", L"abcde", 0},                 0, L"ab\n"},
+        { {L"string", L"sub", L"-l5", L"abcde", 0},                 0, L"abcde\n"},
+        { {L"string", L"sub", L"-l6", L"abcde", 0},                 0, L"abcde\n"},
+        { {L"string", L"sub", L"-l-1", L"abcde", 0},                2, L""},
+        { {L"string", L"sub", L"-s0", L"abcde", 0},                 2, L""},
+        { {L"string", L"sub", L"-s1", L"abcde", 0},                 0, L"abcde\n"},
+        { {L"string", L"sub", L"-s5", L"abcde", 0},                 0, L"e\n"},
+        { {L"string", L"sub", L"-s6", L"abcde", 0},                 0, L"\n"},
+        { {L"string", L"sub", L"-s-1", L"abcde", 0},                0, L"e\n"},
+        { {L"string", L"sub", L"-s-5", L"abcde", 0},                0, L"abcde\n"},
+        { {L"string", L"sub", L"-s-6", L"abcde", 0},                0, L"abcde\n"},
+        { {L"string", L"sub", L"-s1", L"-l0", L"abcde", 0},         0, L"\n"},
+        { {L"string", L"sub", L"-s1", L"-l1", L"abcde", 0},         0, L"a\n"},
+        { {L"string", L"sub", L"-s2", L"-l2", L"abcde", 0},         0, L"bc\n"},
+        { {L"string", L"sub", L"-s-1", L"-l1", L"abcde", 0},        0, L"e\n"},
+        { {L"string", L"sub", L"-s-1", L"-l2", L"abcde", 0},        0, L"e\n"},
+        { {L"string", L"sub", L"-s-3", L"-l2", L"abcde", 0},        0, L"cd\n"},
+        { {L"string", L"sub", L"-s-3", L"-l4", L"abcde", 0},        0, L"cde\n"},
+        { {L"string", L"sub", L"-q", 0},                            1, L"" },
+        { {L"string", L"sub", L"-q", L"abcde", 0},                  0, L""},
+
+        { {L"string", L"trim", 0},                                  1, L""},
+        { {L"string", L"trim", L""},                                1, L"\n"},
+        { {L"string", L"trim", L" "},                               0, L"\n"},
+        { {L"string", L"trim", L"  \f\n\r\t"},                      0, L"\n"},
+        { {L"string", L"trim", L" a"},                              0, L"a\n"},
+        { {L"string", L"trim", L"a "},                              0, L"a\n"},
+        { {L"string", L"trim", L" a "},                             0, L"a\n"},
+        { {L"string", L"trim", L"-l", L" a"},                       0, L"a\n"},
+        { {L"string", L"trim", L"-l", L"a "},                       1, L"a \n"},
+        { {L"string", L"trim", L"-l", L" a "},                      0, L"a \n"},
+        { {L"string", L"trim", L"-r", L" a"},                       1, L" a\n"},
+        { {L"string", L"trim", L"-r", L"a "},                       0, L"a\n"},
+        { {L"string", L"trim", L"-r", L" a "},                      0, L" a\n"},
+        { {L"string", L"trim", L"-c", L".", L" a"},                 1, L" a\n"},
+        { {L"string", L"trim", L"-c", L".", L"a "},                 1, L"a \n"},
+        { {L"string", L"trim", L"-c", L".", L" a "},                1, L" a \n"},
+        { {L"string", L"trim", L"-c", L".", L".a"},                 0, L"a\n"},
+        { {L"string", L"trim", L"-c", L".", L"a."},                 0, L"a\n"},
+        { {L"string", L"trim", L"-c", L".", L".a."},                0, L"a\n"},
+        { {L"string", L"trim", L"-c", L"\\/", L"/a\\"},             0, L"a\n"},
+        { {L"string", L"trim", L"-c", L"\\/", L"a/"},               0, L"a\n"},
+        { {L"string", L"trim", L"-c", L"\\/", L"\\a/"},             0, L"a\n"},
+        { {L"string", L"trim", L"-c", L"", L".a."},                 1, L".a.\n"},
+
+        { {0}, 0, 0 }
+    };
+
+    struct string_test *t = string_tests;
+    while (t->argv[0] != 0)
+    {
+        run_one_string_test(t->argv, t->expected_rc, t->expected_out);
+        t++;
+    }
+}
+
 /**
    Main test
 */
@@ -4213,6 +4519,7 @@ int main(int argc, char **argv)
     if (should_test_function("history_races")) history_tests_t::test_history_races();
     if (should_test_function("history_formats")) history_tests_t::test_history_formats();
     //history_tests_t::test_history_speed();
+    if (should_test_function("string")) test_string();
 
     say(L"Encountered %d errors in low-level tests", err_count);
     if (s_test_run_count == 0)

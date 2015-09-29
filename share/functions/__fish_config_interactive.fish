@@ -169,12 +169,12 @@ function __fish_config_interactive -d "Initializations that should be performed 
 		set -g fish_bind_mode default
 		if test "$fish_key_bindings" = fish_default_key_bindings
 			fish_default_key_bindings
-			# Load user key bindings if they are defined
-			if functions --query fish_user_key_bindings > /dev/null
-				fish_user_key_bindings
-			end
 		else
 			eval $fish_key_bindings ^/dev/null
+		end
+		# Load user key bindings if they are defined
+		if functions --query fish_user_key_bindings > /dev/null
+			fish_user_key_bindings
 		end
 	end
 
@@ -196,17 +196,19 @@ function __fish_config_interactive -d "Initializations that should be performed 
 		end
 	end
 
-	# The first time a command is not found, look for command-not-found
-	# This is not cheap so we try to avoid doing it during startup
-	# config.fish already installed a handler for noninteractive command-not-found,
-	# so delete it here since we are now interactive
-	functions -e __fish_command_not_found_handler
+	# Remove the startup command_not_found handler since we're done with it
+	functions -e __fish_startup_command_not_found_handler
 
 	# Now install our fancy variant
 	function __fish_command_not_found_setup --on-event fish_command_not_found
 		# Remove fish_command_not_found_setup so we only execute this once
 		functions --erase __fish_command_not_found_setup
 
+		# If the user defined a handler, it takes precedence
+		# It does not need to be executed because it's been defined before the event
+		if type -q __fish_command_not_found_handler
+			return 0
+		end
 		# First check if we are on OpenSUSE since SUSE's handler has no options
 		# and expects first argument to be a command and second database
 		# also check if there is command-not-found command.
@@ -253,5 +255,69 @@ function __fish_config_interactive -d "Initializations that should be performed 
 			end
 		end
 		__fish_command_not_found_handler $argv
+	end
+	if test $TERM = "linux" # A linux in-kernel VT with 8 colors and 256/512 glyphs
+		# In a VT we have
+		# black (invisible)
+		# red
+		# green
+		# yellow
+		# blue
+		# magenta
+		# cyan
+		# white
+
+		# Pretty much just set at random
+		set -g fish_color_normal normal
+		set -g fish_color_command yellow
+		set -g fish_color_param cyan
+		set -g fish_color_redirection normal
+		set -g fish_color_comment red
+		set -g fish_color_error red
+		set -g fish_color_escape cyan
+		set -g fish_color_operator cyan
+		set -g fish_color_quote blue
+		set -g fish_color_autosuggestion yellow
+		set -g fish_color_valid_path
+		set -g fish_color_cwd green
+		set -g fish_color_cwd_root red
+		set -g fish_color_match cyan
+		set -g fish_color_history_current cyan
+		set -g fish_color_search_match cyan
+		set -g fish_color_selection blue
+		set -g fish_color_end yellow
+		set -g fish_color_host normal
+		set -g fish_color_status red
+		set -g fish_color_user green
+		set -g fish_pager_color_prefix cyan
+		set -g fish_pager_color_completion normal
+		set -g fish_pager_color_description yellow
+		set -g fish_pager_color_progress cyan
+
+		# Don't allow setting color other than what linux offers (see #2001)
+		functions -e set_color
+		function set_color
+			set -l term_colors black red green yellow blue magenta cyan white normal
+			for a in $argv
+				if not contains -- $a $term_colors
+					switch $a
+						# Also allow options
+						case "-*"
+							continue
+						case "*"
+							echo "Color not valid in TERM = linux: $a"
+							return 1
+					end
+				end
+			end
+			builtin set_color $argv
+			return $status
+		end
+
+		# Set fish_prompt to a VT-friendly version
+		# without color or unicode
+		function fish_prompt
+			fish_fallback_prompt
+		end
 	end
 end

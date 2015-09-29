@@ -641,9 +641,7 @@ static bool should_debug(int level)
 static void debug_shared(const wcstring &msg)
 {
     const wcstring sb = wcstring(program_name) + L": " + msg;
-    wcstring sb2;
-    write_screen(sb, sb2);
-    fwprintf(stderr, L"%ls", sb2.c_str());
+    fwprintf(stderr, L"%ls", reformat_for_screen(sb).c_str());
 }
 
 void debug(int level, const wchar_t *msg, ...)
@@ -834,8 +832,9 @@ void format_ullong_safe(wchar_t buff[64], unsigned long long val)
     }
 }
 
-void write_screen(const wcstring &msg, wcstring &buff)
+wcstring reformat_for_screen(const wcstring &msg)
 {
+    wcstring buff;
     int line_width = 0;
     int screen_width = common_get_width();
 
@@ -920,6 +919,7 @@ void write_screen(const wcstring &msg, wcstring &buff)
         buff.append(msg);
     }
     buff.push_back(L'\n');
+    return buff;
 }
 
 /* Escape a string, storing the result in out_str */
@@ -1134,7 +1134,7 @@ static wint_t string_last_char(const wcstring &str)
 }
 
 /* Given a null terminated string starting with a backslash, read the escape as if it is unquoted, appending to result. Return the number of characters consumed, or 0 on error */
-static size_t read_unquoted_escape(const wchar_t *input, wcstring *result, bool allow_incomplete, bool unescape_special)
+size_t read_unquoted_escape(const wchar_t *input, wcstring *result, bool allow_incomplete, bool unescape_special)
 {
     if (input[0] != L'\\')
     {

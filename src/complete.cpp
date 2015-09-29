@@ -938,7 +938,7 @@ void completer_t::complete_strings(const wcstring &wc_escaped,
     if (! expand_one(tmp, EXPAND_SKIP_CMDSUBST | EXPAND_SKIP_WILDCARDS | this->expand_flags(), NULL))
         return;
 
-    const wchar_t *wc = parse_util_unescape_wildcards(tmp.c_str());
+    const wcstring wc = parse_util_unescape_wildcards(tmp);
 
     for (size_t i=0; i< possible_comp.size(); i++)
     {
@@ -947,11 +947,9 @@ void completer_t::complete_strings(const wcstring &wc_escaped,
 
         if (next_str)
         {
-            wildcard_complete(next_str, wc, desc, desc_func, &this->completions, this->expand_flags(), flags);
+            wildcard_complete(next_str, wc.c_str(), desc, desc_func, &this->completions, this->expand_flags(), flags);
         }
     }
-
-    free((void *)wc);
 }
 
 /**
@@ -2189,8 +2187,9 @@ static void append_switch(wcstring &out,
     append_format(out, L" --%ls %ls", opt.c_str(), esc.c_str());
 }
 
-void complete_print(wcstring &out)
+wcstring complete_print()
 {
+    wcstring out;
     scoped_lock locker(completion_lock);
     scoped_lock locker2(completion_entry_lock);
 
@@ -2260,6 +2259,7 @@ void complete_print(wcstring &out)
         const wcstring &target = wrap_pairs.at(i++);
         append_format(out, L"complete --command %ls --wraps %ls\n", cmd.c_str(), target.c_str());
     }
+    return out;
 }
 
 
@@ -2278,7 +2278,7 @@ static wrapper_map_t &wrap_map()
     return *wrapper_map;
 }
 
-/* Add a new target that is wrapped by command. Example: sgrep (command) wraps grep (target). */
+/* Add a new target that is wrapped by command. Example: __fish_sgrep (command) wraps grep (target). */
 bool complete_add_wrapper(const wcstring &command, const wcstring &new_target)
 {
     if (command.empty() || new_target.empty())

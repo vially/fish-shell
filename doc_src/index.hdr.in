@@ -59,7 +59,7 @@ Switches differ between commands and are documented in the manual page for each 
 
 \subsection quotes Quotes
 
-Sometimes features such as <a href="#expand">parameter expansion</a> and <a href="#escapes">character escapes</a> get in the way. When that happens, the user can write a parameter within quotes, either `'` (single quote) or `&quot;` (double quote). There is one important difference between single quoted and double quoted strings: When using double quoted string, <a href="#expand-variable">variable expansion</a> still takes place. Other than that, a quoted parameter will not be parameter expanded, may contain spaces, and escape sequences are ignored. The only backslash escape accepted within single quotes is `\'`, which escapes a single quote and `\\`, which escapes the backslash symbol. The only backslash escapes accepted within double quotes are `\&quot;`, which escapes a double quote, `\$`, which escapes a dollar character, `\` followed by a newline, which deletes the backslash and the newline, and lastly `\\`, which escapes the backslash symbol. Single quotes have no special meaning within double quotes and vice versa.
+Sometimes features such as <a href="#expand">parameter expansion</a> and <a href="#escapes">character escapes</a> get in the way. When that happens, the user can write a parameter within quotes, either `'` (single quote) or `&quot;` (double quote). There is one important difference between single quoted and double quoted strings: When using double quoted string, <a href="#expand-variable">variable expansion</a> still takes place. Other than that, no other kind of expansion (including <a href="#expand-brace">brace expansion</a> and parameter expansion) will take place, the parameter may contain spaces, and escape sequences are ignored. The only backslash escape accepted within single quotes is `\'`, which escapes a single quote and `\\`, which escapes the backslash symbol. The only backslash escapes accepted within double quotes are `\&quot;`, which escapes a double quote, `\$`, which escapes a dollar character, `\` followed by a newline, which deletes the backslash and the newline, and lastly `\\`, which escapes the backslash symbol. Single quotes have no special meaning within double quotes and vice versa.
 
 Example:
 
@@ -236,7 +236,7 @@ There are a few important things that need to be noted about aliases:
 
 - Always take care to add the `$argv` variable to the list of parameters to the wrapped command. This makes sure that if the user specifies any additional parameters to the function, they are passed on to the underlying command.
 
-- If the alias has the same name as the aliased command, it is necessary to refix the call to the program with `command` in order to tell fish that the function should not call itself, but rather a command with the same name. Failing to do so will cause infinite recursion bugs.
+- If the alias has the same name as the aliased command, it is necessary to prefix the call to the program with `command` in order to tell fish that the function should not call itself, but rather a command with the same name. Failing to do so will cause infinite recursion bugs.
 
 To easily create a function of this form, you can use the <a href="commands.html#alias">alias</a> command.
 
@@ -250,6 +250,8 @@ Fish automatically searches through any directories in the array variable `$fish
 The default value for `$fish_function_path` is `~/.config/fish/functions` `/etc/fish/functions` `/usr/share/fish/functions`. The exact path to the last two of these may be slightly different depending on what install path prefix was chosen at configuration time. The rationale behind having three different directories is that the first one is for user specific functions, the second one is for system-wide additional functions and the last one is for default fish functions. The path list is searched in order, meaning that by default, the system administrator can override default fish functions, and the user can override functions defined by the system administrator.
 
 It is very important that function definition files only contain the definition for the specified function and nothing else. Otherwise, it is possible that autoloading a function files requires that the function already be loaded, which creates a circular dependency.
+
+Autoloading also won't work for <a href=#event>event handlers</a>, since fish cannot know that a function is supposed to be executed when an event occurs when it hasn't yet loaded the function. See there for details.
 
 
 \subsubsection syntax-conditional Conditional execution of code and flow control
@@ -546,6 +548,8 @@ The `~` (tilde) character at the beginning of a parameter, followed by a usernam
 The `%` (percent) character at the beginning of a parameter followed by a string is expanded into a process ID (PID). The following expansions are performed:
 
 - If the string is the entire word `self`, the shell's PID is the result.
+
+- Otherwise, if the string is the entire word `last`, the last job's PID is the result.
 
 - Otherwise, if the string is the ID of a job, the result is the process group ID of the job.
 
@@ -1007,7 +1011,7 @@ The fish commandline editor works exactly the same in single line mode and in mu
 
 Normally when `fish` starts a program, this program will be put in the foreground, meaning it will take control of the terminal and `fish` will be stopped until the program finishes. Sometimes this is not desirable. For example, you may wish to start an application with a graphical user interface from the terminal, and then be able to continue using the shell. In such cases, there are several ways in which the user can change fish's behavior.
 
--# By ending a command with the `&amp;` (ampersand) symbol, the user tells `fish` to put the specified command into the background. A background process will be run simultaneous with `fish`. `fish` will retain control of the terminal, so the program will not be able to read from the keyboard.
+-# By ending a command with the `&` (ampersand) symbol, the user tells `fish` to put the specified command into the background. A background process will be run simultaneous with `fish`. `fish` will retain control of the terminal, so the program will not be able to read from the keyboard.
 
 -# By pressing @key{Control,Z}, the user stops a currently running foreground  program and returns control to `fish`. Some programs do not support this feature, or remap it to another key. GNU Emacs uses @key{Control,X} @key{z} to stop running.
 
@@ -1112,6 +1116,8 @@ function --on-signal WINCH my_signal_handler
     echo Got WINCH signal!
 end
 \endfish
+
+Please note that event handlers only become active when a function is loaded, which means you might need to otherwise <a href='commands.html#source'>source</a> or execute a function instead of relying on <a href=#syntax-function-autoloading>autoloading</a>. One approach is to put it into your <a href="index.html#initialization">initialization file</a>.
 
 For more information on how to define new event handlers, see the documentation for the <a href='commands.html#function'>function</a> command.
 

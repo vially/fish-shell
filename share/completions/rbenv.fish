@@ -2,7 +2,7 @@
 
 function __fish_rbenv_needs_command
   set cmd (commandline -opc)
-  if [ (count $cmd) -eq 1 -a $cmd[1] = 'rbenv' ]
+  if [ (count $cmd) -eq 1 ]
     return 0
   end
 
@@ -28,7 +28,13 @@ function __fish_rbenv_installed_rubies
 end
 
 function __fish_rbenv_official_rubies
-  ruby-build --definitions
+	if command -s ruby-build >/dev/null
+		ruby-build --definitions
+	else
+		# Remove trailing spaces, otherwise completion options appear like
+		# "\ \ option"
+		rbenv install --list | sed "s/^[[:space:]]*//"
+	end
 end
 
 function __fish_rbenv_prefixes

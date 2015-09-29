@@ -43,6 +43,20 @@ commence.
 #include <sys/select.h>
 #endif
 
+#if HAVE_NCURSES_H
+#include <ncurses.h>
+#elif HAVE_NCURSES_CURSES_H
+#include <ncurses/curses.h>
+#else
+#include <curses.h>
+#endif
+
+#if HAVE_TERM_H
+#include <term.h>
+#elif HAVE_NCURSES_TERM_H
+#include <ncurses/term.h>
+#endif
+
 #include <signal.h>
 #include <fcntl.h>
 #include <wchar.h>
@@ -407,12 +421,6 @@ static int end_loop = 0;
 
 /** The stack containing names of files that are being parsed */
 static std::stack<const wchar_t *, std::vector<const wchar_t *> > current_filename;
-
-
-/**
-   Store the pid of the parent process, so the exit function knows whether it should reset the terminal or not.
-*/
-static pid_t original_pid;
 
 /**
    This variable is set to true by the signal handler when ^C is pressed
@@ -2127,12 +2135,6 @@ static void reader_interactive_init()
         wperror(L"tcsetattr");
     }
 
-    /*
-       We need to know our own pid so we'll later know if we are a
-       fork
-    */
-    original_pid = getpid();
-
     env_set(L"_", L"fish", ENV_GLOBAL);
 }
 
@@ -3101,6 +3103,13 @@ const wchar_t *reader_readline(int nchars)
     data->search_mode = NO_SEARCH;
 
     exec_prompt();
+
+    /* Send the smkx sequence if defined to enable arrow keys etc.
+     See https://github.com/fish-shell/fish-shell/issues/2139 and
+     http://invisible-island.net/xterm/xterm.faq.html#xterm_arrows
+    */
+
+    tputs(keypad_xmit, 1, &writeb);
 
     reader_super_highlight_me_plenty();
     s_reset(&data->screen, screen_reset_abandon_line);
@@ -4213,6 +4222,13 @@ const wchar_t *reader_readline(int nchars)
         {
             wperror(L"tcsetattr");
         }
+
+        /* Send the rmkx sequence if defined to disable arrow keys etc.
+         See https://github.com/fish-shell/fish-shell/issues/2139 and
+         http://invisible-island.net/xterm/xterm.faq.html#xterm_arrows
+        */
+
+        tputs(keypad_local, 1, &writeb);
 
         set_color(rgb_color_t::reset(), rgb_color_t::reset());
     }

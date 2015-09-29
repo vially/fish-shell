@@ -70,7 +70,7 @@ static int cpu_use(const job_t *j)
 /**
    Print information about the specified job
 */
-static void builtin_jobs_print(const job_t *j, int mode, int header)
+static void builtin_jobs_print(const job_t *j, int mode, int header, io_streams_t &streams)
 {
     process_t *p;
     switch (mode)
@@ -83,22 +83,22 @@ static void builtin_jobs_print(const job_t *j, int mode, int header)
                 /*
                   Print table header before first job
                 */
-                stdout_buffer.append(_(L"Job\tGroup\t"));
+                streams.out.append(_(L"Job\tGroup\t"));
 #ifdef HAVE__PROC_SELF_STAT
-                stdout_buffer.append(_(L"CPU\t"));
+                streams.out.append(_(L"CPU\t"));
 #endif
-                stdout_buffer.append(_(L"State\tCommand\n"));
+                streams.out.append(_(L"State\tCommand\n"));
             }
 
-            append_format(stdout_buffer, L"%d\t%d\t", j->job_id, j->pgid);
+            streams.out.append_format( L"%d\t%d\t", j->job_id, j->pgid);
 
 #ifdef HAVE__PROC_SELF_STAT
-            append_format(stdout_buffer, L"%d%%\t", cpu_use(j));
+            streams.out.append_format( L"%d%%\t", cpu_use(j));
 #endif
-            stdout_buffer.append(job_is_stopped(j)?_(L"stopped"):_(L"running"));
-            stdout_buffer.append(L"\t");
-            stdout_buffer.append(j->command_wcstr());
-            stdout_buffer.append(L"\n");
+            streams.out.append(job_is_stopped(j)?_(L"stopped"):_(L"running"));
+            streams.out.append(L"\t");
+            streams.out.append(j->command_wcstr());
+            streams.out.append(L"\n");
             break;
         }
 
@@ -109,9 +109,9 @@ static void builtin_jobs_print(const job_t *j, int mode, int header)
                 /*
                   Print table header before first job
                 */
-                stdout_buffer.append(_(L"Group\n"));
+                streams.out.append(_(L"Group\n"));
             }
-            append_format(stdout_buffer, L"%d\n", j->pgid);
+            streams.out.append_format( L"%d\n", j->pgid);
             break;
         }
 
@@ -122,12 +122,12 @@ static void builtin_jobs_print(const job_t *j, int mode, int header)
                 /*
                   Print table header before first job
                 */
-                stdout_buffer.append(_(L"Process\n"));
+                streams.out.append(_(L"Process\n"));
             }
 
             for (p=j->first_process; p; p=p->next)
             {
-                append_format(stdout_buffer, L"%d\n", p->pid);
+                streams.out.append_format( L"%d\n", p->pid);
             }
             break;
         }
@@ -139,12 +139,12 @@ static void builtin_jobs_print(const job_t *j, int mode, int header)
                 /*
                   Print table header before first job
                 */
-                stdout_buffer.append(_(L"Command\n"));
+                streams.out.append(_(L"Command\n"));
             }
 
             for (p=j->first_process; p; p=p->next)
             {
-                append_format(stdout_buffer, L"%ls\n", p->argv0());
+                streams.out.append_format( L"%ls\n", p->argv0());
             }
             break;
         }
@@ -168,11 +168,11 @@ static const wchar_t * const g_jobs_usage =
 ;
 
 /** The jobs builtin. Used for printing running jobs. */
-static int builtin_jobs(parser_t &parser, wchar_t **argv)
+static int builtin_jobs(parser_t &parser, io_streams_t &streams, wchar_t **argv)
 {
     docopt_arguments_t args;
     int status;
-    if (! parse_argv_or_show_help(parser, argv, &args, &status))
+    if (! parse_argv_or_show_help(parser, argv, &args, &status, streams))
     {
         return status;
     }
@@ -193,7 +193,8 @@ static int builtin_jobs(parser_t &parser, wchar_t **argv)
     }
     
     /* Do not babble if not interactive */
-    if (builtin_out_redirect)
+    if (streams.out_is_redirected)
+
     {
         found=1;
     }
@@ -208,7 +209,7 @@ static int builtin_jobs(parser_t &parser, wchar_t **argv)
 
             if ((j->flags & JOB_CONSTRUCTED) && !job_is_completed(j))
             {
-                builtin_jobs_print(j, mode, !found);
+                builtin_jobs_print(j, mode, !found, streams);
                 return 0;
             }
         }
@@ -229,8 +230,7 @@ static int builtin_jobs(parser_t &parser, wchar_t **argv)
                 pid=fish_wcstoi(pids.at(i).c_str(), &end, 10);
                 if (errno || *end)
                 {
-                    append_format(stderr_buffer,
-                                  _(L"%ls: '%ls' is not a job\n"),
+                    streams.err.append_format(_(L"%ls: '%ls' is not a job\n"),
                                   argv[0],
                                   argv[i]);
                     return 1;
@@ -240,12 +240,11 @@ static int builtin_jobs(parser_t &parser, wchar_t **argv)
 
                 if (j && !job_is_completed(j))
                 {
-                    builtin_jobs_print(j, mode, !found);
+                    builtin_jobs_print(j, mode, !found, streams);
                 }
                 else
                 {
-                    append_format(stderr_buffer,
-                                  _(L"%ls: No suitable job: %d\n"),
+                    streams.err.append_format(_(L"%ls: No suitable job: %d\n"),
                                   argv[0],
                                   pid);
                     return 1;
@@ -263,7 +262,7 @@ static int builtin_jobs(parser_t &parser, wchar_t **argv)
                 */
                 if ((j->flags & JOB_CONSTRUCTED) && !job_is_completed(j))
                 {
-                    builtin_jobs_print(j, mode, !found);
+                    builtin_jobs_print(j, mode, !found, streams);
                     found = 1;
                 }
             }
@@ -272,7 +271,7 @@ static int builtin_jobs(parser_t &parser, wchar_t **argv)
 
     if (!found)
     {
-        append_format(stdout_buffer,
+        streams.out.append_format(
                       _(L"%ls: There are no jobs\n"),
                       argv[0]);
         return 1;
