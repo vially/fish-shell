@@ -76,6 +76,8 @@ static const wcstring &C_(const wcstring &s)
 }
 #endif
 
+static void complete_load(const wcstring &name, bool reload);
+
 /* Testing apparatus */
 const wcstring_list_t *s_override_variable_names = NULL;
 
@@ -1150,11 +1152,12 @@ void completer_t::complete_cmd(const wcstring &str_cmd, bool use_function, bool 
                     nxt_completion.append(str_cmd);
 
                     size_t prev_count =  this->completions.size();
+                    expand_flags_t expand_flags = EXPAND_FOR_COMPLETIONS | EXECUTABLES_ONLY | EXPAND_NO_FUZZY_DIRECTORIES | this->expand_flags();
                     if (expand_string(nxt_completion,
                                       &this->completions,
-                                      EXPAND_FOR_COMPLETIONS | EXECUTABLES_ONLY | this->expand_flags(), NULL) != EXPAND_ERROR)
+                                      expand_flags, NULL) != EXPAND_ERROR)
                     {
-                        /* For all new completions, if COMPLETE_NO_CASE is set, then use only the last path component */
+                        /* For all new completions, if COMPLETE_REPLACES_TOKEN is set, then use only the last path component */
                         for (size_t i=prev_count; i< this->completions.size(); i++)
                         {
                             completion_t &c =  this->completions.at(i);
@@ -1318,8 +1321,13 @@ static int short_ok(const wcstring &arg_str, wchar_t nextopt, const wcstring &al
     return 1;
 }
 
-void complete_load(const wcstring &name, bool reload)
+
+/* Load command-specific completions for the specified command. */
+static void complete_load(const wcstring &name, bool reload)
 {
+    // we have to load this as a function, since it may define a --wraps or signature
+    // see #2466
+    function_load(name);
     completion_autoloader.load(name, reload);
 }
 

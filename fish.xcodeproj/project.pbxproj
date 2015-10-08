@@ -7,6 +7,17 @@
 	objects = {
 
 /* Begin PBXAggregateTarget section */
+		D008D0C41BC58F8800841177 /* generate-version-header */ = {
+			isa = PBXAggregateTarget;
+			buildConfigurationList = D008D0C81BC58F8800841177 /* Build configuration list for PBXAggregateTarget "generate-version-header" */;
+			buildPhases = (
+				D008D0C91BC58F9500841177 /* ShellScript */,
+			);
+			dependencies = (
+			);
+			name = "generate-version-header";
+			productName = "generate-version-header";
+		};
 		D07D265615E33B86009E43F6 /* install_tree */ = {
 			isa = PBXAggregateTarget;
 			buildConfigurationList = D07D266F15E33B86009E43F6 /* Build configuration list for PBXAggregateTarget "install_tree" */;
@@ -102,8 +113,8 @@
 		D007693B1990137800CA4627 /* parse_productions.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D0FE8EE7179FB75F008C9F21 /* parse_productions.cpp */; };
 		D007693D1990137800CA4627 /* libncurses.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = D0D02A8C15983CFA008E62BD /* libncurses.dylib */; };
 		D0076943199013B900CA4627 /* fish_tests.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D0A0854113B3ACEE0099B651 /* fish_tests.cpp */; };
-		D00F63F119137E9D00FCCDEC /* fish_version.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D00F63F019137E9D00FCCDEC /* fish_version.cpp */; };
-		D00F63F219137E9D00FCCDEC /* fish_version.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D00F63F019137E9D00FCCDEC /* fish_version.cpp */; };
+		D00F63F119137E9D00FCCDEC /* fish_version.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D00F63F019137E9D00FCCDEC /* fish_version.cpp */; settings = {COMPILER_FLAGS = "-I$(DERIVED_FILE_DIR)"; }; };
+		D00F63F219137E9D00FCCDEC /* fish_version.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D00F63F019137E9D00FCCDEC /* fish_version.cpp */; settings = {COMPILER_FLAGS = "-I$(DERIVED_FILE_DIR)"; }; };
 		D01A2D24169B736200767098 /* man1 in Copy Files */ = {isa = PBXBuildFile; fileRef = D01A2D23169B730A00767098 /* man1 */; };
 		D01A2D25169B737700767098 /* man1 in CopyFiles */ = {isa = PBXBuildFile; fileRef = D01A2D23169B730A00767098 /* man1 */; };
 		D030FBEF1A4A382000F7ADA0 /* input.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D0A0854A13B3ACEE0099B651 /* input.cpp */; };
@@ -268,6 +279,27 @@
 /* End PBXBuildRule section */
 
 /* Begin PBXContainerItemProxy section */
+		D008D0CA1BC58FDD00841177 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D0A084F213B3AC130099B651 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D008D0C41BC58F8800841177;
+			remoteInfo = "generate-version-header";
+		};
+		D008D0CC1BC58FE100841177 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D0A084F213B3AC130099B651 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D008D0C41BC58F8800841177;
+			remoteInfo = "generate-version-header";
+		};
+		D008D0CE1BC58FE500841177 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D0A084F213B3AC130099B651 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D008D0C41BC58F8800841177;
+			remoteInfo = "generate-version-header";
+		};
 		D031890715E36CC000D9CC39 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = D0A084F213B3AC130099B651 /* Project object */;
@@ -878,23 +910,6 @@
 		};
 /* End PBXHeadersBuildPhase section */
 
-/* Begin PBXLegacyTarget section */
-		D0A084F713B3AC130099B651 /* Makefile */ = {
-			isa = PBXLegacyTarget;
-			buildArgumentsString = " -f Makefile -k ${ACTION}";
-			buildConfigurationList = D0A084FA13B3AC130099B651 /* Build configuration list for PBXLegacyTarget "Makefile" */;
-			buildPhases = (
-			);
-			buildToolPath = /usr/bin/make;
-			buildWorkingDirectory = "";
-			dependencies = (
-			);
-			name = Makefile;
-			passBuildSettingsInEnvironment = 1;
-			productName = FishsFish;
-		};
-/* End PBXLegacyTarget section */
-
 /* Begin PBXNativeTarget section */
 		D00769101990137800CA4627 /* fish_tests */ = {
 			isa = PBXNativeTarget;
@@ -906,6 +921,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				D008D0CF1BC58FE500841177 /* PBXTargetDependency */,
 				D04F7FED1BA4E3DF00B0F227 /* PBXTargetDependency */,
 			);
 			name = fish_tests;
@@ -959,6 +975,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				D008D0CD1BC58FE100841177 /* PBXTargetDependency */,
 			);
 			name = fish_indent;
 			productName = fish_indent;
@@ -975,6 +992,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				D008D0CB1BC58FDD00841177 /* PBXTargetDependency */,
 				D04F7FEB1BA4E3DB00B0F227 /* PBXTargetDependency */,
 			);
 			name = fish_shell;
@@ -990,6 +1008,9 @@
 			attributes = {
 				LastUpgradeCheck = 0700;
 				TargetAttributes = {
+					D008D0C41BC58F8800841177 = {
+						CreatedOnToolsVersion = 7.0.1;
+					};
 					D04F7FCF1BA4E29300B0F227 = {
 						CreatedOnToolsVersion = 6.4;
 					};
@@ -1013,9 +1034,9 @@
 				D0D2693B159835CA005D9B9C /* fish_shell */,
 				D0D02ACF1598642A008E62BD /* fish_indent */,
 				D0A564E6168CFDD800AF6161 /* man_pages */,
-				D0A084F713B3AC130099B651 /* Makefile */,
 				D00769101990137800CA4627 /* fish_tests */,
 				D04F7FCF1BA4E29300B0F227 /* pcre2 */,
+				D008D0C41BC58F8800841177 /* generate-version-header */,
 			);
 		};
 /* End PBXProject section */
@@ -1036,6 +1057,21 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		D008D0C91BC58F9500841177 /* ShellScript */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			outputPaths = (
+				"$(SHARED_DERIVED_FILE_DIR)/fish-build-version.h",
+				"$(SHARED_DERIVED_FILE_DIR)/force-fish-build-version.h",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = ./build_tools/xcode_version_gen.sh;
+		};
 		D01A25E01AF58CD0002F9E92 /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
@@ -1427,6 +1463,21 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		D008D0CB1BC58FDD00841177 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D008D0C41BC58F8800841177 /* generate-version-header */;
+			targetProxy = D008D0CA1BC58FDD00841177 /* PBXContainerItemProxy */;
+		};
+		D008D0CD1BC58FE100841177 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D008D0C41BC58F8800841177 /* generate-version-header */;
+			targetProxy = D008D0CC1BC58FE100841177 /* PBXContainerItemProxy */;
+		};
+		D008D0CF1BC58FE500841177 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D008D0C41BC58F8800841177 /* generate-version-header */;
+			targetProxy = D008D0CE1BC58FE500841177 /* PBXContainerItemProxy */;
+		};
 		D031890815E36CC000D9CC39 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = D0F019EC15A976F30034B3B1 /* base */;
@@ -1528,7 +1579,6 @@
 					"SYSCONFDIR=L\\\"/usr/local/etc\\\"",
 					"BINDIR=L\\\"/usr/local/bin\\\"",
 					"DOCDIR=L\\\"/usr/local/share/doc\\\"",
-					"FISH_BUILD_VERSION=\\\"2.2.0-git\\\"",
 				);
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES;
@@ -1537,7 +1587,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 10.7;
 				SDKROOT = macosx;
-				USER_HEADER_SEARCH_PATHS = "$(SRCROOT)/osx $(SRCROOT)/osx/shared_headers";
+				USER_HEADER_SEARCH_PATHS = "$(SRCROOT)/osx $(SRCROOT)/osx/shared_headers $(SHARED_DERIVED_FILE_DIR)";
 				WARNING_CFLAGS = (
 					"-Wall",
 					"-Wunused-macros",
@@ -1613,16 +1663,23 @@
 			};
 			name = "Release_C++11";
 		};
-		D007FDE317136EAA00A52BE6 /* Release_C++11 */ = {
+		D008D0C51BC58F8800841177 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ALWAYS_SEARCH_USER_PATHS = NO;
-				COMBINE_HIDPI_IMAGES = YES;
-				COPY_PHASE_STRIP = YES;
-				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
-				OTHER_CFLAGS = "";
-				OTHER_LDFLAGS = "";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		D008D0C61BC58F8800841177 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
+		D008D0C71BC58F8800841177 /* Release_C++11 */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = "Release_C++11";
@@ -1639,7 +1696,6 @@
 					"SYSCONFDIR=L\\\"/usr/local/etc\\\"",
 					"BINDIR=L\\\"/usr/local/bin\\\"",
 					"DOCDIR=L\\\"/usr/local/share/doc\\\"",
-					"FISH_BUILD_VERSION=\\\"2.2.0-git\\\"",
 					"PCRE2_CODE_UNIT_WIDTH=32",
 					"HAVE_CONFIG_H=1",
 				);
@@ -1664,7 +1720,6 @@
 					"SYSCONFDIR=L\\\"/usr/local/etc\\\"",
 					"BINDIR=L\\\"/usr/local/bin\\\"",
 					"DOCDIR=L\\\"/usr/local/share/doc\\\"",
-					"FISH_BUILD_VERSION=\\\"2.2.0-git\\\"",
 					"PCRE2_CODE_UNIT_WIDTH=32",
 					"HAVE_CONFIG_H=1",
 				);
@@ -1689,7 +1744,6 @@
 					"SYSCONFDIR=L\\\"/usr/local/etc\\\"",
 					"BINDIR=L\\\"/usr/local/bin\\\"",
 					"DOCDIR=L\\\"/usr/local/share/doc\\\"",
-					"FISH_BUILD_VERSION=\\\"2.2.0-git\\\"",
 					"PCRE2_CODE_UNIT_WIDTH=32",
 					"HAVE_CONFIG_H=1",
 				);
@@ -1737,7 +1791,6 @@
 					"SYSCONFDIR=L\\\"/usr/local/etc\\\"",
 					"BINDIR=L\\\"/usr/local/bin\\\"",
 					"DOCDIR=L\\\"/usr/local/share/doc\\\"",
-					"FISH_BUILD_VERSION=\\\"2.2.0-git\\\"",
 				);
 				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -1748,7 +1801,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 10.6;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
-				USER_HEADER_SEARCH_PATHS = "$(SRCROOT)/osx $(SRCROOT)/osx/shared_headers";
+				USER_HEADER_SEARCH_PATHS = "$(SRCROOT)/osx $(SRCROOT)/osx/shared_headers $(SHARED_DERIVED_FILE_DIR)";
 				WARNING_CFLAGS = (
 					"-Wall",
 					"-Wunused-macros",
@@ -1771,7 +1824,6 @@
 					"SYSCONFDIR=L\\\"/usr/local/etc\\\"",
 					"BINDIR=L\\\"/usr/local/bin\\\"",
 					"DOCDIR=L\\\"/usr/local/share/doc\\\"",
-					"FISH_BUILD_VERSION=\\\"2.2.0-git\\\"",
 				);
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES;
@@ -1780,42 +1832,11 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 10.6;
 				SDKROOT = macosx;
-				USER_HEADER_SEARCH_PATHS = "$(SRCROOT)/osx $(SRCROOT)/osx/shared_headers";
+				USER_HEADER_SEARCH_PATHS = "$(SRCROOT)/osx $(SRCROOT)/osx/shared_headers $(SHARED_DERIVED_FILE_DIR)";
 				WARNING_CFLAGS = (
 					"-Wall",
 					"-Wunused-macros",
 				);
-			};
-			name = Release;
-		};
-		D0A084FB13B3AC130099B651 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ALWAYS_SEARCH_USER_PATHS = NO;
-				COMBINE_HIDPI_IMAGES = YES;
-				COPY_PHASE_STRIP = NO;
-				DEBUGGING_SYMBOLS = YES;
-				GCC_DYNAMIC_NO_PIC = NO;
-				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
-				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
-				GCC_OPTIMIZATION_LEVEL = 0;
-				OTHER_CFLAGS = "";
-				OTHER_LDFLAGS = "";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-			};
-			name = Debug;
-		};
-		D0A084FC13B3AC130099B651 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ALWAYS_SEARCH_USER_PATHS = NO;
-				COMBINE_HIDPI_IMAGES = YES;
-				COPY_PHASE_STRIP = YES;
-				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
-				OTHER_CFLAGS = "";
-				OTHER_LDFLAGS = "";
-				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Release;
 		};
@@ -1956,6 +1977,16 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		D008D0C81BC58F8800841177 /* Build configuration list for PBXAggregateTarget "generate-version-header" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D008D0C51BC58F8800841177 /* Debug */,
+				D008D0C61BC58F8800841177 /* Release */,
+				D008D0C71BC58F8800841177 /* Release_C++11 */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		D04F7FD11BA4E29300B0F227 /* Build configuration list for PBXNativeTarget "pcre2" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -1982,16 +2013,6 @@
 				D0A084F813B3AC130099B651 /* Debug */,
 				D0A084F913B3AC130099B651 /* Release */,
 				D007FDDA17136EAA00A52BE6 /* Release_C++11 */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		D0A084FA13B3AC130099B651 /* Build configuration list for PBXLegacyTarget "Makefile" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				D0A084FB13B3AC130099B651 /* Debug */,
-				D0A084FC13B3AC130099B651 /* Release */,
-				D007FDE317136EAA00A52BE6 /* Release_C++11 */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

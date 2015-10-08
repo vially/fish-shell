@@ -25,15 +25,21 @@ function __fish_git_remotes
 end
 
 function __fish_git_modified_files
-  command git ls-files -m --exclude-standard ^/dev/null
+	# git diff --name-only hands us filenames relative to the git toplevel
+	set -l root (command git rev-parse --show-toplevel)
+	# Print files from the current $PWD as-is, prepend all others with ":/" (relative to toplevel in git-speak)
+	# This is a bit simplistic but finding the lowest common directory and then replacing everything else in $PWD with ".." is a bit annoying
+	string replace -- "$PWD/" "" "$root/"(command git diff --name-only ^/dev/null) | string replace "$root/" ":/"
 end
 
 function __fish_git_staged_files
-  command git diff --staged --name-only ^/dev/null
+	set -l root (command git rev-parse --show-toplevel)
+	string replace -- "$PWD/" "" "$root/"(command git diff --staged --name-only ^/dev/null) | string replace "$root/" ":/"
 end
 
 function __fish_git_add_files
-  command git ls-files -mo --exclude-standard ^/dev/null
+	set -l root (command git rev-parse --show-toplevel)
+	string replace -- "$PWD/" "" "$root/"(command git -C $root ls-files -mo --exclude-standard ^/dev/null) | string replace "$root/" ":/"
 end
 
 function __fish_git_ranges
@@ -57,7 +63,32 @@ end
 function __fish_git_needs_command
   set cmd (commandline -opc)
   if [ (count $cmd) -eq 1 ]
-    return 0
+	  return 0
+  else
+	  set -l skip_next 1
+	  # Skip first word because it's "git" or a wrapper
+	  for c in $cmd[2..-1]
+		  test $skip_next -eq 0; and set skip_next 1; and continue
+		  # git can only take a few options before a command, these are the ones mentioned in the "git" man page
+		  # e.g. `git --follow log` is wrong, `git --help log` is okay (and `git --help log $branch` is superfluous but works)
+		  # In case any other option is used before a command, we'll fail, but that's okay since it's invalid anyway
+		  switch $c
+			  # General options that can still take a command
+			  case "--help" "-p" "--paginate" "--no-pager" "--bare" "--no-replace-objects" --{literal,glob,noglob,icase}-pathspecs  --{exec-path,git-dir,work-tree,namespace}"=*"
+				  continue
+			  # General options with an argument we need to skip. The option=value versions have already been handled above
+			  case --{exec-path,git-dir,work-tree,namespace}
+				  set skip_next 0
+				  continue
+			  # General options that cause git to do something and exit - these behave like commands and everything after them is ignored
+			  case "--version" --{html,man,info}-path
+				  return 1
+			  # We assume that any other token that's not an argument to a general option is a command
+			  case "*"
+				  return 1
+		  end
+	  end
+	  return 0
   end
   return 1
 end

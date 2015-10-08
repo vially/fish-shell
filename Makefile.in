@@ -55,23 +55,20 @@ localedir = @localedir@
 
 PCRE2_WIDTH = @WCHAR_T_BITS@
 PCRE2_DIR = pcre2-10.20
-PCRE2_CXXFLAGS = -I$(PCRE2_DIR)/src
 PCRE2_LIBDIR = $(PCRE2_DIR)/.libs
 PCRE2_LIB = $(PCRE2_LIBDIR)/libpcre2-$(PCRE2_WIDTH).a
 PCRE2_H = $(PCRE2_DIR)/src/pcre2.h
-PCRE2_CONFIG = --disable-pcre2-8 --enable-pcre2-$(PCRE2_WIDTH) --disable-shared
+EXTRA_PCRE2 = @EXTRA_PCRE2@
 
 #
 # Various flags
 #
 
 MACROS = -DLOCALEDIR=\"$(localedir)\" -DPREFIX=L\"$(prefix)\" -DDATADIR=L\"$(datadir)\" -DSYSCONFDIR=L\"$(sysconfdir)\" -DBINDIR=L\"$(bindir)\" -DDOCDIR=L\"$(docdir)\"
-CXXFLAGS = @CXXFLAGS@ -iquote. -iquote./src/ $(MACROS) $(PCRE2_CXXFLAGS) $(EXTRA_CXXFLAGS)
+CXXFLAGS = @CXXFLAGS@ -iquote. -iquote./src/ $(MACROS) $(EXTRA_CXXFLAGS)
 CPPFLAGS = @CPPFLAGS@
 LDFLAGS = @LDFLAGS@
-PCRE2 = pcre2-10.20
-LIBS_PCRE2 = -L$(PCRE2_LIBDIR) -lpcre2-$(PCRE2_WIDTH)
-LIBS = @LIBS@ $(LIBS_PCRE2)
+LIBS = @LIBS@
 LDFLAGS_FISH = ${LDFLAGS} @LDFLAGS_FISH@
 
 #
@@ -490,8 +487,9 @@ messages.pot: src/*.cpp src/*.h share/completions/*.fish share/functions/*.fish
 
 builtin.o: $(BUILTIN_FILES)
 
+ifdef EXTRA_PCRE2
 src/builtin_string.cpp: $(PCRE2_H)
-
+endif
 
 #
 # Generate the internal help functions by making doxygen create
@@ -796,19 +794,21 @@ obj:
 # Build the fish program.
 #
 
-fish: $(FISH_OBJS) obj/fish.o $(PCRE2_LIB)
+fish: $(FISH_OBJS) obj/fish.o $(EXTRA_PCRE2)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS_FISH) $(FISH_OBJS) obj/fish.o $(LIBS) -o $@
 
-$(PCRE2_H):
-	(cd $(PCRE2_DIR) && autoreconf -i && ./configure $(PCRE2_CONFIG) && make libpcre2-$(PCRE2_WIDTH).la)
-
 $(PCRE2_LIB): $(PCRE2_H)
+	$(MAKE) -C $(PCRE2_DIR) libpcre2-$(PCRE2_WIDTH).la
+
+$(PCRE2_H):
+	(cd $(PCRE2_DIR) && ./config.status)
+
 
 #
 # Build the fish_tests program.
 #
 
-fish_tests: $(FISH_TESTS_OBJS) $(PCRE2_LIB)
+fish_tests: $(FISH_TESTS_OBJS) $(EXTRA_PCRE2)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS_FISH) $(FISH_TESTS_OBJS) $(LIBS) -o $@
 
 
@@ -816,7 +816,7 @@ fish_tests: $(FISH_TESTS_OBJS) $(PCRE2_LIB)
 # Build the fish_indent program.
 #
 
-fish_indent: $(FISH_INDENT_OBJS) $(PCRE2_LIB)
+fish_indent: $(FISH_INDENT_OBJS) $(EXTRA_PCRE2)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(FISH_INDENT_OBJS) $(LIBS) -o $@
 
 
@@ -867,6 +867,7 @@ _iwyu: clean $(PROGRAMS)
 #
 
 distclean: clean
+	$(MAKE) -C $(PCRE2_DIR) distclean
 	rm -f config.status config.log config.h Makefile
 .PHONY: distclean
 
@@ -881,6 +882,7 @@ distclean: clean
 # deleted we won't be able to regenerate them
 
 clean:
+	$(MAKE) -C $(PCRE2_DIR) clean
 	rm -f obj/*.o *.o doc.h doc.tmp doc_src/*.doxygen doc_src/*.cpp doc_src/*.o doc_src/commands.hdr
 	rm -f tests/tmp.err tests/tmp.out tests/tmp.status tests/foo.txt
 	rm -f $(PROGRAMS) fish_tests key_reader
