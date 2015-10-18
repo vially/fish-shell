@@ -16,5 +16,5 @@ Options: -e <eyestr>    Specify eye string
          -w             Wired cow
          -y             Young cow
 
-Conditions: <cowfile>  (cowsay -l|tail -n +2|tr \  \n)
+Arguments: <cowfile>  (cowsay -l|tail -n +2|tr \  \n)
 '

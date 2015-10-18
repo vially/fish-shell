@@ -29,7 +29,7 @@ complete --signature "
              -L  Locally forwarded ports
              -R  Remotely forwarded ports
              -D  Dynamic port forwarding
-    Conditions:
+    Arguments:
       <hostname>
             (__fish_print_hostnames)
             (
