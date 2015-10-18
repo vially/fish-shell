@@ -13,9 +13,7 @@ OPEN_DOCOPT_IMPL
 using std::vector;
 
 /* Usage grammar:
- 
- usages = [usage]
- 
+  
  usage = WORD alternation_list
 
  alternation_list = [expression_list] # logical ORs of values
@@ -154,19 +152,9 @@ struct usage_t {
         v->visit(prog_name);
         v->visit(alternation_list);
     }
-};
-
-struct usages_t {
-    vector<usage_t> usages;
     
-    std::string name() const { return "usages"; }
-    
-    template<typename T>
-    void visit_children(T *v) const {
-        for (size_t i=0; i < this->usages.size(); i++) {
-            v->visit(this->usages.at(i));
-        }
-    }
+    /* Turn the receiver into a "default" usage that has an empty program name and just the [options] portion. */
+    void make_default();
 };
 
 struct opt_ellipsis_t {
@@ -273,7 +261,8 @@ struct variable_clause_t {
 };
 
 template<typename string_t>
-usages_t *parse_usage(const string_t &src, const range_t &src_range, const option_list_t &shortcut_options, vector<error_t<string_t> > *out_errors);
+bool parse_one_usage(const string_t &src, const range_t &src_range, const option_list_t &shortcut_options, usage_t *out_usage, vector<error_t<string_t> > *out_errors);
+
 
 // Node visitor class, using CRTP. Child classes should override accept().
 template<typename T>

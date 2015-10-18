@@ -317,7 +317,7 @@ struct parse_context_t {
             continue;
         }
         
-        /* Determine the initial indent before consuming whitespace. Lines that are indented less than this are considered part of the existing usage */
+        /* Determine the initial indent before consuming whitespace. Lines that are indented more than this are considered part of the existing usage */
         this->initial_indent = this->indent_for_current_line();
         
         consume_leading_whitespace();
@@ -325,33 +325,11 @@ struct parse_context_t {
             return parsed_done;
         }
         
-        if (! this->scan_word(&result->prog_name)) {
-            append_error(&this->errors, this->remaining_range.start, error_missing_program_name, "Missing program name");
-            return parsed_error;
-        } else {
-            return parse(&result->alternation_list);
-        }
+        bool scanned = this->scan_word(&result->prog_name);
+        assert(scanned); // else we should not have tried to parse this as a usage
+        return parse(&result->alternation_list);
     }
     
-    // Parse a usages_t
-    parse_result_t parse(usages_t *result) {
-        // Our usages are quite small, but copying them is expensive
-        result->usages.reserve(8);
-        parse_result_t status = parsed_ok;
-        while (status == parsed_ok) {
-            status = try_parse_appending(&result->usages);
-        }
-        if (status == parsed_done) {
-            if (result->usages.empty()) {
-                append_error(&this->errors, this->remaining_range.start, error_missing_program_name, "Missing program name");
-                status = parsed_error;
-            } else {
-                status = parsed_ok;
-            }
-        }
-        return status;
-    }
-
     // Parse ellipsis
     parse_result_t parse(opt_ellipsis_t *result) {
         result->present = this->scan("...", &result->ellipsis);
@@ -533,29 +511,28 @@ struct parse_context_t {
     }
 };
 
+void usage_t::make_default() {
+    // hackish?
+    const std::string src = "command [options]";
+    vector<error_t<std::string> > *null_errors = NULL;
+    parse_one_usage(src, range_t(0, src.size()), option_list_t(), this, null_errors);
+}
+
 template<typename string_t>
-usages_t *parse_usage(const string_t &src, const range_t &src_range, const option_list_t &shortcut_options, vector<error_t<string_t> > *out_errors)
+bool parse_one_usage(const string_t &src, const range_t &src_range, const option_list_t &shortcut_options, usage_t *out_usage, vector<error_t<string_t> > *out_errors)
 {
     parse_context_t<string_t> ctx(src, src_range, shortcut_options);
-    usages_t *result = new usages_t();
-    parse_result_t status = ctx.template parse(result);
-    if (status == parsed_error) {
-        delete result;
-        result = NULL;
-    }
-    
-    // Error statuses should have error messages
+    parse_result_t status = ctx.template parse(out_usage);
     assert(! (status == parsed_error && ctx.errors.empty()));
     if (out_errors) {
         out_errors->insert(out_errors->end(), ctx.errors.begin(), ctx.errors.end());
     }
-    
-    return result; // transfers ownership
+    return status != parsed_error;
 }
 
 // Force template instantiation
-template usages_t *parse_usage<std::string>(const std::string &, const range_t &, const option_list_t &, vector<error_t<std::string> > *);
-template usages_t *parse_usage<std::wstring>(const std::wstring &, const range_t &, const option_list_t &shortcut_options, vector<error_t<std::wstring> > *);
+template bool parse_one_usage<std::string>(const std::string &, const range_t &, const option_list_t &, usage_t *out_usage, vector<error_t<std::string> > *);
+template bool parse_one_usage<std::wstring>(const std::wstring &, const range_t &, const option_list_t &shortcut_options, usage_t *out_usage, vector<error_t<std::wstring> > *);
 
 
 CLOSE_DOCOPT_IMPL /* namespace */

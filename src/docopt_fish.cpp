@@ -336,12 +336,15 @@ struct clause_collector_t : public node_visitor_t<clause_collector_t> {
 typedef std::vector<error_t<string_t> > error_list_t;
 
 /* Class representing a map from variable names to conditions */
-typedef std::map<string_t, range_t> condition_map_t;
+typedef std::map<string_t, range_t> variable_command_map_t;
+
+/* List of usages */
+typedef std::vector<usage_t> usage_list_t;
 
 /* Constructor takes the source */
 public:
 const string_t source;
-docopt_impl(const string_t &s) : source(s), parse_tree(NULL) {}
+docopt_impl(const string_t &s) : source(s) {}
 
 string_t string_for_range(const range_t &r) const
 {
@@ -353,8 +356,8 @@ string_t string_for_range(const range_t &r) const
 #pragma mark Instance Variables
 #pragma mark -
 
-/* The usage parse tree */
-usages_t *parse_tree;
+/* The usage parse tree. */
+usage_list_t usages;
 
 /* The list of options parsed from the "Options:" section. Referred to as "shortcut options" because the "[options]" directive can be used as a shortcut to reference them. */
 option_list_t shortcut_options;
@@ -368,11 +371,8 @@ range_list_t all_variables;
 /* All of the positional commands (like "checkout") that appear in the "Usage:" sections */
 range_list_t all_static_arguments;
 
-/* List of errors */
-error_list_t errors;
-
-/* Map from variable names to conditions */
-condition_map_t variables_to_conditions;
+/* Map from variable names to the commands that populate them */
+variable_command_map_t variables_to_commands;
 
 /* Helper typedefs */
 typedef base_argument_t<string_t> arg_t;
@@ -499,10 +499,11 @@ bool token_substr_equals(const token_t &tok, const char *str, size_t len) const 
 }
 
 /* Collects options, i.e. tokens of the form --foo */
-template<typename ENTRY_TYPE>
-void collect_options_and_variables(const ENTRY_TYPE &entry, option_list_t *out_options, range_list_t *out_variables, range_list_t *out_static_arguments) const {
+void collect_options_and_variables(const usage_list_t &usages, option_list_t *out_options, range_list_t *out_variables, range_list_t *out_static_arguments) const {
     clause_collector_t collector;
-    collector.begin(entry);
+    for (size_t i=0; i < usages.size(); i++) {
+        collector.begin(usages.at(i));
+    }
     
     // "Return" the values
     out_options->swap(collector.options);
@@ -645,30 +646,6 @@ option_list_t parse_one_option_spec(const range_t &range, error_list_t *errors) 
     return result;
 }
 
-// Returns true if the source line contains an option spec, that is, has at least one leading space, and then a dash
-static bool line_contains_option_spec(const string_t &str, const range_t &range) {
-    range_t remaining = range;
-    range_t space = scan_while(str, &remaining, isspace);
-    range_t dashes = scan_while(str, &remaining, it_equals<'-'>);
-    return space.length > 0 && dashes.length > 0;
-}
-
-// Returns true if the source line contains a condition spec, that is, has at least one leading space and then a <
-static bool line_contains_condition_spec(const string_t &str, const range_t &range) {
-    range_t remaining = range;
-    range_t space = scan_while(str, &remaining, isspace);
-    range_t open_bracket = scan_while(str, &remaining, it_equals<'<'>);
-    return space.length > 0 && open_bracket.length > 0;
-}
-
-// Returns the index of the first colon within the given range, or npos if not found
-static size_t find_colon(const range_t &r, const string_t &src) {
-    typename string_t::const_iterator istart = src.begin();
-    size_t colon_pos = std::find(istart + r.start, istart + r.end(), ':') - istart;
-    assert(colon_pos >= r.start && colon_pos <= r.end());
-    return colon_pos < r.end() ? colon_pos : npos;
-}
-
 // Computes the indent for a line starting at start and extending len. Tabs are treated as 4 spaces. newlines are unexpected, and treated as one space.
 static size_t compute_indent(const string_t &src, size_t start, size_t len)
 {
@@ -692,6 +669,140 @@ static size_t compute_indent(const string_t &src, size_t start, size_t len)
         }
     }
     return result;
+}
+
+static bool find_header(const string_t &src, const range_t &line_range, range_t *out_header_range) {
+    /* We are considered a header if we contain a colon, and only space / alpha text before it. */
+    bool result = false;
+    for (size_t i=line_range.start; i < line_range.end(); i++) {
+        char_t c = src[i];
+        if (c == ':') {
+            *out_header_range = range_t(line_range.start, i + 1 - line_range.start);
+            result = true;
+            break;
+        } else if (! (isalnum(c) || c == ' ')) {
+            break;
+        }
+    }
+    return result;
+}
+
+/* Walk over the lines of our source, starting from the beginning. */
+void populate_by_walking_lines(error_list_t *out_errors) {
+    /* Distinguish between normal (docopt) and exposition (e.g. description). */
+    enum mode_t {
+        mode_normal,
+        mode_exposition
+    } mode = mode_normal;
+    
+    // We need to parse the usage spec ranges after all of the Options
+    // This is because we need the options to disambiguate some usages
+    range_list_t usage_spec_ranges;
+    
+    range_t line_range;
+    while (get_next_line(this->source, &line_range)) {
+        /* There are a couple of possibilitise for each line:
+         
+         1. It may have a header like "Usage:". If so, we want to strip that header, and optionally
+            use it to determine the mode.
+         2. It may be a usage spec. We can tell because the first word is plain text.
+         3. It may be an option spec. We can tell because the first character is a dash.
+         4. It may be a variable spec. We can tell because the first character is a <.
+         5. It may be just whitespace or empty, and is ignored.
+         
+         Also note that a (nonempty) line indented more than the previous line is considered a continuation of that line.
+         */
+        
+        range_t trimmed_line_range = trim_whitespace(line_range, this->source);
+        assert(trimmed_line_range.start >= line_range.start);
+        
+        range_t header_range;
+        if (find_header(this->source, trimmed_line_range, &header_range)) {
+            // Set mode based on header, and remove header from line
+            // The headers we know about are Usage, Synopsis, Options, and Arguments (case insensitive)
+            // Everything else is considered exposition
+            const char * const keywords[] = { "Usage", "Synopsis", "Options", "Arguments" };
+            size_t keyword_count = sizeof keywords / sizeof *keywords;
+            bool found_keyword = false;
+            for (size_t i=0; i < keyword_count && !found_keyword; i++) {
+                found_keyword = (find_case_insensitive(this->source, keywords[i], header_range) != string_t::npos);
+            }
+            mode = found_keyword ? mode_normal : mode_exposition;
+            
+            // Remove the header range from the trimmed line
+            size_t header_end = header_range.end();
+            assert(header_end <= trimmed_line_range.end());
+            trimmed_line_range = trim_whitespace(range_t(header_end, trimmed_line_range.end() - header_end), this->source);
+        }
+        
+        // Skip exposition or empty lines
+        if (mode == mode_exposition || trimmed_line_range.empty()) {
+            continue;
+        }
+        
+        /* Compute the indent. Note that the header is considered part of the indent, so that:
+         
+          Usage: foo
+              bar
+        
+          Here 'foo' is indented more than 'bar'.
+        */
+        const size_t line_indent = compute_indent(this->source, line_range.start, trimmed_line_range.start - line_range.start);
+        
+        // Determine the "line group." That is, this line plus all subsequent nonempty lines
+        // that are indented more than this line.
+        range_t line_group_range = trimmed_line_range;
+        range_t all_consumed_lines = line_range;
+        range_t next_line = line_range;
+        while (get_next_line(this->source, &next_line)) {
+            range_t trimmed_next_line = trim_whitespace(next_line, this->source);
+            size_t next_line_indent = compute_indent(this->source, next_line.start, trimmed_next_line.start - next_line.start);
+            if (trimmed_next_line.empty() || next_line_indent <= line_indent) {
+                break;
+            }
+            line_group_range.merge(next_line);
+            all_consumed_lines.merge(next_line);
+        }
+        
+        char_t first_char = this->source.at(line_group_range.start);
+        if (first_char == '-') {
+            // It's an option spec
+            option_list_t options = this->parse_one_option_spec(line_group_range, out_errors);
+            this->shortcut_options.insert(this->shortcut_options.end(), options.begin(), options.end());
+            
+        } else if (first_char == '<') {
+            // It's a variable command spec
+            const variable_command_map_t new_var_cmds = parse_one_variable_command_spec(line_group_range, out_errors);
+            for (typename variable_command_map_t::const_iterator iter = new_var_cmds.begin(); iter != new_var_cmds.end(); ++iter) {
+                if (!this->variables_to_commands.insert(*iter).second) {
+                    append_error(out_errors, line_group_range.start, error_one_variable_multiple_commands, "Duplicate command for variable");
+                }
+            }
+            
+        } else if (isalnum(first_char) || first_char == '_') {
+            // It's a usage spec. We will come back to this.
+            usage_spec_ranges.push_back(line_group_range);
+            
+        } else {
+            // It's an error
+            append_error(out_errors, trimmed_line_range.start, error_unknown_leader, "Lines must start with a normal character, less-than sign, or dash.");
+            break;
+        }
+        
+        // Note the line range we consumed, for the next iteration of the loop
+        line_range = all_consumed_lines;
+    }
+    
+    // Ensure our shortcut options don't have duplicates
+    this->uniqueize_options(&this->shortcut_options, true /* error on duplicates */, out_errors);
+    
+    // Now parse our usage_spec_ranges
+    size_t usages_count = usage_spec_ranges.size();
+    this->usages.resize(usages_count);
+    for (size_t i=0; i < usages_count; i++)
+    {
+        parse_one_usage<string_t>(this->source, usage_spec_ranges.at(i), this->shortcut_options, &this->usages.at(i), out_errors);
+    }
 }
 
 /* Finds the headers containing name (for example, "Options:") and returns source ranges for them. Header lines are not included. We allow the section names to be indented, but must be less idented than the previous line. If include_unindented_lines is true, then non-header lines that are less indented are included:
@@ -756,122 +867,26 @@ range_list_t source_ranges_for_section(const char *name, bool include_other_top_
     return result;
 }
 
-/* Parses the option specification at the given location */
-option_list_t parse_options_spec(error_list_t *errors) const {
-    option_list_t result;
-
-    const range_list_t section_ranges = source_ranges_for_section("Options:");
-    for (size_t range_idx = 0; range_idx < section_ranges.size(); range_idx++) {
-        const range_t section_range = section_ranges.at(range_idx);
-        const size_t section_end = section_range.end();
-        range_t line_range(section_range.start, 0);
-        while (get_next_line(this->source, &line_range, section_end)) {
-            // These are all valid option specifications:
-            // --foo
-            // --foo <bar>
-            // --foo=<bar>
-            // --foo=<bar>, -f=<bar>
-            // There may also be a description after two spaces
-            // The description may span multiple lines.
-
-            // Check to see if this line starts with a -
-            range_t trimmed_line = trim_whitespace(line_range, this->source);
-            if (trimmed_line.empty()) {
-                // Empty line in Options, just skip it
-                continue;
-            } else if (! line_contains_option_spec(this->source, line_range)) {
-                append_error(errors, line_range.start, error_invalid_option_name, "Invalid option name. Options must start with a leading space and a dash.");
-            } else {
-                // It's a new option. Determine how long its description goes.
-                range_t option_spec_range = line_range;
-                range_t local_range = line_range;
-                while (get_next_line(this->source, &local_range, section_end)) {
-                    if (line_contains_option_spec(this->source, local_range)) {
-                        break;
-                    } else {
-                        option_spec_range.merge(local_range);
-                        // Set our outermost lines to this line, so we'll skip past it next iteration
-                        line_range = local_range;
-                    }
-                }
-                
-                // Got the description. Skip leading whitespace and then parse out an option.
-                scan_while(this->source, &option_spec_range, isspace);
-                option_list_t tmp = parse_one_option_spec(option_spec_range, errors);
-                result.insert(result.end(), tmp.begin(), tmp.end());
-            }
-        }
+/* Given a variable spec, parse out a condition map */
+variable_command_map_t parse_one_variable_command_spec(const range_t &range, error_list_t *out_errors) const {
+    // A specification look like this:
+    // <pid> stuff
+    variable_command_map_t result;
+    assert(this->source.at(range.start) == '<');
+    const size_t close_bracket = this->source.find('>', range.start);
+    if (close_bracket >= range.end()) {
+        // note: this covers npos too
+        append_error(out_errors, range.start, error_missing_close_variable, "No > to balance this <");
+    } else {
+        assert(close_bracket < range.end());
+        range_t key_range(range.start, close_bracket - range.start + 1);
+        range_t value(key_range.end(), range.end() - key_range.end());
+        key_range = trim_whitespace(key_range, this->source);
+        value = trim_whitespace(value, this->source);
+        result[string_for_range(key_range)] = value;
     }
     return result;
 }
-
-/* Parses the conditions specification at the given location. TODO: refactor this with parse_options_spec */
-condition_map_t parse_conditions_spec(error_list_t *errors) const {
-    condition_map_t result;
-    
-    /* The 'true' here means to include other top-level lines as conditions, e.g.:
-          Usage: prog <pid>
-          Conditions: <pid>
-          1
-          2
-          3
-     
-        This can come about during e.g. variable expansion in fish.
-    */
-    
-    const range_list_t section_ranges = source_ranges_for_section("Conditions:", true);
-    for (size_t range_idx = 0; range_idx < section_ranges.size(); range_idx++) {
-        const range_t section_range = section_ranges.at(range_idx);
-        const size_t section_end = section_range.end();
-        range_t line_range(section_range.start, 0);
-        while (get_next_line(this->source, &line_range, section_end)) {
-            range_t trimmed_line = trim_whitespace(line_range, this->source);
-            if (trimmed_line.empty()) {
-                // Empty line in Conditions, just skip it
-                continue;
-            } else if (! line_contains_condition_spec(this->source, line_range)) {
-                append_error(errors, line_range.start, error_invalid_variable_name, "Invalid condition. Conditions must start with a variable like <var>.");
-            } else {
-                // It's a new condition. Determine how long it goes.
-                range_t condition_spec_range = line_range;
-                range_t local_range = line_range;
-                while (get_next_line(this->source, &local_range, section_end)) {
-                    if (line_contains_condition_spec(this->source, local_range)) {
-                        break;
-                    } else {
-                        condition_spec_range.merge(local_range);
-                        // Set our outermost lines to this line, so we'll skip past it next iteration
-                        line_range = local_range;
-                    }
-                }
-
-                // Got the condition spec
-                // A specification look like this:
-                // <pid>  stuff
-                // Two spaces are the separator. But make sure we skip leading spaces!
-                condition_spec_range = trim_whitespace(condition_spec_range, this->source);
-                const char_t two_spaces[] = {char_t(' '), char_t(' '), char_t('\0')};
-                size_t sep = this->source.find(two_spaces, condition_spec_range.start);
-                if (sep < condition_spec_range.end())
-                {
-                    range_t key(condition_spec_range.start, sep - condition_spec_range.start);
-                    range_t value(sep, condition_spec_range.end() - sep);
-                    
-                    // Trim whitespace off of both sides and then populate our map
-                    // TODO: verify that the variable was found
-                    key = trim_whitespace(key, this->source);
-                    value = trim_whitespace(value, this->source);
-                    const string_t key_str(this->source, key.start, key.length);
-                    if (! result.insert(typename condition_map_t::value_type(key_str, value)).second) {
-                        append_error(errors, key.start, error_one_variable_multiple_conditions, "Variable already has a condition");
-                    }
-                }
-            }
-        }
-    }
-    return result;
-}
-
 
 /* Returns true if the two options have the same name */
 bool options_have_same_name(const option_t &opt1, const option_t &opt2) const {
@@ -1436,9 +1451,9 @@ void match_list(const T& node, match_state_list_t *incoming_state_list, match_co
 }
 
 /* Match overrides */
-void match(const usages_t &node, match_state_t *state, match_context_t *ctx, match_state_list_t *resulting_states) const {
+void match(const vector<usage_t> &usages, match_state_t *state, match_context_t *ctx, match_state_list_t *resulting_states) const {
     // Elide the copy in the last one
-    size_t count = node.usages.size();
+    size_t count = usages.size();
     if (count == 0) {
         return;
     }
@@ -1446,7 +1461,7 @@ void match(const usages_t &node, match_state_t *state, match_context_t *ctx, mat
     bool fully_consumed = false;
     for (size_t i=0; i + 1 < count && ! fully_consumed; i++) {
         match_state_t copied_state = *state;
-        match(node.usages.at(i), &copied_state, ctx, resulting_states);
+        match(usages.at(i), &copied_state, ctx, resulting_states);
         
         if (ctx->flags & flag_stop_after_consuming_everything) {
             size_t idx = resulting_states->size();
@@ -1459,7 +1474,7 @@ void match(const usages_t &node, match_state_t *state, match_context_t *ctx, mat
         }
     }
     if (! fully_consumed) {
-        match(node.usages.at(count-1), state, ctx, resulting_states);
+        match(usages.at(count-1), state, ctx, resulting_states);
     }
 }
 
@@ -1826,7 +1841,7 @@ option_map_t match_argv(const string_list_t &argv, parse_flags_t flags, const po
     init_state.consumed_options.resize(resolved_options.size(), false);
     
     match_state_list_t result;
-    match(*this->parse_tree, &init_state, &ctx, &result);
+    match(this->usages, &init_state, &ctx, &result);
 
     if (log_stuff) {
         fprintf(stderr, "Matched %lu way(s)\n", result.size());
@@ -1886,46 +1901,26 @@ option_map_t match_argv(const string_list_t &argv, parse_flags_t flags, const po
 }
 
 /* Parses the docopt, etc. Returns true on success, false on error */
-bool preflight() {
-    /* Clean up from any prior run */
-    delete this->parse_tree; // may be null
-    this->parse_tree = NULL;
-
-    this->shortcut_options.clear();
-    this->all_options.clear();
-    this->all_variables.clear();
-    this->all_static_arguments.clear();
-    this->variables_to_conditions.clear();
-
-    const range_list_t usage_ranges = this->source_ranges_for_section("Usage:");
-    if (usage_ranges.empty()) {
-        append_error(&this->errors, npos, error_missing_usage_section, "Missing Usage: section");
-        return false;
-    } else if (usage_ranges.size() > 1) {
-        append_error(&this->errors, npos, error_excessive_usage_sections, "More than one Usage: section");
-        return false;
-    }
+bool preflight(error_list_t *out_errors) {
+    // Populate our instance variables
+    this->populate_by_walking_lines(out_errors);
     
-    // Extract options from the options section
-    this->shortcut_options = this->parse_options_spec(&this->errors);
-    this->uniqueize_options(&this->shortcut_options, true /* error on duplicates */, &this->errors);
-    
-    this->parse_tree = parse_usage<string_t>(this->source, usage_ranges.at(0), this->shortcut_options, &this->errors);
-    if (! this->parse_tree) {
-        // Should always produce an error here!
-        assert(! this->errors.empty());
-        return false;
+    /* If we have no usage, apply the default one */
+    if (this->usages.empty())
+    {
+        this->usages.resize(1);
+        this->usages.back().make_default();
     }
     
     // Extract options and variables from the usage sections
     option_list_t usage_options;
-    this->collect_options_and_variables(*this->parse_tree, &usage_options, &this->all_variables, &this->all_static_arguments);
+    this->collect_options_and_variables(this->usages, &usage_options, &this->all_variables, &this->all_static_arguments);
 
     // Combine these into a single list
     this->all_options.reserve(usage_options.size() + this->shortcut_options.size());
     this->all_options.insert(this->all_options.end(), usage_options.begin(), usage_options.end());
     this->all_options.insert(this->all_options.end(), this->shortcut_options.begin(), this->shortcut_options.end());
-    this->uniqueize_options(&this->all_options, false /* do not error on duplicates */, &this->errors);
+    this->uniqueize_options(&this->all_options, false /* do not error on duplicates */, out_errors);
 
     /* Hackish. Consider the following usage:
        usage: prog [options] [-a]
@@ -1953,13 +1948,14 @@ bool preflight() {
         }
     }
     
-    // Extract conditions from the conditions section
-    this->variables_to_conditions = this->parse_conditions_spec(&this->errors);
-    
     // Example of how to dump
     if (0)
     {
-        std::string dumped = node_dumper_t::dump_tree(*this->parse_tree, this->source);
+        std::string dumped;
+        for (size_t i=0; i < this->usages.size(); i++)
+        {
+            dumped += node_dumper_t::dump_tree(this->usages.at(i), this->source);
+        }
         fprintf(stderr, "%s\n", dumped.c_str());
     }
     
@@ -1970,22 +1966,14 @@ bool preflight() {
 // TODO: make this const by stop touching error_list
 option_map_t best_assignment_for_argv(const string_list_t &argv, parse_flags_t flags, error_list_t *out_errors, index_list_t *out_unused_arguments)
 {
-    this->errors.clear();
-    
     positional_argument_list_t positionals;
     resolved_option_list_t resolved_options;
     
     // Extract positionals and arguments from argv
-    this->separate_argv_into_options_and_positionals(argv, all_options, flags, &positionals, &resolved_options, &this->errors);
+    this->separate_argv_into_options_and_positionals(argv, all_options, flags, &positionals, &resolved_options, out_errors);
     
     // Produce an option map
     option_map_t result = this->match_argv(argv, flags, positionals, resolved_options, all_options, all_variables, out_unused_arguments);
-    
-    // Pass along any errors
-    if (out_errors) {
-        out_errors->insert(out_errors->end(), this->errors.begin(), this->errors.end());
-    }
-    this->errors.clear();
     
     return result;
 }
@@ -2009,7 +1997,7 @@ string_list_t suggest_next_argument(const string_list_t &argv, parse_flags_t fla
     match_state_t init_state;
     init_state.consumed_options.resize(resolved_options.size(), false);
     match_state_list_t states;
-    match(*this->parse_tree, &init_state, &ctx, &states);
+    match(this->usages, &init_state, &ctx, &states);
     
     /* Find the state(s) with the fewest unused arguments, and then insert all of their suggestions into a list */
     string_list_t all_suggestions;
@@ -2032,10 +2020,10 @@ string_list_t suggest_next_argument(const string_list_t &argv, parse_flags_t fla
     return all_suggestions;
 }
 
-string_t conditions_for_variable(const string_t &var_name) const {
+string_t commands_for_variable(const string_t &var_name) const {
     string_t result;
-    typename condition_map_t::const_iterator where = this->variables_to_conditions.find(var_name);
-    if (where != this->variables_to_conditions.end()) {
+    typename variable_command_map_t::const_iterator where = this->variables_to_commands.find(var_name);
+    if (where != this->variables_to_commands.end()) {
         const range_t &cond_range = where->second;
         result.assign(this->source, cond_range.start, cond_range.length);
     }
@@ -2079,16 +2067,14 @@ string_t description_for_option(const string_t &given_option_name) const {
 std::vector<string_t> get_command_names() const {
     /* Get the command names. We store a set of seen names so we only return tha names once, but in the order matching their appearance in the usage spec. */
     std::vector<string_t> result;
-    if (this->parse_tree) {
-        std::set<string_t> seen;
-        for (size_t i=0; i < this->parse_tree->usages.size(); i++) {
-            const usage_t &usage = this->parse_tree->usages.at(i);
-            range_t name_range = usage.prog_name.range;
-            if (! name_range.empty()) {
-                const string_t name(this->source, name_range.start, name_range.length);
-                if (seen.insert(name).second) {
-                    result.push_back(name);
-                }
+    std::set<string_t> seen;
+    for (size_t i=0; i < this->usages.size(); i++) {
+        const usage_t &usage = this->usages.at(i);
+        range_t name_range = usage.prog_name.range;
+        if (! name_range.empty()) {
+            const string_t name(this->source, name_range.start, name_range.length);
+            if (seen.insert(name).second) {
+                result.push_back(name);
             }
         }
     }
@@ -2146,9 +2132,9 @@ std::vector<string_t> argument_parser_t<string_t>::suggest_next_argument(const s
 }
 
 template<typename string_t>
-string_t argument_parser_t<string_t>::conditions_for_variable(const string_t &var) const
+string_t argument_parser_t<string_t>::commands_for_variable(const string_t &var) const
 {
-    return impl->conditions_for_variable(var);
+    return impl->commands_for_variable(var);
 }
 
 template<typename string_t>
@@ -2183,11 +2169,7 @@ template<typename string_t>
 bool argument_parser_t<string_t>::set_doc(const string_t &doc, std::vector<error_t<string_t> > *out_errors) {
     docopt_impl<string_t> *new_impl = new docopt_impl<string_t>(doc);
     
-    bool preflighted = new_impl->preflight();
-    
-    if (out_errors) {
-        out_errors->insert(out_errors->end(), new_impl->errors.begin(), new_impl->errors.end());
-    }
+    bool preflighted = new_impl->preflight(out_errors);
     
     if (! preflighted) {
         delete new_impl;
