@@ -1,2 +1,1 @@
-
-complete -c break -s h -l help --description 'Display help and exit'
+complete -c break --signature '-h --help  Display help and exit'
