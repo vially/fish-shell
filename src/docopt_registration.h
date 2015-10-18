@@ -73,8 +73,8 @@ public:
     /* Given a command and proposed arguments for the command, return a list of suggested next arguments */
     wcstring_list_t suggest_next_argument(const wcstring_list_t &argv, docopt_parse_flags_t flags = flags_default) const;
     
-    /* Given a command and a variable in a usage spec, return a condition for that variable. Also returns the description by reference. */
-    wcstring conditions_for_variable(const wcstring &var, wcstring *out_description = NULL) const;
+    /* Given a variable in a usage spec, return a command for that variable. Also returns the description by reference. */
+    wcstring commands_for_variable(const wcstring &var, wcstring *out_description = NULL) const;
     
     /* Given a command and an option like --foo, returns the description of that option */
     wcstring description_for_option(const wcstring &option) const;

@@ -2264,7 +2264,7 @@ static void test_docopt_complete(void)
     L"       -g <val>, --group <val>\n"
     L"       -x <dynval>\n"
     L"       -h, --help  Help Description\n"
-    L"Conditions:\n"
+    L"Arguments:\n"
     L"       <val>  ONE TWO THREE\n"
     L"       <dynval>  (echo ONE\\nTWO\\nTHREE)\n"
     ;

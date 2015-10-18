@@ -1607,7 +1607,7 @@ bool completer_t::complete_from_docopt(const wcstring &cmd_unescape, const parse
         {
             // Variable. Handle any conditions. If there are no conditions, we may return false, which allows for file completions.
             wcstring description;
-            const wcstring conditions = regs.conditions_for_variable(suggestion, &description);
+            const wcstring conditions = regs.commands_for_variable(suggestion, &description);
             if (! conditions.empty())
             {
                 this->complete_from_args(last_arg, conditions, description, local_flags);

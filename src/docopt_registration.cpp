@@ -91,7 +91,7 @@ class doc_register_t {
         for (size_t i=0; i < vars.size(); i++)
         {
             const wcstring &var = vars.at(i);
-            const wcstring condition_string = parser.conditions_for_variable(var);
+            const wcstring condition_string = parser.commands_for_variable(var);
             if (! condition_string.empty())
             {
                 wcstring local_err;
@@ -262,14 +262,14 @@ wcstring_list_t docopt_registration_set_t::suggest_next_argument(const wcstring_
     return result;
 }
 
-wcstring docopt_registration_set_t::conditions_for_variable(const wcstring &var, wcstring *out_description) const
+wcstring docopt_registration_set_t::commands_for_variable(const wcstring &var, wcstring *out_description) const
 {
     /* We use the first parser that has a condition */
     wcstring result;
     for (size_t i=0; i < registrations.size(); i++)
     {
         const docopt_registration_t *reg = registrations.at(i).get();
-        result = reg->parser->conditions_for_variable(var);
+        result = reg->parser->commands_for_variable(var);
         if (! result.empty())
         {
             // Return the description if requested
