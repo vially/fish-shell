@@ -1,0 +1,24 @@
+__1__
+argv = 1
+__2__
+argv = 2 -x
+opt_longX = 1
+__3__
+argv = 3 --counted -x --counted
+opt_counted = 2
+opt_longX = 1
+__4__
+argv = 4 --longX --counted value1 value2
+opt_counted = 1
+opt_longX = 1
+value = value1 value2
+__5__
+argv = 5 -oldOpt --longX -y --counted value3
+opt_counted = 1
+opt_longX = 1
+opt_longY = 1
+opt_oldOpt = 1
+value = value3
+__6__
+argv = 6 literal
+cmd_literal = 1

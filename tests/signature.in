@@ -1,0 +1,21 @@
+function signature_test  --signature '
+  signature_test <which> literal
+  signature_test <which> [--counted...] [options] [<value>...]
+  -x, --longX
+  -y, --longY
+  -oldOpt
+'
+  echo __{$which}__
+  for name in (set -l)
+    if [ $name != 'which' ]
+      echo $name = $$name
+    end
+  end
+end
+
+signature_test 1
+signature_test 2 -x
+signature_test 3 --counted -x --counted
+signature_test 4 --longX --counted value1 value2
+signature_test 5 -oldOpt --longX -y --counted value3
+signature_test 6 literal
