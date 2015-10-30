@@ -9,10 +9,13 @@ function abbr --description 'Manage abbreviations' --signature '
     
   Options:
     -a, --add <word_phrase>  Adds a new abbreviation
-    -s, --show               Show all abbreviated words and their expanded
-    -l, --list               List all abbreviated words
-    -e, --erase <word>       Erase the abbreviation <word>
+    -s, --show               Print all abbreviations
+    -l, --list               Print all abbreviation names
+    -e, --erase <word>       Erase an abbreviation by name
     -h, --help               Show help
+	
+  Arguments:
+	<word>    (abbr -s | cut -d" " -f 2- | sed -e "s/ /	/")
 '
 	# Note that if we are run with no arguments, we treat it like --add if
 	# we have a word_phrase, and --show if we do not
