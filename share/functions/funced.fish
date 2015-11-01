@@ -1,49 +1,39 @@
-function funced --description 'Edit function definition'
-    set -l editor
-    # Check VISUAL first since theoretically EDITOR could be ed
-    if set -q VISUAL
-        set editor $VISUAL
-    else if set -q EDITOR
-        set editor $EDITOR
-    end
-    set -l interactive
-    set -l funcname
-    while set -q argv[1]
-        switch $argv[1]
-            case -h --help
-                __fish_print_help funced
-                return 0
+function funced --description 'Edit function definition' --signature '
+    Usage:
+      funced [-i | -e <editor>] <funcname>
+      funced -h
+    Options:
+      -e, --editor <editor>   Specify the text editor to use
+      -i, --interactive       Open function body in the built‐in editor
+      -h, --help              Show help and usage information
+	Arguments:
+	  <funcname> (functions -na)
+	  <editor>   (__fish_complete_command)
+'
+	if set -ql opt_help
+		__fish_print_help funced
+		return 0
+	end
 
-            case -e --editor
-                set editor $argv[2]
-                set -e argv[2]
-
-            case -i --interactive
-                set interactive 1
-
-            case --
-                set funcname $funcname $argv[2]
-                set -e argv[2]
-
-            case '-*'
-                set_color red
-                printf (_ "%s: Unknown option %s\n") funced $argv[1]
-                set_color normal
-                return 1
-
-            case '*' '.*'
-                set funcname $funcname $argv[1]
-        end
-        set -e argv[1]
-    end
-
-    if test (count $funcname) -ne 1
+	# Determine the editor
+	set -l effective_editor
+	if set -ql editor
+		set effective_editor $editor
+	else if set -ql opt_interactive
+		set effective_editor fish
+	else if set -q VISUAL
+		set effective_editor $VISUAL
+	else if set -q EDITOR
+		set effective_editor $EDITOR
+	end
+	
+	if not set -ql funcname
         set_color red
         _ "funced: You must specify one function name
 "
         set_color normal
         return 1
-    end
+	end
 
     set -l init
     switch $funcname
@@ -53,23 +43,23 @@ function funced --description 'Edit function definition'
         set init function $funcname\n\nend
     end
 
-    # Break editor up to get its first command (i.e. discard flags)
-    if test -n "$editor"
-        set -l editor_cmd
-        eval set editor_cmd $editor
+    # Break effective_editor up to get its first command (i.e. discard flags)
+    if test -n "$effective_editor"
+        set -l effective_editor_cmd
+        eval set editor_cmd $effective_editor
         if not type -q -f "$editor_cmd[1]"
-            _ "funced: The value for \$EDITOR '$editor' could not be used because the command '$editor_cmd[1]' could not be found
+            _ "funced: The value for \$EDITOR '$effective_editor' could not be used because the command '$editor_cmd[1]' could not be found
     "
-            set editor fish
+            set effective_editor fish
         end
     end
     
     # If no editor is specified, use fish
-    if test -z "$editor"
-        set editor fish
+    if test -z "$effective_editor"
+        set effective_editor fish
     end
 
-    if begin; set -q interactive[1]; or test "$editor" = fish; end
+    if test "$effective_editor" = fish
         set -l IFS
         if functions -q -- $funcname
             # Shadow IFS here to avoid array splitting in command substitution
@@ -98,7 +88,7 @@ function funced --description 'Edit function definition'
         # If the editor command itself fails, we assume the user cancelled or the file
         # could not be edited, and we do not try again
         while true
-            if not eval $editor $tmpname
+            if not eval $effective_editor $tmpname
                         _ "Editing failed or was cancelled"
                         echo
                 else
