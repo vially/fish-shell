@@ -1,6 +1,8 @@
 
-function funcsave --description "Save the current definition of all specified functions to file"
-
+function funcsave --description "Save the current definition of all specified functions to file" --signature '
+    Usage: funcsave <funcname>
+	<funcname>  (functions -na)\t"Save function"
+'
 	if count $argv >/dev/null
 		switch $argv[1]
 			case -h --h --he --hel --help
