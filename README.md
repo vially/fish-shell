@@ -7,7 +7,7 @@ For more on fish's design philosophy, see the [design document](http://fishshell
 
 ## Quick Start
 
-fish generally works like other shells, like bash or zsh. A few important differences can be found at <http://fishshell.com/docs/current/tutorial.html> by searching for the magic phrase 'unlike other shells'.
+fish generally works like other shells, like bash or zsh. A few important differences can be found at <http://fishshell.com/docs/current/tutorial.html> by searching for the magic phrase "unlike other shells".
 
 Detailed user documentation is available by running `help` within fish, and also at <http://fishshell.com/docs/current/index.html>
 
@@ -46,7 +46,7 @@ If fish reports that it could not find curses, try installing a curses developme
 
 On Debian or Ubuntu you want:
 
-    sudo apt-get install build-essential ncurses-dev libncurses5-dev gettext
+    sudo apt-get install build-essential ncurses-dev libncurses5-dev gettext autoconf
 
 On RedHat, CentOS, or Amazon EC2:
 
@@ -74,7 +74,7 @@ If you wish to use fish as your default shell, use the following command:
 
 	chsh -s /usr/local/bin/fish
 
-chsh will prompt you for your password, and change your default shell.
+chsh will prompt you for your password, and change your default shell. Substitute "/usr/local/bin/fish" with whatever path to fish is in your /etc/shells file.
 
 To switch your default shell back, you can run:
 

@@ -192,13 +192,6 @@ static int builtin_jobs(parser_t &parser, io_streams_t &streams, wchar_t **argv)
         mode = JOBS_PRINT_GROUP;
     }
     
-    /* Do not babble if not interactive */
-    if (streams.out_is_redirected)
-
-    {
-        found=1;
-    }
-
     if (args.has(L"--last"))
     {
         /* Ignore unconstructed jobs, i.e. ourself. */
@@ -209,7 +202,7 @@ static int builtin_jobs(parser_t &parser, io_streams_t &streams, wchar_t **argv)
 
             if ((j->flags & JOB_CONSTRUCTED) && !job_is_completed(j))
             {
-                builtin_jobs_print(j, mode, !found, streams);
+                builtin_jobs_print(j, mode, !streams.out_is_redirected, streams);
                 return 0;
             }
         }
@@ -220,8 +213,6 @@ static int builtin_jobs(parser_t &parser, io_streams_t &streams, wchar_t **argv)
         const wcstring_list_t &pids = args.get_list(L"<pid>");
         if (! pids.empty())
         {
-            found = 1;
-
             for (size_t i=0; i < pids.size(); i++)
             {
                 int pid;
@@ -240,7 +231,8 @@ static int builtin_jobs(parser_t &parser, io_streams_t &streams, wchar_t **argv)
 
                 if (j && !job_is_completed(j))
                 {
-                    builtin_jobs_print(j, mode, !found, streams);
+                    builtin_jobs_print(j, mode, false, streams);
+                    found = 1;
                 }
                 else
                 {
@@ -262,7 +254,7 @@ static int builtin_jobs(parser_t &parser, io_streams_t &streams, wchar_t **argv)
                 */
                 if ((j->flags & JOB_CONSTRUCTED) && !job_is_completed(j))
                 {
-                    builtin_jobs_print(j, mode, !found, streams);
+                    builtin_jobs_print(j, mode, !streams.out_is_redirected, streams);
                     found = 1;
                 }
             }
@@ -271,9 +263,15 @@ static int builtin_jobs(parser_t &parser, io_streams_t &streams, wchar_t **argv)
 
     if (!found)
     {
-        streams.out.append_format(
-                      _(L"%ls: There are no jobs\n"),
-                      argv[0]);
+        /*
+          Do not babble if not interactive
+        */
+        if (!streams.out_is_redirected)
+        {
+            streams.out.append_format(
+                        _(L"%ls: There are no jobs\n"),
+                        argv[0]);
+        }
         return 1;
     }
 

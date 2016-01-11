@@ -1028,6 +1028,8 @@ void reader_init()
 
     /* Set the mode used for the terminal, initialized to the current mode */
     memcpy(&shell_modes, &terminal_mode_on_startup, sizeof shell_modes);
+    shell_modes.c_iflag &= ~ICRNL;    /* turn off mapping CR (\cM) to NL (\cJ) */
+    shell_modes.c_iflag &= ~INLCR;    /* turn off mapping NL (\cJ) to CR (\cM) */
     shell_modes.c_lflag &= ~ICANON;   /* turn off canonical mode */
     shell_modes.c_lflag &= ~ECHO;     /* turn off echo mode */
     shell_modes.c_iflag &= ~IXON;     /* disable flow control */
@@ -1043,6 +1045,20 @@ void reader_init()
     shell_modes.c_cc[VDSUSP] = _POSIX_VDISABLE;
 #endif
 #endif
+
+    // We don't use term_steal because this can fail if fd 0 isn't associated
+    // with a tty and this function is run regardless of whether stdin is tied
+    // to a tty. This is harmless in that case. We do it unconditionally
+    // because disabling ICRNL mode (see above) needs to be done at the
+    // earliest possible moment. Doing it here means it will be done within
+    // approximately 1 ms of the start of the shell rather than 250 ms (or
+    // more) when reader_interactive_init is eventually called.
+    //
+    // TODO: Remove this condition when issue #2315 and #1041 are addressed.
+    if (is_interactive_session)
+    {
+        tcsetattr(STDIN_FILENO, TCSANOW,&shell_modes);
+    }
 }
 
 

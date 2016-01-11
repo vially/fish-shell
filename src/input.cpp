@@ -496,6 +496,7 @@ int input_init()
     {
         input_mapping_add(L"", L"self-insert");
         input_mapping_add(L"\n", L"execute");
+        input_mapping_add(L"\r", L"execute");
         input_mapping_add(L"\t", L"complete");
         input_mapping_add(L"\x3", L"commandline \"\"");
         input_mapping_add(L"\x4", L"exit");
@@ -567,7 +568,7 @@ static void input_mapping_execute(const input_mapping_t &m, bool allow_commands)
         return;
     }
 
-    if (!allow_commands)
+    if (has_commands && !allow_commands)
     {
         /* We don't want to run commands yet. Put the characters back and return
            R_NULL */

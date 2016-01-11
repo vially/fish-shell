@@ -21,37 +21,46 @@ set -g fish_prompt_hg_status_unmerged '!'
 set -g fish_prompt_hg_status_order added modified copied deleted untracked unmerged
 
 function __fish_hg_prompt --description 'Write out the hg prompt'
-	# If hg isn't installed, there's nothing we can do
-	# Return 1 so the calling prompt can deal with it
-	if not command -s hg >/dev/null
-		return 1
-	end
-
-    set -l branch (hg branch ^/dev/null)
-	# If there's no branch, there's no repository
-    if test -z $branch
-        return
+    # If hg isn't installed, there's nothing we can do
+    # Return 1 so the calling prompt can deal with it
+    if not command -s hg > /dev/null
+        return 1
     end
 
-	# With "-q", hg bookmark will always output every bookmark
-	# So our only option is to filter it ourselves
-	set -l bookmark (hg bookmark | string match ' \\**' | cut -d" " -f3)
-	# Unfortunately, hg bookmark doesn't exit non-zero when there's no bookmark
-	if test -n "$bookmark"
-		set branch "$branch/$bookmark"
-	end
+    # Find an hg directory above $PWD
+    # without calling `hg root` because that's too slow
+    set -l root
+    set -l dir $PWD
+    while test $dir != "/"
+        if test -f $dir'/.hg/dirstate'
+            set root $dir"/.hg"
+            break
+        end
+        # Go up one directory
+        set -l dir (string replace -r '[^/]*/?$' '' $dir)
+    end
+
+    if test -z "$root"
+        return 0
+    end
+
+    # Read branch and bookmark
+    set -l branch (cat $root/branch ^/dev/null; or echo default)
+    if set -l bookmark (cat $root/bookmarks.current ^/dev/null)
+        set branch "$branch|$bookmark"
+    end
 
     echo -n '|'
 
-    set -l repo_status (hg status | cut -c 1-2 | sort -u)
+    set -l repo_status (hg status | string sub -l 2 | sort -u)
 
     # Show nice color for a clean repo
     if test -z "$repo_status"
         set_color $fish_color_hg_clean
-        echo -n $branch'✓'
+        echo -n "($branch)"'✓'
         set_color normal
 
-    # Handle modified or dirty (unknown state)
+        # Handle modified or dirty (unknown state)
     else
         set -l hg_statuses
 
@@ -69,13 +78,13 @@ function __fish_hg_prompt --description 'Write out the hg prompt'
             end
         end
 
-        if string match -r '^[AMCD]' $repo_status
+        if string match -qr '^[AMCD]' $repo_status
             set_color $fish_color_hg_modified
         else
             set_color $fish_color_hg_dirty
         end
 
-        echo -n $branch'⚡'
+        echo -n "($branch)"'⚡'
 
         # Sort status symbols
         for i in $fish_prompt_hg_status_order

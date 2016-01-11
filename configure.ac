@@ -13,7 +13,7 @@ m4_syscmd([build_tools/git_version_gen.sh 2>/dev/null])
 AC_PREREQ([2.60])
 AC_INIT(fish,
         m4_esyscmd([cut -f 3 -d ' ' FISH-BUILD-VERSION-FILE | tr -d '\n']),
-        fish-users@lists.sf.net)
+        fish-users@lists.sourceforge.net)
 
 conf_arg=$@
 
@@ -362,6 +362,7 @@ AC_SEARCH_LIBS( shm_open, rt, , [AC_MSG_ERROR([Cannot find the rt library, neede
 AC_SEARCH_LIBS( pthread_create, pthread, , [AC_MSG_ERROR([Cannot find the pthread library, needed to build this package.] )] )
 AC_SEARCH_LIBS( setupterm, [ncurses tinfo curses], , [AC_MSG_ERROR([Could not find a curses implementation, needed to build fish. If this is Linux, try running 'sudo apt-get install libncurses5-dev' or 'sudo yum install ncurses-devel'])] )
 AC_SEARCH_LIBS( [nan], [m], [AC_DEFINE( [HAVE_NAN], [1], [Define to 1 if you have the nan function])] )
+AC_SEARCH_LIBS( [backtrace_symbols_fd], [execinfo] )
 
 if test x$local_gettext != xno; then
   AC_SEARCH_LIBS( gettext, intl,,)
@@ -524,7 +525,8 @@ AC_STRUCT_DIRENT_D_TYPE
 AC_CHECK_FUNCS( wcsdup wcsndup wcslen wcscasecmp wcsncasecmp fwprintf )
 AC_CHECK_FUNCS( futimes wcwidth wcswidth wcstok fputwc fgetwc )
 AC_CHECK_FUNCS( wcstol wcslcat wcslcpy lrand48_r killpg mkostemp )
-AC_CHECK_FUNCS( backtrace backtrace_symbols sysconf getifaddrs )
+AC_CHECK_FUNCS( backtrace backtrace_symbols_fd sysconf getifaddrs )
+AC_CHECK_FUNCS( futimens clock_gettime )
 
 if test x$local_gettext != xno; then
   AC_CHECK_FUNCS( gettext dcgettext )
@@ -795,6 +797,8 @@ AC_COMPILE_IFELSE(
       [
 	#if HAVE_NCURSES_H
 	#include <ncurses.h>
+	#elif HAVE_NCURSES_CURSES_H
+	#include <ncurses/curses.h>
 	#else
 	#include <curses.h>
 	#endif
