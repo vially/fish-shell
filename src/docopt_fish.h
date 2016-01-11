@@ -33,7 +33,6 @@ namespace docopt_fish
     };
     
     /* Represents an error. */
-    template<typename string_t>
     struct error_t {
         /* Location of the token where the error occurred, in either the docopt doc or the argument */
         size_t location;
@@ -44,24 +43,24 @@ namespace docopt_fish
         /* Internal code, for use in the tests */
         int code;
         
-        /* Text of the error */
-        string_t text;
+        /* Text of the error. This is an immortal string literal, but may someday need to be a std::string. */
+        const char *text;
         
-        error_t() : location(-1), argument_index(-1), code(0)
+        error_t() : location(-1), argument_index(-1), code(0), text(NULL)
         {}
     };
     
     /* A processed docopt file is called an argument parser. */
-    template<typename string_t> class docopt_impl;
+    class docopt_impl;
     
     /* Represents an argument in the result */
     template<typename string_t>
     struct base_argument_t {
-        /* How many times the argument appeared. This is typically 1 but may be greater than 1 for repeated arguments ("-v -v"), or 0 for missing arguments. */
-        unsigned int count;
-        
         /* The values specified in the argument. If this argument is a flag (like -d), this will be empty. If the argument has a single value, this will have a single value. If the argument has a default value, and no value was found in argv, the default will be contained in here (and count will be 0) */
         std::vector<string_t> values;
+        
+        /* How many times the argument appeared. This is typically 1 but may be greater than 1 for repeated arguments ("-v -v"), or 0 for missing arguments. */
+        unsigned int count;
         
         /* Helper function to return a single value */
         const string_t &value() const {
@@ -75,13 +74,13 @@ namespace docopt_fish
     template<typename string_t>
     class argument_parser_t {
         /* Guts */
-        docopt_impl<string_t> *impl;
+        docopt_impl *impl;
         
         public:
         
         typedef base_argument_t<string_t> argument_t;
         typedef std::map<string_t, argument_t> argument_map_t;
-        typedef std::vector<error_t<string_t> > error_list_t;
+        typedef std::vector<error_t> error_list_t;
         
         /* Sets the docopt doc for this parser. Returns any parse errors by reference. Returns true if successful. */
         bool set_doc(const string_t &doc, error_list_t *out_errors);
@@ -118,6 +117,6 @@ namespace docopt_fish
         argument_parser_t(const argument_parser_t &rhs);
         argument_parser_t &operator=(const argument_parser_t &rhs);
     };
-};
+}
 
 #endif

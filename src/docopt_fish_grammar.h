@@ -144,7 +144,7 @@ struct alternation_list_t {
 };
 
 struct usage_t {
-    token_t prog_name;
+    rstring_t prog_name;
     alternation_list_t alternation_list;
     
     std::string name() const { return "usage"; }
@@ -160,8 +160,8 @@ struct usage_t {
 };
 
 struct opt_ellipsis_t {
+    rstring_t ellipsis;
     bool present;
-    token_t ellipsis;
 
     opt_ellipsis_t() : present(false) {}
     
@@ -202,9 +202,9 @@ struct expression_t {
     deep_ptr<simple_clause_t> simple_clause;
     
     // Collapsed for productions 1 and 2
-    token_t open_token;
+    rstring_t open_token;
     deep_ptr<alternation_list_t> alternation_list;
-    token_t close_token;
+    rstring_t close_token;
     
     // Collapsed for all
     opt_ellipsis_t opt_ellipsis;
@@ -231,7 +231,7 @@ struct expression_t {
 
 // An option like '--track', optionally with a value
 struct option_clause_t {
-    token_t word;
+    rstring_t word;
     option_t option;
     std::string name() const { return "option"; }
     template<typename T>
@@ -242,7 +242,7 @@ struct option_clause_t {
 
 // Fixed like 'checkout'
 struct fixed_clause_t {
-    token_t word;
+    rstring_t word;
     std::string name() const { return "fixed"; }
     template<typename T>
     void visit_children(T *v) const {
@@ -253,7 +253,7 @@ struct fixed_clause_t {
 
 // Variable like '<branch>'
 struct variable_clause_t {
-    token_t word;
+    rstring_t word;
     variable_clause_t() {}
     std::string name() const { return "variable"; }
     template<typename T>
@@ -262,8 +262,7 @@ struct variable_clause_t {
     }
 };
 
-template<typename string_t>
-bool parse_one_usage(const string_t &src, const range_t &src_range, const option_list_t &shortcut_options, usage_t *out_usage, vector<error_t<string_t> > *out_errors);
+bool parse_one_usage(const rstring_t &src, const option_list_t &shortcut_options, usage_t *out_usage, vector<error_t> *out_errors);
 
 
 // Node visitor class, using CRTP. Child classes should override accept().
@@ -295,7 +294,7 @@ struct node_visitor_t {
     }
     
     /* Visit is called from node visit_children implementations. A token has no children. */
-    void visit(const token_t &token) {
+    void visit(const rstring_t &token) {
         static_cast<T *>(this)->accept(token);
     }
     

@@ -19,7 +19,7 @@ Functions for handling the set of docopt descriptions
 #include <algorithm>
 
 typedef docopt_fish::argument_parser_t<wcstring> docopt_parser_t;
-typedef docopt_fish::error_t<wcstring> docopt_error_t;
+typedef docopt_fish::error_t docopt_error_t;
 typedef std::vector<docopt_error_t> docopt_error_list_t;
 typedef docopt_parser_t::argument_map_t docopt_argument_map_t;
 
@@ -125,7 +125,7 @@ class doc_register_t {
             for (size_t i=0; i < errors.size(); i++)
             {
                 const docopt_error_t &doc_err = errors.at(i);
-                append_parse_error(out_errors, doc_err.location, doc_err.text);
+                append_parse_error(out_errors, doc_err.location, str2wcstring(doc_err.text));
             }
         }
 
