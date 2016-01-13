@@ -82,7 +82,7 @@ class doc_register_t {
     registration_map_t cmd_to_registration;
     mutex_lock_t lock;
     
-    // Looks for errors in the parser conditions
+    // Looks for errors in the parser variable commands
     static bool validate_parser(const docopt_parser_t &parser, parse_error_list_t *out_errors)
     {
         bool success = true;
@@ -91,13 +91,13 @@ class doc_register_t {
         for (size_t i=0; i < vars.size(); i++)
         {
             const wcstring &var = vars.at(i);
-            const wcstring condition_string = parser.commands_for_variable(var);
-            if (! condition_string.empty())
+            const wcstring command_string = parser.commands_for_variable(var);
+            if (! command_string.empty())
             {
                 wcstring local_err;
-                if (error_detector.detect_errors_in_argument_list(condition_string, &local_err, L""))
+                if (error_detector.detect_errors_in_argument_list(command_string, &local_err, L""))
                 {
-                    wcstring err_text = format_string(L"Condition '%ls' contained a syntax error:\n%ls", condition_string.c_str(), local_err.c_str());
+                    wcstring err_text = format_string(L"Command '%ls' contained a syntax error:\n%ls", command_string.c_str(), local_err.c_str());
                     // TODO: would be nice to have the actual position of the error
                     append_parse_error(out_errors, -1, err_text);
                     success = false;
@@ -264,7 +264,7 @@ wcstring_list_t docopt_registration_set_t::suggest_next_argument(const wcstring_
 
 wcstring docopt_registration_set_t::commands_for_variable(const wcstring &var, wcstring *out_description) const
 {
-    /* We use the first parser that has a condition */
+    /* We use the first parser that has a command */
     wcstring result;
     for (size_t i=0; i < registrations.size(); i++)
     {
@@ -295,7 +295,7 @@ wcstring docopt_registration_set_t::commands_for_variable(const wcstring &var, w
 wcstring docopt_registration_set_t::description_for_option(const wcstring &option) const
 {
     wcstring result;
-    /* We use the first parser that has a condition */
+    /* We use the first parser that has a description */
     for (size_t i=0; i < registrations.size(); i++)
     {
         result = registrations.at(i)->parser->description_for_option(option);
