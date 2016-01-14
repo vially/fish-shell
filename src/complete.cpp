@@ -2095,8 +2095,8 @@ void complete(const wcstring &cmd_with_subcmds, std::vector<completion_t> &comps
                     {
                         wcstring previous_argument_unescape, current_argument_unescape;
                         bool unescaped_arguments =
-                        unescape_string(previous_argument, &previous_argument_unescape, UNESCAPE_DEFAULT) &&
-                        unescape_string(current_argument, &current_argument_unescape, UNESCAPE_INCOMPLETE);
+                            unescape_string(previous_argument, &previous_argument_unescape, UNESCAPE_DEFAULT) &&
+                            unescape_string(current_argument, &current_argument_unescape, UNESCAPE_INCOMPLETE);
                         
                         // Have to walk over the command and its entire wrap chain
                         // If any command disables do_file, then they all do
