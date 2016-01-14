@@ -48,14 +48,15 @@ class docopt_registration_t
     void operator=(docopt_registration_t&);
     docopt_registration_t(const docopt_registration_t&);
     
-    docopt_registration_t() : parser(NULL) {}
+    docopt_registration_t() {}
     
     wcstring usage;
     wcstring description;
     wcstring condition;
-    docopt_fish::argument_parser_t<wcstring> *parser; // owned
+    shared_ptr<docopt_fish::argument_parser_t<wcstring> > parser;
     
 public:
+    // need an explicit destructor to avoid forcing clients to import docopt headers
     ~docopt_registration_t();
 };
 

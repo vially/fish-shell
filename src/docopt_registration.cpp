@@ -112,12 +112,12 @@ class doc_register_t {
     bool register_usage(const wcstring &cmd_or_empty, const wcstring &condition, const wcstring &usage, const wcstring &description, parse_error_list_t *out_errors)
     {
         // Try to parse it
-        docopt_parser_t parser;
+        shared_ptr<docopt_parser_t> parser(new docopt_parser_t());
         docopt_error_list_t errors;
-        bool success = parser.set_doc(usage, &errors);
+        bool success = parser->set_doc(usage, &errors);
         
         // Verify it
-        success = success && validate_parser(parser, out_errors);
+        success = success && validate_parser(*parser, out_errors);
 
         // Translate errors from docopt to parse_error over
         if (out_errors != NULL)
@@ -133,7 +133,7 @@ class doc_register_t {
         wcstring effective_cmd = cmd_or_empty;
         if (effective_cmd.empty())
         {
-            const wcstring_list_t cmd_names = parser.get_command_names();
+            const wcstring_list_t cmd_names = parser->get_command_names();
             if (cmd_names.empty())
             {
                 append_parse_error(out_errors, 0, L"No command name found in docopt description");
@@ -179,7 +179,7 @@ class doc_register_t {
             reg->usage = usage;
             reg->description = description;
             reg->condition = condition;
-            reg->parser = new docopt_parser_t(parser); // todo: avoid this copy
+            reg->parser = parser; // note shared_ptr
             
             // insert in the front
             // this transfers ownership!
@@ -216,7 +216,6 @@ docopt_registration_set_t docopt_get_registrations(const wcstring &cmd)
 
 docopt_registration_t::~docopt_registration_t()
 {
-    delete this->parser; // we own it
 }
 
 std::vector<docopt_argument_status_t> docopt_registration_set_t::validate_arguments(const wcstring_list_t &argv, docopt_parse_flags_t flags) const
@@ -227,7 +226,7 @@ std::vector<docopt_argument_status_t> docopt_registration_set_t::validate_argume
     // For each parser, have it validate the arguments. Mark an argument as the most valid that any parser declares it to be.
     for (size_t i=0; i < registrations.size(); i++)
     {
-        const docopt_parser_t *p = registrations.at(i)->parser;
+        const docopt_parser_t *p = registrations.at(i)->parser.get();
         const std::vector<docopt_fish::argument_status_t> parser_statuses = p->validate_arguments(argv, flags);
         
         // Fill result with status_invalid until it's the right size
@@ -264,7 +263,7 @@ wcstring_list_t docopt_registration_set_t::suggest_next_argument(const wcstring_
 
 wcstring docopt_registration_set_t::commands_for_variable(const wcstring &var, wcstring *out_description) const
 {
-    /* We use the first parser that has a command */
+    /* We use the first parser that has a condition */
     wcstring result;
     for (size_t i=0; i < registrations.size(); i++)
     {
