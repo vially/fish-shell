@@ -1581,8 +1581,16 @@ void highlighter_t::apply_docopt_coloring(const parse_node_t &statement_node)
     // All arguments
     const parse_node_tree_t::parse_node_list_t args = this->parse_tree.find_nodes(statement_node, symbol_argument);
     for (size_t i=0; i < args.size(); i++) {
-        // TODO: need to escape all of these!
-        argv.push_back(args.at(i)->get_source(this->buff));
+        const parse_node_t *arg = args.at(i);
+        wcstring arg_src = arg->get_source(this->buff);
+        if (unescape_string_in_place(&arg_src, UNESCAPE_DEFAULT))
+        {
+            argv.push_back(arg_src);
+        }
+        else
+        {
+            this->color_node(*arg, highlight_spec_error);
+        }
     }
     
     docopt_registration_set_t regs = docopt_get_registrations(argv.at(0));

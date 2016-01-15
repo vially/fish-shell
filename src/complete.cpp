@@ -1587,8 +1587,13 @@ bool completer_t::complete_from_docopt(const wcstring &cmd_unescape, const parse
     argv.push_back(cmd_unescape);
     for (size_t i=0; i < arg_nodes.size(); i++)
     {
-        // TODO: need to escape all of these!
-        argv.push_back(arg_nodes.at(i)->get_source(src));
+        bool allow_incomplete = cursor_in_last_arg && (i + 1 == arg_nodes.size());
+        wcstring arg = arg_nodes.at(i)->get_source(src);
+        // ignore args that fail to unescape
+        if (unescape_string_in_place(&arg, allow_incomplete ? UNESCAPE_INCOMPLETE : UNESCAPE_DEFAULT))
+        {
+            argv.push_back(arg);
+        }
     }
     
     wcstring last_arg;
@@ -1605,7 +1610,7 @@ bool completer_t::complete_from_docopt(const wcstring &cmd_unescape, const parse
         const wcstring &suggestion = suggestions.at(i);
         if (string_prefixes_string(L"<", suggestion))
         {
-            // Variable. Handle any conditions. If there are no conditions, we may return false, which allows for file completions.
+            // Variable. Handle any commands. If there are no commands, we may return false, which allows for file completions.
             wcstring description;
             const wcstring conditions = regs.commands_for_variable(suggestion, &description);
             if (! conditions.empty())
