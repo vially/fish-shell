@@ -38,27 +38,7 @@ namespace docopt_fish
 }
 
 class docopt_arguments_t;
-
-/* Represents a single docopt registration. This is immutable. */
-class docopt_registration_t
-{
-    friend class doc_register_t;
-    friend class docopt_registration_set_t;
-    /* No copying */
-    void operator=(docopt_registration_t&);
-    docopt_registration_t(const docopt_registration_t&);
-    
-    docopt_registration_t() {}
-    
-    wcstring usage;
-    wcstring description;
-    wcstring condition;
-    shared_ptr<docopt_fish::argument_parser_t<wcstring> > parser;
-    
-public:
-    // need an explicit destructor to avoid forcing clients to import docopt headers
-    ~docopt_registration_t();
-};
+class docopt_registration_t;
 
 /* Represents a set of docopt registrations */
 class docopt_registration_set_t
@@ -87,6 +67,8 @@ public:
     {
         return this->registrations.empty();
     }
+    
+    ~docopt_registration_set_t();
 };
 
 /* Helper class for representing the result of parsing argv via docopt. */

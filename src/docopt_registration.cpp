@@ -76,6 +76,23 @@ static void append_parse_error(parse_error_list_t *out_errors, size_t where, con
     }
 }
 
+/* Represents a single docopt registration. This is immutable. */
+class docopt_registration_t
+{
+    friend class doc_register_t;
+    friend class docopt_registration_set_t;
+    /* No copying */
+    void operator=(docopt_registration_t&);
+    docopt_registration_t(const docopt_registration_t&);
+    
+    docopt_registration_t() {}
+    
+    wcstring usage;
+    wcstring description;
+    wcstring condition;
+    shared_ptr<docopt_fish::argument_parser_t<wcstring> > parser;
+};
+
 // Class that holds a mapping from command name to list of docopt descriptions
 class doc_register_t {
     typedef std::map<wcstring, docopt_registration_set_t> registration_map_t;
@@ -214,7 +231,7 @@ docopt_registration_set_t docopt_get_registrations(const wcstring &cmd)
     return default_register.get_registrations(cmd);
 }
 
-docopt_registration_t::~docopt_registration_t()
+docopt_registration_set_t::~docopt_registration_set_t()
 {
 }
 
