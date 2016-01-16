@@ -54,9 +54,8 @@ the fish manual.
 
 - `-x` or `--exclusive` implies both `-r` and `-f`.
 
-<<<<<<< HEAD
 - `-g` or `--signature` adds a docopt signature to the command.
-=======
+
 - `-w WRAPPED_COMMAND` or `--wraps=WRAPPED_COMMAND` causes the specified command to inherit completions from the wrapped command (See blow for details).
 
 - `-n` or `--condition` specifies a shell command that must return 0 if the completion is to be used. This makes it possible to specify completions that should only be used in some cases.
