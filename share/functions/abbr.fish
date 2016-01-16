@@ -24,13 +24,11 @@ function abbr --description 'Manage abbreviations' --signature '
 		set -l value
 		__fish_abbr_parse_entry "$word_phrase" key value
 		# ensure the key contains at least one non-space character
-		set -l IFS \n\ \t
-		printf '%s' $key | read -lz key_ __
-		if test -z "$key_"
+		if not string match -qr "\w" -- $key
 			printf ( _ "%s: abbreviation must have a non-empty key\n" ) abbr >&2
 			return 1
 		end
-		if test -z "$value"
+		if not string match -qr "\w" -- $value
 			printf ( _ "%s: abbreviation must have a value\n" ) abbr >&2
 			return 1
 		end
@@ -60,8 +58,6 @@ function abbr --description 'Manage abbreviations' --signature '
 	else if begin ; set -ql opt_show ; or not count $argv > /dev/null; end
 		# Either --show is set, or $argv is empty, which is like --show
 		for i in $fish_user_abbreviations
-			# Disable newline splitting
-			set -lx IFS ''
 			__fish_abbr_parse_entry $i key value
 
 			# Check to see if either key or value has a leading dash
@@ -69,7 +65,7 @@ function abbr --description 'Manage abbreviations' --signature '
 			set -l opt_double_dash ''
 			switch $key ; case '-*'; set opt_double_dash ' --'; end
 			switch $value ; case '-*'; set opt_double_dash ' --'; end
-			echo abbr$opt_double_dash (__fish_abbr_escape "$key") (__fish_abbr_escape "$value")
+			echo abbr$opt_double_dash (string escape -- $key $value)
 		end
 		return 0
 
@@ -88,20 +84,6 @@ function abbr --description 'Manage abbreviations' --signature '
 	end
 end
 
-function __fish_abbr_escape
-	# Prettify the common case: if everything is alphanumeric,
-	# we do not need escapes.
-	# Do this by deleting alnum characters, and check if there's anything left.
-	# Note we need to preserve spaces, so spaces are not considered alnum
-	if test -z (echo -n "$argv" | tr -d '[:alnum:]_')
-		echo $argv
-	else
-		# Escape via single quotes
-		# printf is nice for stripping the newline that sed outputs
-		printf "'%s'" (echo -n $argv | sed -e s,\\\\,\\\\\\\\,g -e s,\',\\\\\',g)
-	end
-end
-
 function __fish_abbr_get_by_key
 	if not set -q argv[1]
 		echo "__fish_abbr_get_by_key: expected one argument, got none" >&2
@@ -109,9 +91,7 @@ function __fish_abbr_get_by_key
 	end
 	set -l count (count $fish_user_abbreviations)
 	if test $count -gt 0
-		set -l key
-		__fish_abbr_parse_entry $argv[1] key
-		set -l IFS \n # ensure newline splitting is enabled
+		set -l key $argv[1] # This assumes the key is valid and pre-parsed
 		for i in (seq $count)
 			set -l key_i
 			__fish_abbr_parse_entry $fish_user_abbreviations[$i] key_i
@@ -131,19 +111,20 @@ function __fish_abbr_parse_entry -S -a __input __key __value
 	if test -z "$__value"
 		set __value __
 	end
-	set -l IFS '= '
-	switch $__input
-	case '=*'
-		# read will skip any leading ='s, but we don't want that
-		set __input " $__input"
-		set __key _
-		set IFS '='
-	case ' =*'
-		set __key _
-		set IFS '='
+	# A "=" _before_ any space - we only read the first possible separator
+	# because the key can contain neither spaces nor "="
+	if string match -qr '^[^ ]+=' -- $__input
+		# No need for bounds-checking because we already matched before
+		set -l KV (string split "=" -m 1 -- $__input)
+		set $__key $KV[1]
+		set $__value $KV[2]
+	else if string match -qr '^[^ ]+ .*' -- $__input
+		set -l KV (string split " " -m 1 -- $__input)
+		set $__key $KV[1]
+		set $__value $KV[2]
+	else
+		# This is needed for `erase` et al, where we want to allow passing a value
+		set $__key $__input
 	end
-	# use read -z to avoid splitting on newlines
-	# I think we can safely assume there will be no NULs in the input
-	printf "%s" $__input | read -z $__key $__value
 	return 0
 end
