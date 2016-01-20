@@ -50,9 +50,6 @@ namespace docopt_fish
         {}
     };
     
-    /* A processed docopt file is called an argument parser. */
-    class docopt_impl;
-    
     /* Represents an argument in the result */
     template<typename string_t>
     struct base_argument_t {
@@ -71,6 +68,35 @@ namespace docopt_fish
         base_argument_t() : count(0) {}
     };
     
+    /* A "direct" option for constructing arguments parsers programatically. */
+    template<typename string_t>
+    struct direct_option_t
+    {
+        enum
+        {
+            single_short, // like -f
+            single_long, // like -foo
+            double_long, // like --foo
+        } type;
+        
+        // The name of the option.
+        // If empty, the type is ignored.
+        string_t option;
+        
+        // Name of a variable representing the value, or empty
+        // Separators are assumed to be flexible
+        string_t value_name;
+        
+        // Command associated with the variable
+        string_t command;
+        
+        // Description of the option
+        string_t description;
+    };
+    
+    class docopt_impl;
+    
+    /* A processed docopt file is called an argument parser. */
     template<typename string_t>
     class argument_parser_t {
         /* Guts */
@@ -84,6 +110,9 @@ namespace docopt_fish
         
         /* Sets the docopt doc for this parser. Returns any parse errors by reference. Returns true if successful. */
         bool set_doc(const string_t &doc, error_list_t *out_errors);
+        
+        /* Sets the doc via a list of programmatically-specified options. The usage spec is assumed to be `prog [options]` */
+        void set_options(const std::vector<direct_option_t<string_t> > &opts);
         
         /* Given a list of arguments, this returns a corresponding parallel array validating the arguments */
         std::vector<argument_status_t> validate_arguments(const std::vector<string_t> &argv, parse_flags_t flags) const;

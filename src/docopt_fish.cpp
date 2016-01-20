@@ -418,7 +418,7 @@ static rstring_t find_header(const rstring_t &src) {
     return result;
 }
 
-/* Given a variable spec, parse out a condition map */
+/* Given a variable spec, parse out a command map */
 static variable_command_map_t parse_one_variable_command_spec(const rstring_t &spec, error_list_t *out_errors) {
     // A specification look like this:
     // <pid> stuff
@@ -1406,6 +1406,8 @@ public:
     docopt_impl(const std::string &s) : storage_narrow(new std::string(s)), rsource(*storage_narrow) {}
     docopt_impl(const std::wstring &s) : storage_wide(new std::wstring(s)), rsource(*storage_wide) {}
     
+    docopt_impl() {}
+    
 #pragma mark -
 #pragma mark Instance Variables
 #pragma mark -
@@ -1543,6 +1545,79 @@ public:
         }
     }
     
+    template<typename stdstring_t>
+    static void maybe_append(stdstring_t *storage, const stdstring_t &str) {
+        if (! str.empty()) {
+            storage->append(str);
+            storage->push_back('\n');
+        }
+    }
+    
+    template<typename stdstring_t>
+    rstring_t slice_string(size_t *cursor, const stdstring_t &str) {
+        size_t start = *cursor, extent = str.size();
+        assert(start + extent <= this->rsource.length());
+        if (extent > 0)
+        {
+            // +1 for newline
+            *cursor += extent + 1;
+        }
+        return this->rsource.substr(start, extent);
+    }
+    
+    template<typename stdstring_t>
+    static stdstring_t dashed_option_name(const direct_option_t<stdstring_t> &dopt) {
+        size_t dash_count = 1 + (dopt.type == direct_option_t<stdstring_t>::double_long);
+        stdstring_t result;
+        if (! dopt.option.empty()) {
+            result.append(dash_count, '-');
+            result.append(dopt.option);
+        }
+        return result;
+    }
+    
+    /* Given a list of direct options, create a docopt_impl (allocated with new), populating its instance variables from the direct options. */
+    template<typename stdstring_t>
+    static docopt_impl *build_from_direct_options(const std::vector<direct_option_t<stdstring_t> > &dopts) {
+        typedef direct_option_t<stdstring_t> doption_t;
+        const size_t count = dopts.size();
+        /* We need to build our storage first. */
+        stdstring_t storage;
+        for (size_t i=0; i < count; i++) {
+            const doption_t &dopt = dopts.at(i);
+            maybe_append(&storage, dashed_option_name(dopt));
+            maybe_append(&storage, dopt.value_name);
+            maybe_append(&storage, dopt.command);
+            maybe_append(&storage, dopt.description);
+        }
+        
+        /* Create the impl */
+        docopt_impl *impl = new docopt_impl(storage);
+        
+        /* Now populate shortcut_options. cursor tracks our location through our storage. */
+        size_t cursor = 0;
+        impl->shortcut_options.resize(count);
+        for (size_t i=0; i < count; i++) {
+            const doption_t &dopt = dopts.at(i);
+            option_t *option = &impl->shortcut_options.at(i);
+            
+            stdstring_t dashed_name = dashed_option_name(dopt);
+            size_t name_idx = static_cast<size_t>(dopt.type);
+            assert(name_idx < option_t::NAME_TYPE_COUNT);
+            // note: may be empty
+            option->names[name_idx] = impl->slice_string(&cursor, dashed_name);
+
+            option->value = impl->slice_string(&cursor, dopt.value_name);
+            rstring_t command = impl->slice_string(&cursor, dopt.command);
+            option->description = impl->slice_string(&cursor, dopt.description);
+            
+            if (! command.empty()) {
+                impl->variables_to_commands[option->value] = command;
+            }
+        }
+        return impl;
+    }
+    
     /* Given an option map (using rstring), convert it to an option map using the given std::basic_string type. */
     template<typename stdstring_t>
     typename argument_parser_t<stdstring_t>::argument_map_t finalize_option_map(const option_rmap_t &map, parse_flags_t flags) const {
@@ -1671,9 +1746,6 @@ public:
     
     /* Parses the docopt, etc. Returns true on success, false on error */
     bool preflight(error_list_t *out_errors) {
-        // Populate our instance variables
-        this->populate_by_walking_lines(out_errors);
-        
         /* If we have no usage, apply the default one */
         if (this->usages.empty()) {
             this->usages.resize(1);
@@ -1943,6 +2015,7 @@ template<typename stdstring_t>
 bool argument_parser_t<stdstring_t>::set_doc(const stdstring_t &doc, error_list_t *out_errors) {
     docopt_impl *new_impl = new docopt_impl(doc);
     
+    new_impl->populate_by_walking_lines(out_errors);
     bool preflighted = new_impl->preflight(out_errors);
     
     if (! preflighted) {
@@ -1952,6 +2025,14 @@ bool argument_parser_t<stdstring_t>::set_doc(const stdstring_t &doc, error_list_
         this->impl = new_impl;
     }
     return preflighted;
+}
+
+template<typename stdstring_t>
+void argument_parser_t<stdstring_t>::set_options(const std::vector<direct_option_t<stdstring_t> > &opts)
+{
+    delete this->impl; // may be null
+    this->impl = docopt_impl::build_from_direct_options(opts);
+    this->impl->preflight(NULL);
 }
 
 /* Constructors */
