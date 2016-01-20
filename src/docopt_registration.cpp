@@ -85,8 +85,9 @@ class docopt_registration_t
     void operator=(docopt_registration_t&);
     docopt_registration_t(const docopt_registration_t&);
     
-    docopt_registration_t() {}
+    docopt_registration_t() : handle(0) {}
     
+    docopt_registration_handle_t handle;
     wcstring usage;
     wcstring description;
     wcstring condition;
@@ -97,6 +98,7 @@ class docopt_registration_t
 class doc_register_t {
     typedef std::map<wcstring, docopt_registration_set_t> registration_map_t;
     registration_map_t cmd_to_registration;
+    docopt_registration_handle_t last_handle;
     mutex_lock_t lock;
     
     // Looks for errors in the parser variable commands
@@ -126,7 +128,7 @@ class doc_register_t {
     }
     
     public:
-    bool register_usage(const wcstring &cmd_or_empty, const wcstring &condition, const wcstring &usage, const wcstring &description, parse_error_list_t *out_errors)
+    bool register_usage(const wcstring &cmd_or_empty, const wcstring &condition, const wcstring &usage, const wcstring &description, parse_error_list_t *out_errors, docopt_registration_handle_t *out_handle)
     {
         // Try to parse it
         shared_ptr<docopt_parser_t> parser(new docopt_parser_t());
@@ -190,9 +192,18 @@ class doc_register_t {
                 }
             }
             
+            /* Determine the handle */
+            docopt_registration_handle_t handle = ++this->last_handle;
+            if (handle == 0)
+            {
+                handle = ++this->last_handle; // paranoia
+            }
+            
             // Create our registration
             // We will transfer ownership to a shared_ptr
             docopt_registration_t *reg = new docopt_registration_t();
+            
+            reg->handle = handle;
             reg->usage = usage;
             reg->description = description;
             reg->condition = condition;
@@ -201,8 +212,39 @@ class doc_register_t {
             // insert in the front
             // this transfers ownership!
             regs.registrations.insert(regs.registrations.begin(), shared_ptr<const docopt_registration_t>(reg));
+            
+            if (out_handle)
+            {
+                *out_handle = handle;
+            }
         }
         return success;
+    }
+    
+    void unregister(docopt_registration_handle_t handle)
+    {
+        if (handle == 0)
+        {
+            // 0 is never valid
+            return;
+        }
+        scoped_lock locker(lock);
+        
+        // Need something better than this linear search
+        for (registration_map_t::iterator iter = this->cmd_to_registration.begin();
+             iter != this->cmd_to_registration.end();
+             ++iter)
+        {
+            docopt_registration_set_t *regs = &iter->second;
+            size_t idx = regs->registrations.size();
+            while (--idx)
+            {
+                if (regs->registrations.at(idx)->handle == handle)
+                {
+                    regs->registrations.erase(regs->registrations.begin() + idx);
+                }
+            }
+        }
     }
     
     docopt_registration_set_t get_registrations(const wcstring &cmd)
@@ -218,12 +260,19 @@ class doc_register_t {
             return where->second;
         }
     }
+    
+    doc_register_t() : last_handle(0) {}
 };
 static doc_register_t default_register;
 
-bool docopt_register_usage(const wcstring &cmd, const wcstring &name, const wcstring &usage, const wcstring &description, parse_error_list_t *out_errors)
+bool docopt_register_usage(const wcstring &cmd, const wcstring &name, const wcstring &usage, const wcstring &description, parse_error_list_t *out_errors, docopt_registration_handle_t *out_handle)
 {
-    return default_register.register_usage(cmd, name, usage, description, out_errors);
+    return default_register.register_usage(cmd, name, usage, description, out_errors, out_handle);
+}
+
+void docopt_unregister(docopt_registration_handle_t handle)
+{
+    default_register.unregister(handle);
 }
 
 docopt_registration_set_t docopt_get_registrations(const wcstring &cmd)

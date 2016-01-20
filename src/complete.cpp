@@ -177,6 +177,9 @@ public:
 
     /** True if no other options than the ones supplied are possible */
     bool authoritative;
+    
+    /** Handle on current docopt. Set to 0 if it must be recomputed. */
+    docopt_registration_handle_t doc_handle;
 
     /** Order for when this completion was created. This aids in outputting completions sorted by time. */
     const unsigned int order;
@@ -193,6 +196,7 @@ public:
         cmd(c),
         cmd_is_path(type),
         authoritative(author),
+        doc_handle(0),
         order(++kCompleteOrder)
     {
     }

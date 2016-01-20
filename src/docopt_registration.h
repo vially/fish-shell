@@ -30,6 +30,9 @@ enum docopt_parse_flags_t {
     flag_resolve_unambiguous_prefixes = 1U << 2,
 };
 
+/* A handle on a docopt registration, which can be used for removal. 0 is guaranteed invalid. */
+typedef unsigned long long docopt_registration_handle_t;
+
 /* Ugly forward declaration */
 namespace docopt_fish
 {
@@ -121,13 +124,17 @@ class docopt_arguments_t
  \param usage The actual docopt usage spec
  \param description A default description for completions generated from this usage spec
  \param out_errors Parse errors for the usage spec, returned by reference
+ \param out_handle Returned handle to the docopt registration, for later removal.
  
  \return true on success, false on parse error
  */
-bool docopt_register_usage(const wcstring &cmd, const wcstring &condition, const wcstring &usage, const wcstring &description, parse_error_list_t *out_errors);
+bool docopt_register_usage(const wcstring &cmd, const wcstring &condition, const wcstring &usage, const wcstring &description, parse_error_list_t *out_errors, docopt_registration_handle_t *out_handle = NULL);
 
 /** Get the set of registrations for a given command */
 docopt_registration_set_t docopt_get_registrations(const wcstring &cmd);
+
+/** Remove registratrion given a handle */
+void docopt_unregister(docopt_registration_handle_t handle);
 
 /** Given a key name like -b, derive the docopt variable name like opt_b suitable for setting in a function.
  
