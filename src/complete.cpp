@@ -39,6 +39,7 @@
 #include "docopt_registration.h"
 #include "autoload.h"
 #include "parse_constants.h"
+#include "docopt_fish.h"
 
 /*
   Completion description strings, mostly for different types of files, such as sockets, block devices, etc.
@@ -166,6 +167,12 @@ class completion_entry_t
 public:
     /** List of all options */
     option_list_t options;
+    
+    void invalidate_handle();
+    void ensure_handle();
+    
+    /** Handle on current docopt. Set to 0 if it must be recomputed. */
+    docopt_registration_handle_t doc_handle;
 
 public:
 
@@ -178,9 +185,6 @@ public:
     /** True if no other options than the ones supplied are possible */
     bool authoritative;
     
-    /** Handle on current docopt. Set to 0 if it must be recomputed. */
-    docopt_registration_handle_t doc_handle;
-
     /** Order for when this completion was created. This aids in outputting completions sorted by time. */
     const unsigned int order;
 
@@ -193,10 +197,10 @@ public:
     void remove_all_options();
 
     completion_entry_t(const wcstring &c, bool type, bool author) :
+        doc_handle(0),
         cmd(c),
         cmd_is_path(type),
         authoritative(author),
-        doc_handle(0),
         order(++kCompleteOrder)
     {
     }
@@ -235,6 +239,7 @@ static pthread_mutex_t completion_lock = PTHREAD_MUTEX_INITIALIZER;
 void completion_entry_t::add_option(const complete_entry_opt_t &opt)
 {
     ASSERT_IS_LOCKED(completion_lock);
+    this->invalidate_handle();
     options.push_front(opt);
 }
 
@@ -562,6 +567,89 @@ void complete_add(const wchar_t *cmd,
     c->add_option(opt);
 }
 
+// Have to determine ourselves if this is a path
+static void parse_cmd_string(const wcstring &str, wcstring &path, wcstring &cmd);
+static void complete_rebuild_docopt_as_necessary(const wcstring &cmd_or_path)
+{
+    wcstring cmd, path;
+    parse_cmd_string(cmd_or_path, path, cmd);
+
+    scoped_lock lock(completion_lock);
+    if (! cmd.empty())
+    {
+        completion_entry_t *c = complete_find_exact_entry(cmd, false);
+        if (c != NULL)
+        {
+            c->ensure_handle();
+        }
+    }
+    if (! path.empty())
+    {
+        completion_entry_t *c = complete_find_exact_entry(path, true);
+        if (c != NULL)
+        {
+            c->ensure_handle();
+        }
+    }
+}
+
+void completion_entry_t::invalidate_handle()
+{
+    ASSERT_IS_LOCKED(completion_lock);
+    if (this->doc_handle != 0)
+    {
+        docopt_unregister(this->doc_handle);
+        this->doc_handle = 0;
+    }
+}
+
+void completion_entry_t::ensure_handle()
+{
+    ASSERT_IS_LOCKED(completion_lock);
+    if (this->doc_handle == 0 && ! this->options.empty())
+    {
+        unsigned long option_index = 0;
+        typedef docopt_fish::base_annotated_option_t<wcstring> doption_t;
+        std::vector<doption_t> doptions;
+        for (option_list_t::const_iterator iter = this->options.begin();
+             iter != this->options.end();
+             ++iter)
+        {
+            doption_t dopt;
+            switch (iter->type)
+            {
+                case option_type_args_only:
+                case option_type_short:
+                    dopt.type = doption_t::single_short;
+                    break;
+                case option_type_single_long:
+                    dopt.type = doption_t::single_long;
+                    break;
+                case option_type_double_long:
+                    dopt.type = doption_t::double_long;
+                    break;
+            }
+            if (! iter->option.empty())
+            {
+                dopt.option.assign(iter->expected_dash_count(), L'-');
+                dopt.option.append(iter->option);
+            }
+            if (! iter->comp.empty())
+            {
+                dopt.value_name = format_string(L"<%lu>", option_index);
+                dopt.metadata.command = iter->comp;
+            }
+            dopt.metadata.condition = iter->condition;
+            dopt.metadata.description = iter->desc;
+            doptions.push_back(dopt);
+            option_index++;
+        }
+        
+        docopt_register_direct_options(this->cmd, doptions, &this->doc_handle);
+        assert(this->doc_handle != 0);
+    }
+}
+
 /**
    Remove all completion options in the specified entry that match the
    specified short / long option strings. Returns true if it is now
@@ -575,6 +663,7 @@ bool completion_entry_t::remove_option(const wcstring &option, complete_option_t
     {
         if (iter->option == option && iter->type == type)
         {
+            this->invalidate_handle();
             iter = this->options.erase(iter);
         }
         else
@@ -589,6 +678,7 @@ bool completion_entry_t::remove_option(const wcstring &option, complete_option_t
 void completion_entry_t::remove_all_options()
 {
     ASSERT_IS_LOCKED(completion_lock);
+    this->invalidate_handle();
     this->options.clear();
 }
 
@@ -1356,41 +1446,41 @@ bool completer_t::complete_from_docopt(const wcstring &cmd_unescape, const parse
     const wcstring_list_t suggestions = regs.suggest_next_argument(argv, flag_match_allow_incomplete);
     for (size_t i=0; i < suggestions.size(); i++)
     {
+        // This is bad - we should capture the suggestions and associated metadata at the same time
         const wcstring &suggestion = suggestions.at(i);
+        docopt_metadata_t metadata = regs.metadata_for_name(suggestion);
         if (string_prefixes_string(L"<", suggestion))
         {
             // Variable. Handle any commands. If there are no commands, we may return false, which allows for file completions.
-            wcstring description;
-            const wcstring conditions = regs.commands_for_variable(suggestion, &description);
-            if (! conditions.empty())
+            if (! metadata.command.empty())
             {
-                this->complete_from_args(last_arg, conditions, description, local_flags);
+                this->complete_from_args(last_arg, metadata.command, metadata.description, local_flags);
                 // Indicate success even if there were no successful arguments, so that we don't try to do file completions when the variable has conditions
                 success = true;
             }
         }
         else
         {
-            // TODO: descriptions
             if (last_arg.empty())
             {
                 // No partial argument to complete, just dump it in
-                append_completion(&this->completions, suggestion, regs.description_for_option(suggestion), local_flags);
+                append_completion(&this->completions, suggestion, metadata.description, local_flags);
                 success = true;
             }
             else
             {
+                // We have a partial argument, we have to match it against our last argument
                 string_fuzzy_match_t match = string_fuzzy_match_string(last_arg, suggestion, this->max_fuzzy_match_type());
                 if (match.type != fuzzy_match_none)
                 {
                     if (match_type_requires_full_replacement(match.type))
                     {
-                        append_completion(&this->completions, suggestion, regs.description_for_option(suggestion), local_flags | COMPLETE_REPLACES_TOKEN, match);
+                        append_completion(&this->completions, suggestion, metadata.description, local_flags | COMPLETE_REPLACES_TOKEN, match);
                     }
                     else
                     {
                         // Append a prefix completion that starts after the last argument
-                        append_completion(&this->completions, wcstring(suggestion, last_arg.size()), regs.description_for_option(suggestion), local_flags, match);
+                        append_completion(&this->completions, wcstring(suggestion, last_arg.size()), metadata.description, local_flags, match);
                     }
                     success = true;
                 }
@@ -1886,6 +1976,8 @@ void complete(const wcstring &cmd_with_subcmds, std::vector<completion_t> &comps
                                 transient_cmd = new builtin_commandline_scoped_transient_t(faux_cmdline);
                             }
                             
+                            complete_rebuild_docopt_as_necessary(completing_command);
+                            
                             // Perform docopt completions
                             bool cursor_in_last_arg = (adjusted_pos == pos);
                             if (completer.complete_from_docopt(completing_command, tree, all_arguments, cmd, cursor_in_last_arg))
@@ -1894,13 +1986,13 @@ void complete(const wcstring &cmd_with_subcmds, std::vector<completion_t> &comps
                             }
                             
                             // Perform ordinary completions
-                            if (unescaped_arguments && ! completer.complete_param(completing_command,
-                                                                                  previous_argument_unescape,
-                                                                                  current_argument_unescape,
-                                                                                  !had_ddash))
-                            {
-                                do_file = false;
-                            }
+//                            if (unescaped_arguments && ! completer.complete_param(completing_command,
+//                                                                                  previous_argument_unescape,
+//                                                                                  current_argument_unescape,
+//                                                                                  !had_ddash))
+//                            {
+//                                do_file = false;
+//                            }
                             delete transient_cmd; //may be null
                         }
                     }

@@ -30,8 +30,8 @@ typedef std::vector<rstring_t> rstring_list_t;
 typedef std::vector<error_t> error_list_t;
 typedef std::vector<size_t> index_list_t;
 
-/* Class representing a map from variable names to commands */
-typedef std::map<rstring_t, rstring_t> variable_command_map_t;
+/* Class representing a metadata map. Keys are options and variables. */
+typedef std::map<rstring_t, base_metadata_t<rstring_t> > metadata_map_t;
 
 // This represents an error in argv, i.e. the docopt description was OK but a parameter contained an error
 static void append_argv_error(error_list_t *errors, size_t arg_idx, int code, const char *txt, size_t pos_in_arg = 0) {
@@ -419,10 +419,10 @@ static rstring_t find_header(const rstring_t &src) {
 }
 
 /* Given a variable spec, parse out a command map */
-static variable_command_map_t parse_one_variable_command_spec(const rstring_t &spec, error_list_t *out_errors) {
+static metadata_map_t parse_one_variable_command_spec(const rstring_t &spec, error_list_t *out_errors) {
     // A specification look like this:
     // <pid> stuff
-    variable_command_map_t result;
+    metadata_map_t result;
     assert(! spec.empty() && spec[0] == '<');
     const size_t close_bracket = spec.find('>');
     if (close_bracket == rstring_t::npos) {
@@ -431,7 +431,7 @@ static variable_command_map_t parse_one_variable_command_spec(const rstring_t &s
         assert(close_bracket < spec.length());
         rstring_t key = spec.substr(0, close_bracket+1).trim_whitespace();
         rstring_t value = spec.substr_from(close_bracket+1).trim_whitespace();
-        result[key] = value;
+        result[key].command = value;
     }
     return result;
 }
@@ -1427,8 +1427,8 @@ public:
     /* All of the positional commands (like "checkout") that appear in the "Usage:" sections */
     rstring_list_t all_static_arguments;
     
-    /* Map from variable names to the commands that populate them */
-    variable_command_map_t variables_to_commands;
+    /* Map from variable/option names to their metadata */
+    metadata_map_t names_to_metadata;
     
     /* Walk over the lines of our source, starting from the beginning. */
     void populate_by_walking_lines(error_list_t *out_errors) {
@@ -1513,11 +1513,13 @@ public:
                 
             } else if (first_char == '<') {
                 // It's a variable command spec
-                const variable_command_map_t new_var_cmds = parse_one_variable_command_spec(line_group, out_errors);
-                for (variable_command_map_t::const_iterator iter = new_var_cmds.begin(); iter != new_var_cmds.end(); ++iter) {
-                    if (!this->variables_to_commands.insert(*iter).second) {
+                const metadata_map_t new_var_cmds = parse_one_variable_command_spec(line_group, out_errors);
+                for (metadata_map_t::const_iterator iter = new_var_cmds.begin(); iter != new_var_cmds.end(); ++iter) {
+                    base_metadata_t<rstring_t> *md = &this->names_to_metadata[iter->first];
+                    if (! md->command.empty()) {
                         append_docopt_error(out_errors, line_group, error_one_variable_multiple_commands, "Duplicate command for variable");
                     }
+                    md->command = iter->second.command;
                 }
                 
             } else if (isalnum(first_char) || first_char == '_') {
@@ -1565,30 +1567,20 @@ public:
         return this->rsource.substr(start, extent);
     }
     
-    template<typename stdstring_t>
-    static stdstring_t dashed_option_name(const direct_option_t<stdstring_t> &dopt) {
-        size_t dash_count = 1 + (dopt.type == direct_option_t<stdstring_t>::double_long);
-        stdstring_t result;
-        if (! dopt.option.empty()) {
-            result.append(dash_count, '-');
-            result.append(dopt.option);
-        }
-        return result;
-    }
-    
     /* Given a list of direct options, create a docopt_impl (allocated with new), populating its instance variables from the direct options. */
     template<typename stdstring_t>
-    static docopt_impl *build_from_direct_options(const std::vector<direct_option_t<stdstring_t> > &dopts) {
-        typedef direct_option_t<stdstring_t> doption_t;
+    static docopt_impl *build_from_annotated_options(const std::vector<base_annotated_option_t<stdstring_t> > &dopts) {
+        typedef base_annotated_option_t<stdstring_t> doption_t;
         const size_t count = dopts.size();
         /* We need to build our storage first. */
         stdstring_t storage;
         for (size_t i=0; i < count; i++) {
             const doption_t &dopt = dopts.at(i);
-            maybe_append(&storage, dashed_option_name(dopt));
+            maybe_append(&storage, dopt.option);
             maybe_append(&storage, dopt.value_name);
-            maybe_append(&storage, dopt.command);
-            maybe_append(&storage, dopt.description);
+            maybe_append(&storage, dopt.metadata.command);
+            maybe_append(&storage, dopt.metadata.condition);
+            maybe_append(&storage, dopt.metadata.description);
         }
         
         /* Create the impl */
@@ -1601,18 +1593,28 @@ public:
             const doption_t &dopt = dopts.at(i);
             option_t *option = &impl->shortcut_options.at(i);
             
-            stdstring_t dashed_name = dashed_option_name(dopt);
             size_t name_idx = static_cast<size_t>(dopt.type);
             assert(name_idx < option_t::NAME_TYPE_COUNT);
             // note: may be empty
-            option->names[name_idx] = impl->slice_string(&cursor, dashed_name);
+            option->names[name_idx] = impl->slice_string(&cursor, dopt.option);
 
             option->value = impl->slice_string(&cursor, dopt.value_name);
-            rstring_t command = impl->slice_string(&cursor, dopt.command);
-            option->description = impl->slice_string(&cursor, dopt.description);
+            rstring_t command = impl->slice_string(&cursor, dopt.metadata.command);
+            option->condition = impl->slice_string(&cursor, dopt.metadata.condition);
+            option->description = impl->slice_string(&cursor, dopt.metadata.description);
             
-            if (! command.empty()) {
-                impl->variables_to_commands[option->value] = command;
+            // Build metadata
+            // Todo: only if necessary
+            base_metadata_t<rstring_t> metadata;
+            metadata.command = command;
+            metadata.description = option->description;
+            metadata.condition = option->condition;
+            
+            if (! option->best_name().empty()) {
+                impl->names_to_metadata[option->best_name()] = metadata;
+            }
+            if (! option->value.empty()) {
+                impl->names_to_metadata[option->value] = metadata;
             }
         }
         return impl;
@@ -1858,13 +1860,18 @@ public:
         return all_suggestions;
     }
     
-    rstring_t commands_for_variable(const rstring_t &var_name) const {
-        rstring_t result;
-        variable_command_map_t::const_iterator where = this->variables_to_commands.find(var_name);
-        if (where != this->variables_to_commands.end()) {
+    
+    base_metadata_t<rstring_t> metadata_for_name(const rstring_t &name) const {
+        base_metadata_t<rstring_t> result;
+        metadata_map_t::const_iterator where = this->names_to_metadata.find(name);
+        if (where != this->names_to_metadata.end()) {
             result = where->second;
         }
         return result;
+    }
+    
+    rstring_t commands_for_variable(const rstring_t &var_name) const {
+        return this->metadata_for_name(var_name).command;
     }
     
     rstring_t description_for_option(const rstring_t &given_option_name) const {
@@ -1975,6 +1982,17 @@ std::vector<string_t> argument_parser_t<string_t>::suggest_next_argument(const s
 }
 
 template<typename stdstring_t>
+base_metadata_t<stdstring_t> argument_parser_t<stdstring_t>::metadata_for_name(const stdstring_t &var) const
+{
+    base_metadata_t<rstring_t> rresult = impl->metadata_for_name(rstring_t(var));
+    return {
+        rresult.command.std_string<stdstring_t>(),
+        rresult.condition.std_string<stdstring_t>(),
+        rresult.description.std_string<stdstring_t>(),
+    };
+}
+
+template<typename stdstring_t>
 stdstring_t argument_parser_t<stdstring_t>::commands_for_variable(const stdstring_t &var) const
 {
     return impl->commands_for_variable(rstring_t(var)).std_string<stdstring_t>();
@@ -2028,10 +2046,10 @@ bool argument_parser_t<stdstring_t>::set_doc(const stdstring_t &doc, error_list_
 }
 
 template<typename stdstring_t>
-void argument_parser_t<stdstring_t>::set_options(const std::vector<direct_option_t<stdstring_t> > &opts)
+void argument_parser_t<stdstring_t>::set_options(const std::vector<base_annotated_option_t<stdstring_t> > &opts)
 {
     delete this->impl; // may be null
-    this->impl = docopt_impl::build_from_direct_options(opts);
+    this->impl = docopt_impl::build_from_annotated_options(opts);
     this->impl->preflight(NULL);
 }
 

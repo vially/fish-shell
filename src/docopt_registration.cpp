@@ -18,6 +18,7 @@ Functions for handling the set of docopt descriptions
 #include <memory>
 #include <algorithm>
 
+typedef docopt_fish::base_annotated_option_t<wcstring> docopt_option_t;
 typedef docopt_fish::argument_parser_t<wcstring> docopt_parser_t;
 typedef docopt_fish::error_t docopt_error_t;
 typedef std::vector<docopt_error_t> docopt_error_list_t;
@@ -194,10 +195,6 @@ class doc_register_t {
             
             /* Determine the handle */
             docopt_registration_handle_t handle = ++this->last_handle;
-            if (handle == 0)
-            {
-                handle = ++this->last_handle; // paranoia
-            }
             
             // Create our registration
             // We will transfer ownership to a shared_ptr
@@ -219,6 +216,28 @@ class doc_register_t {
             }
         }
         return success;
+    }
+    
+    void register_direct_options(const wcstring &cmd, const std::vector<docopt_option_t> &options, docopt_registration_handle_t *out_handle)
+    {
+        shared_ptr<docopt_parser_t> parser(new docopt_parser_t());
+        parser->set_options(options);
+
+        scoped_lock locker(lock);
+        docopt_registration_set_t &regs = cmd_to_registration[cmd];
+        docopt_registration_handle_t handle = ++this->last_handle;
+        
+        // Create our registration
+        // We will transfer ownership to a shared_ptr
+        docopt_registration_t *reg = new docopt_registration_t();
+        reg->handle = handle;
+        reg->parser = parser; // note shared_ptr
+        regs.registrations.insert(regs.registrations.begin(), shared_ptr<const docopt_registration_t>(reg));
+
+        if (out_handle)
+        {
+            *out_handle = handle;
+        }
     }
     
     void unregister(docopt_registration_handle_t handle)
@@ -268,6 +287,11 @@ static doc_register_t default_register;
 bool docopt_register_usage(const wcstring &cmd, const wcstring &name, const wcstring &usage, const wcstring &description, parse_error_list_t *out_errors, docopt_registration_handle_t *out_handle)
 {
     return default_register.register_usage(cmd, name, usage, description, out_errors, out_handle);
+}
+
+void docopt_register_direct_options(const wcstring &cmd, const std::vector<docopt_option_t> &options, docopt_registration_handle_t *out_handle)
+{
+    return default_register.register_direct_options(cmd, options, out_handle);
 }
 
 void docopt_unregister(docopt_registration_handle_t handle)
@@ -327,47 +351,29 @@ wcstring_list_t docopt_registration_set_t::suggest_next_argument(const wcstring_
     return result;
 }
 
-wcstring docopt_registration_set_t::commands_for_variable(const wcstring &var, wcstring *out_description) const
+docopt_metadata_t docopt_registration_set_t::metadata_for_name(const wcstring &name) const
 {
-    /* We use the first parser that has a condition */
-    wcstring result;
+    /* We use the first parser that has anything */
+    docopt_metadata_t result;
     for (size_t i=0; i < registrations.size(); i++)
     {
         const docopt_registration_t *reg = registrations.at(i).get();
-        result = reg->parser->commands_for_variable(var);
-        if (! result.empty())
+        docopt_parser_t::metadata_t md = reg->parser->metadata_for_name(name);
+        if (! (md.command.empty() &&
+               md.condition.empty() &&
+               md.description.empty()))
         {
-            // Return the description if requested
-            if (out_description != NULL)
-            {
-                if (! reg->description.empty())
-                {
-                    // Explicit description
-                    out_description->assign(reg->description);
-                }
-                else
-                {
-                    // We use the variable name as the description
-                    out_description->assign(description_from_variable_name(var));
-                }
-            }
+            // Found it
+            result.command.swap(md.command);
+            result.condition.swap(md.condition);
+            result.description.swap(md.description);
             break;
         }
     }
-    return result;
-}
-
-wcstring docopt_registration_set_t::description_for_option(const wcstring &option) const
-{
-    wcstring result;
-    /* We use the first parser that has a description */
-    for (size_t i=0; i < registrations.size(); i++)
+    // Maybe derive a decsription
+    if (result.description.empty() && string_prefixes_string(L"<", name))
     {
-        result = registrations.at(i)->parser->description_for_option(option);
-        if (! result.empty())
-        {
-            break;
-        }
+        result.description = description_from_variable_name(name);
     }
     return result;
 }

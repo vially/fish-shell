@@ -10,6 +10,7 @@
 #include "util.h"
 #include "common.h"
 #include "io.h"
+#include "docopt_fish.h"
 #include <vector>
 #include <map>
 
@@ -28,6 +29,19 @@ enum docopt_parse_flags_t {
     flag_generate_empty_args = 1U << 0,
     flag_match_allow_incomplete = 1U << 1,
     flag_resolve_unambiguous_prefixes = 1U << 2,
+};
+
+/* Metadata for docopt entities. This may refer to options, variables, or literals. */
+struct docopt_metadata_t
+{
+    // The command that generates the value of arguments
+    wcstring command;
+    
+    // The condition required for this option to be used
+    wcstring condition;
+    
+    // The description of the option
+    wcstring description;
 };
 
 /* A handle on a docopt registration, which can be used for removal. 0 is guaranteed invalid. */
@@ -57,12 +71,9 @@ public:
     /* Given a command and proposed arguments for the command, return a list of suggested next arguments */
     wcstring_list_t suggest_next_argument(const wcstring_list_t &argv, docopt_parse_flags_t flags = flags_default) const;
     
-    /* Given a variable in a usage spec, return a command for that variable. Also returns the description by reference. */
-    wcstring commands_for_variable(const wcstring &var, wcstring *out_description = NULL) const;
-    
-    /* Given a command and an option like --foo, returns the description of that option */
-    wcstring description_for_option(const wcstring &option) const;
-    
+    /* Given some name (variable, option, or literal), return metadata for it. */
+    docopt_metadata_t metadata_for_name(const wcstring &name) const;
+        
     /* Given a command and a list of arguments, parses it into an argument list. Returns by reference: a map from argument name to value, a list of errors, and a list of unused arguments. If there is no docopt registration, the result is false. */
     bool parse_arguments(const wcstring_list_t &argv, docopt_arguments_t *out_arguments, parse_error_list_t *out_errors, std::vector<size_t> *out_unused_arguments) const;
     
@@ -129,6 +140,9 @@ class docopt_arguments_t
  \return true on success, false on parse error
  */
 bool docopt_register_usage(const wcstring &cmd, const wcstring &condition, const wcstring &usage, const wcstring &description, parse_error_list_t *out_errors, docopt_registration_handle_t *out_handle = NULL);
+
+
+void docopt_register_direct_options(const wcstring &cmd, const std::vector<docopt_fish::base_annotated_option_t<wcstring> >& options, docopt_registration_handle_t *out_handle);
 
 /** Get the set of registrations for a given command */
 docopt_registration_set_t docopt_get_registrations(const wcstring &cmd);

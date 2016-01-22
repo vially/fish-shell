@@ -439,7 +439,6 @@ public:
     explicit rstring_t(const char *s, size_t len) : start_(0), length_(len), base_(s), width_(width_narrow) {}
 };
 
-
 /* An option represents something like '--foo=bar' */
 struct option_t {
     
@@ -463,6 +462,9 @@ struct option_t {
     
     // Default value. Empty for none.
     rstring_t default_value;
+    
+    // Condition. Empty for none.
+    rstring_t condition;
     
     // How we separate the name from the value
     enum separator_t {
@@ -570,6 +572,7 @@ struct option_t {
         this->value.replace_if_empty(rhs.value);
         this->description.replace_if_empty(rhs.description);
         this->default_value.replace_if_empty(rhs.default_value);
+        this->condition.replace_if_empty(rhs.condition);
     }
     
     /* Given a string and the inout range 'remaining', parse out an option and return it. Update the remaining range to reflect the number of characters used. */

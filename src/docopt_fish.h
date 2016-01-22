@@ -67,10 +67,17 @@ namespace docopt_fish
         /* Constructor */
         base_argument_t() : count(0) {}
     };
+
+    template<typename string_t>
+    struct base_metadata_t {
+        string_t command;
+        string_t condition;
+        string_t description;        
+    };
     
     /* A "direct" option for constructing arguments parsers programatically. */
     template<typename string_t>
-    struct direct_option_t
+    struct base_annotated_option_t
     {
         enum
         {
@@ -79,7 +86,7 @@ namespace docopt_fish
             double_long, // like --foo
         } type;
         
-        // The name of the option.
+        // The name of the option, including any dashes.
         // If empty, the type is ignored.
         string_t option;
         
@@ -87,11 +94,9 @@ namespace docopt_fish
         // Separators are assumed to be flexible
         string_t value_name;
         
-        // Command associated with the variable
-        string_t command;
-        
-        // Description of the option
-        string_t description;
+        // Metadata associated with the option
+        // Note for historic reasons, this applies equally to both the option and variable
+        base_metadata_t<string_t> metadata;
     };
     
     class docopt_impl;
@@ -104,6 +109,8 @@ namespace docopt_fish
         
         public:
         
+        typedef base_metadata_t<string_t> metadata_t;
+        typedef base_annotated_option_t<string_t> annotated_option_t;
         typedef base_argument_t<string_t> argument_t;
         typedef std::map<string_t, argument_t> argument_map_t;
         typedef std::vector<error_t> error_list_t;
@@ -112,13 +119,16 @@ namespace docopt_fish
         bool set_doc(const string_t &doc, error_list_t *out_errors);
         
         /* Sets the doc via a list of programmatically-specified options. The usage spec is assumed to be `prog [options]` */
-        void set_options(const std::vector<direct_option_t<string_t> > &opts);
+        void set_options(const std::vector<annotated_option_t> &opts);
         
         /* Given a list of arguments, this returns a corresponding parallel array validating the arguments */
         std::vector<argument_status_t> validate_arguments(const std::vector<string_t> &argv, parse_flags_t flags) const;
         
         /* Given a list of arguments, returns an array of potential next values. A value may be either a literal flag -foo, or a variable; these may be distinguished by the <> surrounding the variable. */
         std::vector<string_t> suggest_next_argument(const std::vector<string_t> &argv, parse_flags_t flags) const;
+        
+        /** Given a name (either an option or a variable), returns any metadata for that name */
+        metadata_t metadata_for_name(const string_t &name) const;
         
         /* Given a variable name, returns the commands for that variable, or the empty string if none. */
         string_t commands_for_variable(const string_t &var) const;
