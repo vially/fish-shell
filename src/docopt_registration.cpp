@@ -111,7 +111,7 @@ class doc_register_t {
         for (size_t i=0; i < vars.size(); i++)
         {
             const wcstring &var = vars.at(i);
-            const wcstring command_string = parser.commands_for_variable(var);
+            const wcstring command_string = parser.metadata_for_name(var).command;
             if (! command_string.empty())
             {
                 wcstring local_err;
@@ -256,7 +256,7 @@ class doc_register_t {
         {
             docopt_registration_set_t *regs = &iter->second;
             size_t idx = regs->registrations.size();
-            while (--idx)
+            while (idx--)
             {
                 if (regs->registrations.at(idx)->handle == handle)
                 {

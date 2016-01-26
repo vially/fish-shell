@@ -129,13 +129,7 @@ namespace docopt_fish
         
         /** Given a name (either an option or a variable), returns any metadata for that name */
         metadata_t metadata_for_name(const string_t &name) const;
-        
-        /* Given a variable name, returns the commands for that variable, or the empty string if none. */
-        string_t commands_for_variable(const string_t &var) const;
-        
-        /* Given an option name like --foo, returns the description of that option name, or the empty string if none. */
-        string_t description_for_option(const string_t &option) const;
-        
+                
         /* Returns the list of command names (i.e. prog in `Usage: prog [options]`. Duplicate names are only returned once. */
         std::vector<string_t> get_command_names() const;
 

@@ -20,7 +20,6 @@ using std::shared_ptr;
 using std::tr1::shared_ptr;
 #endif
 
-
 namespace docopt_fish
 OPEN_DOCOPT_IMPL
 
@@ -343,8 +342,8 @@ struct positional_argument_t {
 };
 typedef std::vector<positional_argument_t> positional_argument_list_t;
 
-/* Given an option spec, that extends from the initial - to the end of the description, parse out an option. It may have multiple names. */
-static option_t parse_one_option_spec(const rstring_t &spec, error_list_t *errors) {
+/* Given an option spec, that extends from the initial - to the end of the description, parse out an option. Store descriptions in the given metadata. It may have multiple names. */
+static option_t parse_one_option_spec(const rstring_t &spec, metadata_map_t *metadata, error_list_t *errors) {
     assert(! spec.empty() && spec[0] == '-');
     const size_t end = spec.length();
     option_t result;
@@ -357,7 +356,6 @@ static option_t parse_one_option_spec(const rstring_t &spec, error_list_t *error
     
     // Determine the description range (possibly empty). Trim leading and trailing whitespace
     rstring_t description = spec.substr_from(options_end).trim_whitespace();
-    result.description = description;
     
     // Parse out a "default:" value.
     if (! description.empty()) {
@@ -397,6 +395,16 @@ static option_t parse_one_option_spec(const rstring_t &spec, error_list_t *error
         remaining.scan_while<char_is_space>();
         remaining.scan_while<it_equals<','> >();
         remaining.scan_while<char_is_space>();
+    }
+    
+    // Store any description in the metadata
+    if (! description.empty()) {
+        for (size_t i=0; i < option_t::NAME_TYPE_COUNT; i++) {
+            rstring_t name = result.names[i];
+            if (! name.empty()) {
+                (*metadata)[name].description = description;
+            }
+        }
     }
     
     return result;
@@ -482,9 +490,6 @@ static void uniqueize_options(option_list_t *options, bool error_on_duplicates, 
             if (error_on_duplicates) {
                 // Generate an error, and then continue on
                 append_docopt_error(errors, candidate->best_name(), error_option_duplicated_in_options_section, "Option specified more than once");
-            }
-            if (candidate->description.length() > representative->description.length()) {
-                representative->description = candidate->description;
             }
             
             // "Delete" candidate by overwriting it with the last value, and decrementing the count
@@ -1509,7 +1514,7 @@ public:
             rstring_t::char_t first_char = line_group[0];
             if (first_char == '-') {
                 // It's an option spec
-                this->shortcut_options.push_back(parse_one_option_spec(line_group, out_errors));
+                this->shortcut_options.push_back(parse_one_option_spec(line_group, &this->names_to_metadata, out_errors));
                 
             } else if (first_char == '<') {
                 // It's a variable command spec
@@ -1586,37 +1591,48 @@ public:
         /* Create the impl */
         docopt_impl *impl = new docopt_impl(storage);
         
-        /* Now populate shortcut_options. cursor tracks our location through our storage. */
+        /* We're going to construct a list of variable arguments, that are not associated with an option Now populate impl->shortcut_options and free_variables. cursor tracks our location through our storage. */
+        rstring_list_t free_variables;
         size_t cursor = 0;
-        impl->shortcut_options.resize(count);
         for (size_t i=0; i < count; i++) {
             const doption_t &dopt = dopts.at(i);
-            option_t *option = &impl->shortcut_options.at(i);
+            base_metadata_t<rstring_t> md;
             
-            size_t name_idx = static_cast<size_t>(dopt.type);
-            assert(name_idx < option_t::NAME_TYPE_COUNT);
-            // note: may be empty
-            option->names[name_idx] = impl->slice_string(&cursor, dopt.option);
-
-            option->value = impl->slice_string(&cursor, dopt.value_name);
-            rstring_t command = impl->slice_string(&cursor, dopt.metadata.command);
-            option->condition = impl->slice_string(&cursor, dopt.metadata.condition);
-            option->description = impl->slice_string(&cursor, dopt.metadata.description);
+            // Note the order here must match that of the loop above
+            const rstring_t option_name = impl->slice_string(&cursor, dopt.option);
+            const rstring_t value_name = impl->slice_string(&cursor, dopt.value_name);
+            md.command = impl->slice_string(&cursor, dopt.metadata.command);
+            md.condition = impl->slice_string(&cursor, dopt.metadata.condition);
+            md.description = impl->slice_string(&cursor, dopt.metadata.description);
             
-            // Build metadata
-            // Todo: only if necessary
-            base_metadata_t<rstring_t> metadata;
-            metadata.command = command;
-            metadata.description = option->description;
-            metadata.condition = option->condition;
-            
-            if (! option->best_name().empty()) {
-                impl->names_to_metadata[option->best_name()] = metadata;
+            if (! option_name.empty()) {
+                // Create an option
+                impl->shortcut_options.push_back(option_t());
+                option_t *option = &impl->shortcut_options.back();
+                size_t name_idx = static_cast<size_t>(dopt.type);
+                assert(name_idx < option_t::NAME_TYPE_COUNT);
+                option->names[name_idx] = option_name;
+                option->value = value_name; // maybe empty
+            } else if (! value_name.empty()) {
+                // option_name is empty, create a static
+                free_variables.push_back(value_name);
             }
-            if (! option->value.empty()) {
-                impl->names_to_metadata[option->value] = metadata;
+            
+            // Save metadata
+            if (! option_name.empty()) {
+                impl->names_to_metadata[option_name] = md;
+            }
+            if (! value_name.empty()) {
+                impl->names_to_metadata[value_name] = md;
             }
         }
+        
+        bool has_option = ! impl->shortcut_options.empty();
+        
+        // Build usages
+        impl->usages.resize(1);
+        impl->usages.back().set_from_variables(free_variables, has_option);
+        
         return impl;
     }
     
@@ -1870,43 +1886,6 @@ public:
         return result;
     }
     
-    rstring_t commands_for_variable(const rstring_t &var_name) const {
-        return this->metadata_for_name(var_name).command;
-    }
-    
-    rstring_t description_for_option(const rstring_t &given_option_name) const {
-        if (given_option_name.length() < 2 || given_option_name.at(0) != '-')
-        {
-            return rstring_t();
-        }
-        
-        rstring_t result;
-        const bool has_double_dash = (given_option_name.at(1) == '-');
-        // We have to go through our options and compare their names to the given string
-        const rstring_t needle(given_option_name);
-        for (size_t i=0; i < this->all_options.size(); i++) {
-            const option_t &opt = this->all_options.at(i);
-            
-            // We can skip options without descriptions
-            if (opt.description.empty()) {
-                continue;
-            }
-            
-            bool matches = false;
-            if (has_double_dash) {
-                matches = (needle == opt.names[option_t::double_long]);
-            } else {
-                matches = (needle == opt.names[option_t::single_long] || needle == opt.names[option_t::single_short]);
-            }
-            
-            if (matches) {
-                result = opt.description;
-                break;
-            }
-        }
-        return result;
-    }
-    
     template<typename stdstring_t>
     std::vector<stdstring_t> get_command_names() const {
         /* Get the command names. We store a set of seen names so we only return tha names once, but in the order matching their appearance in the usage spec. */
@@ -1984,24 +1963,13 @@ std::vector<string_t> argument_parser_t<string_t>::suggest_next_argument(const s
 template<typename stdstring_t>
 base_metadata_t<stdstring_t> argument_parser_t<stdstring_t>::metadata_for_name(const stdstring_t &var) const
 {
-    base_metadata_t<rstring_t> rresult = impl->metadata_for_name(rstring_t(var));
-    return {
-        rresult.command.std_string<stdstring_t>(),
-        rresult.condition.std_string<stdstring_t>(),
-        rresult.description.std_string<stdstring_t>(),
+    const base_metadata_t<rstring_t> md = impl->metadata_for_name(rstring_t(var));
+    const base_metadata_t<stdstring_t> result = {
+        md.command.std_string<stdstring_t>(),
+        md.condition.std_string<stdstring_t>(),
+        md.description.std_string<stdstring_t>(),
     };
-}
-
-template<typename stdstring_t>
-stdstring_t argument_parser_t<stdstring_t>::commands_for_variable(const stdstring_t &var) const
-{
-    return impl->commands_for_variable(rstring_t(var)).std_string<stdstring_t>();
-}
-
-template<typename stdstring_t>
-stdstring_t argument_parser_t<stdstring_t>::description_for_option(const stdstring_t &option) const
-{
-    return impl->description_for_option(rstring_t(option)).std_string<stdstring_t>();
+    return result;
 }
 
 template<typename stdstring_t>

@@ -457,14 +457,8 @@ struct option_t {
     // value of the option, i.e. variable name. Empty for no value.
     rstring_t value;
     
-    // Description. Empty for none.
-    rstring_t description;
-    
     // Default value. Empty for none.
     rstring_t default_value;
-    
-    // Condition. Empty for none.
-    rstring_t condition;
     
     // How we separate the name from the value
     enum separator_t {
@@ -570,9 +564,7 @@ struct option_t {
             this->separator = rhs.separator;
         }
         this->value.replace_if_empty(rhs.value);
-        this->description.replace_if_empty(rhs.description);
         this->default_value.replace_if_empty(rhs.default_value);
-        this->condition.replace_if_empty(rhs.condition);
     }
     
     /* Given a string and the inout range 'remaining', parse out an option and return it. Update the remaining range to reflect the number of characters used. */

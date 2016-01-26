@@ -462,13 +462,13 @@ bool completer_t::condition_test(const wcstring &condition)
     if (condition.empty())
     {
 //    fwprintf( stderr, L"No condition specified\n" );
-        return 1;
+        return true;
     }
 
     if (this->type() == COMPLETE_AUTOSUGGEST)
     {
         /* Autosuggestion can't support conditions */
-        return 0;
+        return false;
     }
 
     ASSERT_IS_MAIN_THREAD();
@@ -1449,11 +1449,19 @@ bool completer_t::complete_from_docopt(const wcstring &cmd_unescape, const parse
         // This is bad - we should capture the suggestions and associated metadata at the same time
         const wcstring &suggestion = suggestions.at(i);
         docopt_metadata_t metadata = regs.metadata_for_name(suggestion);
+        
+        // We need to test metadata.condition in every branch, but we can do it after a fuzzy match in the options case
+        
         if (string_prefixes_string(L"<", suggestion))
         {
             // Variable. Handle any commands. If there are no commands, we may return false, which allows for file completions.
             if (! metadata.command.empty())
             {
+                // Test the condition
+                if (! condition_test(metadata.condition)) {
+                    continue;
+                }
+
                 this->complete_from_args(last_arg, metadata.command, metadata.description, local_flags);
                 // Indicate success even if there were no successful arguments, so that we don't try to do file completions when the variable has conditions
                 success = true;
@@ -1463,6 +1471,11 @@ bool completer_t::complete_from_docopt(const wcstring &cmd_unescape, const parse
         {
             if (last_arg.empty())
             {
+                // Test the condition
+                if (! condition_test(metadata.condition)) {
+                    continue;
+                }
+
                 // No partial argument to complete, just dump it in
                 append_completion(&this->completions, suggestion, metadata.description, local_flags);
                 success = true;
@@ -1473,6 +1486,11 @@ bool completer_t::complete_from_docopt(const wcstring &cmd_unescape, const parse
                 string_fuzzy_match_t match = string_fuzzy_match_string(last_arg, suggestion, this->max_fuzzy_match_type());
                 if (match.type != fuzzy_match_none)
                 {
+                    // Test the condition
+                    if (! condition_test(metadata.condition)) {
+                        continue;
+                    }
+
                     if (match_type_requires_full_replacement(match.type))
                     {
                         append_completion(&this->completions, suggestion, metadata.description, local_flags | COMPLETE_REPLACES_TOKEN, match);
