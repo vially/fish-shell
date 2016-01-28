@@ -461,7 +461,6 @@ bool completer_t::condition_test(const wcstring &condition)
 {
     if (condition.empty())
     {
-//    fwprintf( stderr, L"No condition specified\n" );
         return true;
     }
 
@@ -558,7 +557,7 @@ void complete_add(const wchar_t *cmd,
     opt.option = option;
     opt.type = option_type;
     opt.result_mode = result_mode;
-
+    
     if (comp) opt.comp = comp;
     if (condition) opt.condition = condition;
     if (desc) opt.desc = desc;
@@ -1417,10 +1416,10 @@ bool completer_t::complete_param(const wcstring &scmd_orig, const wcstring &spop
     return use_files;
 }
 
-// Attempts to fetch completions from docopt
+// Attempts to fetch completions from docopt. Returns false if file completion should be performed, true if they should be skipped.
 bool completer_t::complete_from_docopt(const wcstring &cmd_unescape, const parse_node_tree_t &tree, const parse_node_tree_t::parse_node_list_t &arg_nodes, const wcstring &src, bool cursor_in_last_arg)
 {
-    bool success = false;
+    bool suppress_file_completion = false;
     const complete_flags_t local_flags = COMPLETE_AUTO_SPACE;
     wcstring_list_t argv;
     argv.push_back(cmd_unescape);
@@ -1442,29 +1441,35 @@ bool completer_t::complete_from_docopt(const wcstring &cmd_unescape, const parse
         argv.pop_back();
     }
     
-    docopt_registration_set_t regs = docopt_get_registrations(cmd_unescape);
-    const wcstring_list_t suggestions = regs.suggest_next_argument(argv, flag_match_allow_incomplete);
+    // Only allow options as completions if the argument we're completing starts with a -
+    const bool allow_options = string_prefixes_string(L"-", last_arg);
+    
+    const docopt_registration_set_t regs = docopt_get_registrations(cmd_unescape);
+    const std::vector<docopt_suggestion_t> suggestions = regs.suggest_next_argument(argv, flag_match_allow_incomplete);
     for (size_t i=0; i < suggestions.size(); i++)
     {
-        // This is bad - we should capture the suggestions and associated metadata at the same time
-        const wcstring &suggestion = suggestions.at(i);
-        docopt_metadata_t metadata = regs.metadata_for_name(suggestion);
+        const docopt_suggestion_t &suggestion = suggestions.at(i);
         
-        // We need to test metadata.condition in every branch, but we can do it after a fuzzy match in the options case
+        if (!allow_options && string_prefixes_string(L"-", suggestion.token))
+        {
+            // Not allowing options
+            continue;
+        }
         
-        if (string_prefixes_string(L"<", suggestion))
+        // We need to test the condition in every branch, but we can do it after a fuzzy match in the options case
+        if (string_prefixes_string(L"<", suggestion.token))
         {
             // Variable. Handle any commands. If there are no commands, we may return false, which allows for file completions.
-            if (! metadata.command.empty())
+            if (! suggestion.command.empty())
             {
                 // Test the condition
-                if (! condition_test(metadata.condition)) {
+                if (! condition_test(suggestion.condition)) {
                     continue;
                 }
 
-                this->complete_from_args(last_arg, metadata.command, metadata.description, local_flags);
-                // Indicate success even if there were no successful arguments, so that we don't try to do file completions when the variable has conditions
-                success = true;
+                this->complete_from_args(last_arg, suggestion.command, suggestion.description, local_flags);
+                // Suppress file completions even if there were no successful arguments, so that we don't try to do file completions when the variable has conditions
+                suppress_file_completion = true;
             }
         }
         else
@@ -1472,40 +1477,40 @@ bool completer_t::complete_from_docopt(const wcstring &cmd_unescape, const parse
             if (last_arg.empty())
             {
                 // Test the condition
-                if (! condition_test(metadata.condition)) {
+                if (! condition_test(suggestion.condition)) {
                     continue;
                 }
 
                 // No partial argument to complete, just dump it in
-                append_completion(&this->completions, suggestion, metadata.description, local_flags);
-                success = true;
+                append_completion(&this->completions, suggestion.token, suggestion.description, local_flags);
+                suppress_file_completion = true;
             }
             else
             {
                 // We have a partial argument, we have to match it against our last argument
-                string_fuzzy_match_t match = string_fuzzy_match_string(last_arg, suggestion, this->max_fuzzy_match_type());
+                string_fuzzy_match_t match = string_fuzzy_match_string(last_arg, suggestion.token, this->max_fuzzy_match_type());
                 if (match.type != fuzzy_match_none)
                 {
                     // Test the condition
-                    if (! condition_test(metadata.condition)) {
+                    if (! condition_test(suggestion.condition)) {
                         continue;
                     }
 
                     if (match_type_requires_full_replacement(match.type))
                     {
-                        append_completion(&this->completions, suggestion, metadata.description, local_flags | COMPLETE_REPLACES_TOKEN, match);
+                        append_completion(&this->completions, suggestion.token, suggestion.description, local_flags | COMPLETE_REPLACES_TOKEN, match);
                     }
                     else
                     {
                         // Append a prefix completion that starts after the last argument
-                        append_completion(&this->completions, wcstring(suggestion, last_arg.size()), metadata.description, local_flags, match);
+                        append_completion(&this->completions, wcstring(suggestion.token, last_arg.size()), suggestion.description, local_flags, match);
                     }
-                    success = true;
+                    suppress_file_completion = true;
                 }
             }
         }
     }
-    return success;
+    return suppress_file_completion;
 }
 
 /**

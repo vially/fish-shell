@@ -334,47 +334,48 @@ std::vector<docopt_argument_status_t> docopt_registration_set_t::validate_argume
     return result;
 }
 
-wcstring_list_t docopt_registration_set_t::suggest_next_argument(const wcstring_list_t &argv, docopt_parse_flags_t flags) const
+static bool suggestionNameLessThan(const docopt_suggestion_t &a, const docopt_suggestion_t &b) {
+    return a.token < b.token;
+}
+
+static bool suggestionNameEquals(const docopt_suggestion_t &a, const docopt_suggestion_t &b) {
+    return a.token == b.token;
+}
+
+
+std::vector<docopt_suggestion_t> docopt_registration_set_t::suggest_next_argument(const wcstring_list_t &argv, docopt_parse_flags_t flags) const
 {
-    /* Include results from all registered parsers */
-    wcstring_list_t result;
+    /* Include results from all registered parsers. We have to capture metadata here. */
+    std::vector<docopt_suggestion_t> result;
     for (size_t i=0; i < registrations.size(); i++)
     {
-        const wcstring_list_t tmp = registrations.at(i)->parser->suggest_next_argument(argv, flags);
-        result.insert(result.end(), tmp.begin(), tmp.end());
+        const docopt_parser_t *parser = registrations.at(i)->parser.get();
+        const wcstring_list_t tmp = parser->suggest_next_argument(argv, flags);
+        result.reserve(result.size() + tmp.size());
+        for (size_t i=0; i < tmp.size(); i++)
+        {
+            const wcstring &name = tmp.at(i);
+            docopt_parser_t::metadata_t md = parser->metadata_for_name(name);
+            
+            result.push_back(docopt_suggestion_t());
+            docopt_suggestion_t *sugg = &result.back();
+            sugg->token = name;
+            sugg->command.swap(md.command);
+            sugg->condition.swap(md.condition);
+            sugg->description.swap(md.description);
+            
+            // Maybe derive a description
+            if (sugg->description.empty() && string_prefixes_string(L"<", name))
+            {
+                sugg->description = description_from_variable_name(name);
+            }
+        }
     }
     
     /* Sort and remove duplicates */
-    std::sort(result.begin(), result.end());
-    result.erase(std::unique(result.begin(), result.end()), result.end());
+    std::sort(result.begin(), result.end(), suggestionNameLessThan);
+    result.erase(std::unique(result.begin(), result.end(), suggestionNameEquals), result.end());
     
-    return result;
-}
-
-docopt_metadata_t docopt_registration_set_t::metadata_for_name(const wcstring &name) const
-{
-    /* We use the first parser that has anything */
-    docopt_metadata_t result;
-    for (size_t i=0; i < registrations.size(); i++)
-    {
-        const docopt_registration_t *reg = registrations.at(i).get();
-        docopt_parser_t::metadata_t md = reg->parser->metadata_for_name(name);
-        if (! (md.command.empty() &&
-               md.condition.empty() &&
-               md.description.empty()))
-        {
-            // Found it
-            result.command.swap(md.command);
-            result.condition.swap(md.condition);
-            result.description.swap(md.description);
-            break;
-        }
-    }
-    // Maybe derive a decsription
-    if (result.description.empty() && string_prefixes_string(L"<", name))
-    {
-        result.description = description_from_variable_name(name);
-    }
     return result;
 }
 

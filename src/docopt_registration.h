@@ -31,9 +31,12 @@ enum docopt_parse_flags_t {
     flag_resolve_unambiguous_prefixes = 1U << 2,
 };
 
-/* Metadata for docopt entities. This may refer to options, variables, or literals. */
-struct docopt_metadata_t
+/* Suggestion. This may refer to options, variables, or literals. */
+struct docopt_suggestion_t
 {
+    // The suggested token
+    wcstring token;
+    
     // The command that generates the value of arguments
     wcstring command;
     
@@ -69,11 +72,8 @@ public:
     std::vector<docopt_argument_status_t> validate_arguments(const wcstring_list_t &argv, docopt_parse_flags_t flags = flags_default) const;
     
     /* Given a command and proposed arguments for the command, return a list of suggested next arguments */
-    wcstring_list_t suggest_next_argument(const wcstring_list_t &argv, docopt_parse_flags_t flags = flags_default) const;
+    std::vector<docopt_suggestion_t> suggest_next_argument(const wcstring_list_t &argv, docopt_parse_flags_t flags = flags_default) const;
     
-    /* Given some name (variable, option, or literal), return metadata for it. */
-    docopt_metadata_t metadata_for_name(const wcstring &name) const;
-        
     /* Given a command and a list of arguments, parses it into an argument list. Returns by reference: a map from argument name to value, a list of errors, and a list of unused arguments. If there is no docopt registration, the result is false. */
     bool parse_arguments(const wcstring_list_t &argv, docopt_arguments_t *out_arguments, parse_error_list_t *out_errors, std::vector<size_t> *out_unused_arguments) const;
     
