@@ -72,7 +72,10 @@ namespace docopt_fish
     struct base_metadata_t {
         string_t command;
         string_t condition;
-        string_t description;        
+        string_t description;
+        long tag; // arbitrary application use
+        
+        base_metadata_t() : tag(0) {}
     };
     
     /* A "direct" option for constructing arguments parsers programatically. */

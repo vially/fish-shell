@@ -1604,6 +1604,7 @@ public:
             md.command = impl->slice_string(&cursor, dopt.metadata.command);
             md.condition = impl->slice_string(&cursor, dopt.metadata.condition);
             md.description = impl->slice_string(&cursor, dopt.metadata.description);
+            md.tag = dopt.metadata.tag;
             
             if (! option_name.empty()) {
                 // Create an option
@@ -1964,11 +1965,11 @@ template<typename stdstring_t>
 base_metadata_t<stdstring_t> argument_parser_t<stdstring_t>::metadata_for_name(const stdstring_t &var) const
 {
     const base_metadata_t<rstring_t> md = impl->metadata_for_name(rstring_t(var));
-    const base_metadata_t<stdstring_t> result = {
-        md.command.std_string<stdstring_t>(),
-        md.condition.std_string<stdstring_t>(),
-        md.description.std_string<stdstring_t>(),
-    };
+    base_metadata_t<stdstring_t> result;
+    result.command = md.command.std_string<stdstring_t>();
+    result.condition = md.condition.std_string<stdstring_t>();
+    result.description = md.description.std_string<stdstring_t>();
+    result.tag = md.tag;
     return result;
 }
 

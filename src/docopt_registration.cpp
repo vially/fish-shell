@@ -41,6 +41,9 @@ enum docopt_argument_status_t more_valid_status(docopt_fish::argument_status_t p
 static wcstring description_from_variable_name(const wcstring &var)
 {
     // Remove < and >. Replace _ with space.
+    // Hack: Do nothing unless we find an alphabetic character. This is for our legacy
+    // support where we create variable names that are just numbers
+    bool found_alpha = false;
     wcstring result = var;
     for (size_t i = 0; i < result.size(); i++)
     {
@@ -54,10 +57,16 @@ static wcstring description_from_variable_name(const wcstring &var)
         {
             result.at(i) = L' ';
         }
+        found_alpha = found_alpha || isalpha(c);
     }
     
     // Uppercase the first character
-    if (! result.empty())
+    if (! found_alpha)
+    {
+        // It's just a number, not going to use it
+        result.clear();
+    }
+    else if (! result.empty())
     {
         result.at(0) = towupper(result.at(0));
     }
@@ -86,13 +95,18 @@ class docopt_registration_t
     void operator=(docopt_registration_t&);
     docopt_registration_t(const docopt_registration_t&);
     
-    docopt_registration_t() : handle(0) {}
+    docopt_registration_t() : handle(0), last_arg_only(false) {}
     
     docopt_registration_handle_t handle;
     wcstring usage;
     wcstring description;
     wcstring condition;
     shared_ptr<docopt_fish::argument_parser_t<wcstring> > parser;
+    
+    // Legacy completion support: completions have historically only looked
+    // at the last argument to decide what to do. If set, we follow suit, allowing
+    // us to emulate the old behavior.
+    bool last_arg_only;
 };
 
 // Class that holds a mapping from command name to list of docopt descriptions
@@ -181,7 +195,8 @@ class doc_register_t {
             
             // Remove any with a matching usage
             typedef std::vector<shared_ptr<const docopt_registration_t> >::iterator reg_iter_t;
-            for (reg_iter_t iter = regs.registrations.begin(); iter != regs.registrations.end();)
+            reg_iter_t iter = regs.registrations.begin();
+            while (iter != regs.registrations.end())
             {
                 if ((*iter)->usage == usage)
                 {
@@ -193,7 +208,7 @@ class doc_register_t {
                 }
             }
             
-            /* Determine the handle */
+            // Determine the handle
             docopt_registration_handle_t handle = ++this->last_handle;
             
             // Create our registration
@@ -232,6 +247,7 @@ class doc_register_t {
         docopt_registration_t *reg = new docopt_registration_t();
         reg->handle = handle;
         reg->parser = parser; // note shared_ptr
+        reg->last_arg_only = true; // match historic behavior of only looking at the last option
         regs.registrations.insert(regs.registrations.begin(), shared_ptr<const docopt_registration_t>(reg));
 
         if (out_handle)
@@ -345,12 +361,21 @@ static bool suggestionNameEquals(const docopt_suggestion_t &a, const docopt_sugg
 
 std::vector<docopt_suggestion_t> docopt_registration_set_t::suggest_next_argument(const wcstring_list_t &argv, docopt_parse_flags_t flags) const
 {
+    /* Construct a list of the last argument only, for last_arg_only support */
+    wcstring_list_t last_arg;
+    if (! argv.empty())
+    {
+        last_arg.push_back(argv.back());
+    }
+
     /* Include results from all registered parsers. We have to capture metadata here. */
     std::vector<docopt_suggestion_t> result;
     for (size_t i=0; i < registrations.size(); i++)
     {
-        const docopt_parser_t *parser = registrations.at(i)->parser.get();
-        const wcstring_list_t tmp = parser->suggest_next_argument(argv, flags);
+        const docopt_registration_t *reg = registrations.at(i).get();
+        const docopt_parser_t *parser = reg->parser.get();
+        const wcstring_list_t &effective_argv = reg->last_arg_only ? last_arg : argv;
+        const wcstring_list_t tmp = parser->suggest_next_argument(effective_argv, flags);
         result.reserve(result.size() + tmp.size());
         for (size_t i=0; i < tmp.size(); i++)
         {
@@ -363,6 +388,7 @@ std::vector<docopt_suggestion_t> docopt_registration_set_t::suggest_next_argumen
             sugg->command.swap(md.command);
             sugg->condition.swap(md.condition);
             sugg->description.swap(md.description);
+            sugg->tag = md.tag;
             
             // Maybe derive a description
             if (sugg->description.empty() && string_prefixes_string(L"<", name))

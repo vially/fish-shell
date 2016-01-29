@@ -640,6 +640,7 @@ void completion_entry_t::ensure_handle()
             }
             dopt.metadata.condition = iter->condition;
             dopt.metadata.description = iter->desc;
+            dopt.metadata.tag = iter->result_mode;
             doptions.push_back(dopt);
             option_index++;
         }
@@ -1459,7 +1460,7 @@ bool completer_t::complete_from_docopt(const wcstring &cmd_unescape, const parse
         // We need to test the condition in every branch, but we can do it after a fuzzy match in the options case
         if (string_prefixes_string(L"<", suggestion.token))
         {
-            // Variable. Handle any commands. If there are no commands, we may return false, which allows for file completions.
+            // Variable. Handle any commands.
             if (! suggestion.command.empty())
             {
                 // Test the condition
@@ -1468,8 +1469,9 @@ bool completer_t::complete_from_docopt(const wcstring &cmd_unescape, const parse
                 }
 
                 this->complete_from_args(last_arg, suggestion.command, suggestion.description, local_flags);
-                // Suppress file completions even if there were no successful arguments, so that we don't try to do file completions when the variable has conditions
-                suppress_file_completion = true;
+
+                // Maybe suppress file completions
+                suppress_file_completion = !! (suggestion.tag & NO_FILES);
             }
         }
         else
@@ -1483,7 +1485,7 @@ bool completer_t::complete_from_docopt(const wcstring &cmd_unescape, const parse
 
                 // No partial argument to complete, just dump it in
                 append_completion(&this->completions, suggestion.token, suggestion.description, local_flags);
-                suppress_file_completion = true;
+                suppress_file_completion = !! (suggestion.tag & NO_FILES);
             }
             else
             {
@@ -1505,7 +1507,7 @@ bool completer_t::complete_from_docopt(const wcstring &cmd_unescape, const parse
                         // Append a prefix completion that starts after the last argument
                         append_completion(&this->completions, wcstring(suggestion.token, last_arg.size()), suggestion.description, local_flags, match);
                     }
-                    suppress_file_completion = true;
+                    suppress_file_completion = !! (suggestion.tag & NO_FILES);
                 }
             }
         }

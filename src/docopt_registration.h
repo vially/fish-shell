@@ -45,6 +45,9 @@ struct docopt_suggestion_t
     
     // The description of the option
     wcstring description;
+    
+    // Tag, e.g. NO_FILES
+    long tag;
 };
 
 /* A handle on a docopt registration, which can be used for removal. 0 is guaranteed invalid. */
