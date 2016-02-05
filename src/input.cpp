@@ -535,9 +535,27 @@ wchar_t input_function_pop_arg()
 void input_function_push_args(int code)
 {
     int arity = input_function_arity(code);
+    std::vector<wchar_t> skipped;
+
     for (int i = 0; i < arity; i++)
     {
-        input_function_push_arg(input_common_readch(0));
+        wchar_t arg;
+
+        // skip and queue up any function codes
+        // See #2357
+        while(((arg = input_common_readch(0)) >= R_MIN) && (arg <= R_MAX))
+        {
+            skipped.push_back(arg);
+        }
+
+        input_function_push_arg(arg);
+    }
+
+    // push the function codes back into the input stream
+    size_t idx = skipped.size();
+    while (idx--)
+    {
+        input_common_next_ch(skipped.at(idx));
     }
 }
 

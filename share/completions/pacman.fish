@@ -4,23 +4,20 @@
 
 set -l progname pacman
 
-set -l listinstalled "(pacman -Q | tr ' ' \t)"
+set -l listinstalled "(pacman -Q | string replace ' ' \t)"
 # This might be an issue if another package manager is also installed (e.g. for containers)
 set -l listall "(__fish_print_packages)"
 set -l listrepos "(__fish_print_pacman_repos)"
-set -l listgroups "(pacman -Sg | sed 's/\(.*\)/\1\tPackage group/g')"
+# Mask $1 so it won't be taken for a variable
+set -l listgroups "(pacman -Sg | string replace -r '(.+)' '\$1\tPackage group')"
 
-set -l noopt 'not __fish_contains_opt -s S -s D -s Q -s R -s U -s T database query sync remove upgrade deptest'
+set -l noopt 'not __fish_contains_opt -s S -s D -s Q -s R -s U -s T -s F database query sync remove upgrade deptest files'
 set -l database '__fish_contains_opt -s D database'
 set -l query '__fish_contains_opt -s Q query'
 set -l remove '__fish_contains_opt -s R remove'
 set -l sync '__fish_contains_opt -s S sync'
 set -l upgrade '__fish_contains_opt -s U upgrade'
-
-# By default fish expands the arguments with the option which is not desired
-# due to performance reasons.
-# This will make sure we are expanding an argument and not an option:
-set -l argument 'not expr -- (commandline --current-token) : "^-.*" > /dev/null'
+set -l files '__fish_contains_opt -s F files'
 
 complete -c pacman -e
 complete -c pacman -f
@@ -34,6 +31,7 @@ complete -c $progname -s R -f -l remove -n $noopt -d 'Remove packages from the s
 complete -c $progname -s S -f -l sync -n $noopt -d 'Synchronize packages'
 complete -c $progname -s T -f -l deptest -n $noopt -d 'Check dependencies'
 complete -c $progname -s U -f -l upgrade -n $noopt -d 'Upgrade or add a local package'
+complete -c $progname -s F -f -l files -n $noopt -d 'Query the files database'
 complete -c $progname -s V -f -l version -d 'Display version and exit'
 complete -c $progname -s h -f -l help -d 'Display help'
 
@@ -47,6 +45,7 @@ complete -c $progname -n "not $noopt" -l cachedir -d 'Alternative package cache 
 complete -c $progname -n "not $noopt" -l config -d 'Alternate config file'
 complete -c $progname -n "not $noopt" -l debug -d 'Display debug messages' -f
 complete -c $progname -n "not $noopt" -l gpgdir -d 'GPG directory to verify signatures'
+complete -c $progname -n "not $noopt" -l hookdir -d 'Hook file directory'
 complete -c $progname -n "not $noopt" -l logfile -d 'Specify alternative log file'
 complete -c $progname -n "not $noopt" -l noconfirm -d 'Bypass any question' -f
 
@@ -94,14 +93,14 @@ complete -c $progname -n $query -s o -l owns -r -d 'Search for the package that 
 complete -c $progname -n $query -s p -l file -d 'Apply the query to a package file, not package' -xa '' -f
 complete -c $progname -n $query -s t -l unrequired -d 'List only unrequired packages' -f
 complete -c $progname -n $query -s u -l upgrades -d 'List only out-of-date packages' -f
-complete -c $progname -n "$query; and $argument" -d 'Installed package' -xa $listinstalled -f
+complete -c $progname -n "$query" -d 'Installed package' -xa $listinstalled -f
 
 # Remove options
 complete -c $progname -n $remove -s c -l cascade -d 'Also remove packages depending on PACKAGE' -f
 complete -c $progname -n $remove -s n -l nosave -d 'Ignore file backup designations' -f
 complete -c $progname -n $remove -s s -l recursive -d 'Also remove dependencies of PACKAGE' -f
 complete -c $progname -n $remove -s u -l unneeded -d 'Only remove targets not required by PACKAGE' -f
-complete -c $progname -n "$remove; and $argument" -d 'Installed package' -xa $listinstalled -f
+complete -c $progname -n "$remove" -d 'Installed package' -xa $listinstalled -f
 
 # Sync options
 complete -c $progname -n $sync -s c -l clean -d 'Remove [all] packages from cache'
@@ -110,30 +109,31 @@ complete -c $progname -n "$sync; and not __fish_contains_opt -s u sysupgrade" -s
 complete -c $progname -n "$sync; and __fish_contains_opt -s u sysupgrade" -s u -l sysupgrade -d 'Also downgrade packages'
 complete -c $progname -n $sync -s w -l downloadonly -d 'Only download the target packages'
 complete -c $progname -n $sync -s y -l refresh -d 'Download fresh copy of the package list'
-complete -c $progname -n "$argument; and $sync" -xa "$listall $listgroups"
+complete -c $progname -n "$sync" -xa "$listall $listgroups"
 
 # Database options
 set -l has_db_opt '__fish_contains_opt asdeps asexplicit'
 complete -c $progname -n "$database; and not $has_db_opt" -xa --asdeps -d 'Mark PACKAGE as dependency'
 complete -c $progname -n "$database; and not $has_db_opt" -xa --asexplicit -d 'Mark PACKAGE as explicitly installed'
-complete -c $progname -n "$has_db_opt; and $argument; and $database" -xa "$listinstalled"
+complete -c $progname -n "$database; and not $has_db_opt" -s k -l check -d 'Check database validity'
+complete -c $progname -n "$has_db_opt; and $database" -xa "$listinstalled"
+
+# File options - since pacman 5
+set -l has_file_opt '__fish_contains_opt list search -s l -s s'
+complete -c $progname -n "$files; and not $has_file_opt" -xa --list -d 'List files owned by given packages'
+complete -c $progname -n "$files; and not $has_file_opt" -xa -l -d 'List files owned by given packages'
+complete -c $progname -n "$files; and not $has_file_opt" -xa --search -d 'Search packages for matching files'
+complete -c $progname -n "$files; and not $has_file_opt" -xa -s -d 'Search packages for matching files'
+complete -c $progname -n "$files" -s y -l refresh -d 'Refresh the files database' -f
+complete -c $progname -n "$files" -s l -l list -d 'List files owned by given packages' -xa $listall
+complete -c $progname -n "$files" -s s -l search -d 'Search packages for matching files'
+complete -c $progname -n "$files" -s o -l owns -d 'Search for packages that include the given files'
+complete -c $progname -n "$files" -s q -l quiet -d 'Show less information' -f
+complete -c $progname -n "$files" -l machinereadable -d 'Show in machine readable format: repo\0pkgname\0pkgver\0path\n' -f
 
 # Upgrade options
 # Theoretically, pacman reads packages in all formats that libarchive supports
 # In practice, it's going to be tar.xz or tar.gz
 # Using "pkg.tar.*" here would change __fish_complete_suffix's descriptions to "unknown"
-complete -c $progname -n "$upgrade; and $argument" -xa '(__fish_complete_suffix pkg.tar.xz)' -d 'Package file'
-complete -c $progname -n "$upgrade; and $argument" -xa '(__fish_complete_suffix pkg.tar.gz)' -d 'Package file'
-
-set -e progname
-set -e listinstalled
-set -e listall
-set -e listrepos
-set -e listgroups
-set -e noopt
-set -e database
-set -e query
-set -e remove
-set -e sync
-set -e upgrade
-set -e argument
+complete -c $progname -n "$upgrade" -xa '(__fish_complete_suffix pkg.tar.xz)' -d 'Package file'
+complete -c $progname -n "$upgrade" -xa '(__fish_complete_suffix pkg.tar.gz)' -d 'Package file'

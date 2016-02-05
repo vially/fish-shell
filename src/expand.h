@@ -110,10 +110,8 @@ enum
 ;
 
 
-/**
-   These are the possible return values for expand_string
-*/
-enum
+/** These are the possible return values for expand_string. Note how zero value is the only error. */
+enum expand_error_t
 {
     /** Error */
     EXPAND_ERROR,
@@ -152,7 +150,7 @@ enum
    \param errors Resulting errors, or NULL to ignore
    \return One of EXPAND_OK, EXPAND_ERROR, EXPAND_WILDCARD_MATCH and EXPAND_WILDCARD_NO_MATCH. EXPAND_WILDCARD_NO_MATCH and EXPAND_WILDCARD_MATCH are normal exit conditions used only on strings containing wildcards to tell if the wildcard produced any matches.
 */
-__warn_unused int expand_string(const wcstring &input, std::vector<completion_t> *output, expand_flags_t flags, parse_error_list_t *errors);
+__warn_unused expand_error_t expand_string(const wcstring &input, std::vector<completion_t> *output, expand_flags_t flags, parse_error_list_t *errors);
 
 
 /**
@@ -183,19 +181,6 @@ void expand_tilde(wcstring &input);
 
 /** Perform the opposite of tilde expansion on the string, which is modified in place */
 wcstring replace_home_directory_with_tilde(const wcstring &str);
-
-/**
-   Test if the specified argument is clean, i.e. it does not contain
-   any tokens which need to be expanded or otherwise altered. Clean
-   strings can be passed through expand_string and expand_one without
-   changing them. About two thirds of all strings are clean, so
-   skipping expansion on them actually does save a small amount of
-   time, since it avoids multiple memory allocations during the
-   expansion process.
-
-   \param in the string to test
-*/
-int expand_is_clean(const wchar_t *in);
 
 /**
    Testing function for getting all process names.
