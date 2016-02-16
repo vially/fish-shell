@@ -280,10 +280,6 @@ const wchar_t * wgetopter_t::_wgetopt_initialize(const wchar_t *optstring)
    `flag' field is nonzero, the value of the option's `val' field
    if the `flag' field is zero.
 
-   The elements of ARGV aren't really const, because we permute them.
-   But we pretend they're const in the prototype to be compatible
-   with other systems.
-
    LONGOPTS is a vector of `struct option' terminated by an
    element containing a name which is zero.
 
@@ -294,7 +290,7 @@ const wchar_t * wgetopter_t::_wgetopt_initialize(const wchar_t *optstring)
    If LONG_ONLY is nonzero, '-' as well as '--' can introduce
    long-named options.  */
 
-int wgetopter_t::_wgetopt_internal(int argc, wchar_t *const *argv, const wchar_t *optstring, const struct woption *longopts, int *longind, int long_only)
+int wgetopter_t::_wgetopt_internal(int argc, wchar_t **argv, const wchar_t *optstring, const struct woption *longopts, int *longind, int long_only)
 {
     woptarg = NULL;
 
@@ -311,7 +307,7 @@ int wgetopter_t::_wgetopt_internal(int argc, wchar_t *const *argv, const wchar_t
                exchange them so that the options come first.  */
 
             if (first_nonopt != last_nonopt && last_nonopt != woptind)
-                exchange((wchar_t **) argv);
+                exchange(argv);
             else if (last_nonopt != woptind)
                 first_nonopt = woptind;
 
@@ -334,7 +330,7 @@ int wgetopter_t::_wgetopt_internal(int argc, wchar_t *const *argv, const wchar_t
             woptind++;
 
             if (first_nonopt != last_nonopt && last_nonopt != woptind)
-                exchange((wchar_t **) argv);
+                exchange(argv);
             else if (first_nonopt == last_nonopt)
                 first_nonopt = woptind;
             last_nonopt = argc;
@@ -585,7 +581,7 @@ int wgetopter_t::_wgetopt_internal(int argc, wchar_t *const *argv, const wchar_t
     }
 }
 
-int wgetopter_t::wgetopt(int argc, wchar_t *const *argv, const wchar_t *optstring)
+int wgetopter_t::wgetopt(int argc, wchar_t **argv, const wchar_t *optstring)
 {
     return _wgetopt_internal(argc, argv, optstring,
                              (const struct woption *) 0,
@@ -593,12 +589,12 @@ int wgetopter_t::wgetopt(int argc, wchar_t *const *argv, const wchar_t *optstrin
                              0);
 }
 
-int wgetopter_t::wgetopt_long(int argc, wchar_t *const *argv, const wchar_t *options, const struct woption *long_options, int *opt_index)
+int wgetopter_t::wgetopt_long(int argc, wchar_t **argv, const wchar_t *options, const struct woption *long_options, int *opt_index)
 {
     return _wgetopt_internal(argc, argv, options, long_options, opt_index, 0);
 }
 
-int wgetopter_t::wgetopt_long_only(int argc, wchar_t *const *argv, const wchar_t *options, const struct woption *long_options, int *opt_index)
+int wgetopter_t::wgetopt_long_only(int argc, wchar_t **argv, const wchar_t *options, const struct woption *long_options, int *opt_index)
 {
     return _wgetopt_internal(argc, argv, options, long_options, opt_index, 1);
 }
