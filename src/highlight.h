@@ -113,10 +113,6 @@ rgb_color_t highlight_get_color(highlight_spec_t highlight, bool is_background);
 */
 bool autosuggest_validate_from_history(const history_item_t &item, file_detection_context_t &detector, const wcstring &working_directory, const env_vars_snapshot_t &vars);
 
-/** Given the command line contents 'str', return via reference a suggestion by specially recognizing the command. The suggestion is escaped. Returns true if we recognized the command (even if we couldn't think of a suggestion for it).
-*/
-bool autosuggest_suggest_special(const wcstring &str, const wcstring &working_directory, wcstring *out_suggestion);
-
 /* Tests whether the specified string cpath is the prefix of anything we could cd to. directories is a list of possible parent directories (typically either the working directory, or the cdpath). This does I/O!
 
     This is used only internally to this file, and is exposed only for testing.
@@ -130,7 +126,7 @@ enum
     PATH_EXPAND_TILDE = 1 << 1
 };
 typedef unsigned int path_flags_t;
-bool is_potential_path(const wcstring &const_path, const wcstring_list_t &directories, path_flags_t flags, wcstring *out_suggested_cdpath = NULL);
+bool is_potential_path(const wcstring &const_path, const wcstring_list_t &directories, path_flags_t flags);
 
 #endif
 

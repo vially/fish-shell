@@ -309,12 +309,51 @@ void completion_t::prepend_token_prefix(const wcstring &prefix)
     }
 }
 
+
+static bool compare_completions_by_match_type(const completion_t &a, const completion_t &b)
+{
+    return a.match.type < b.match.type;
+}
+
+void completions_sort_and_prioritize(std::vector<completion_t> *comps)
+{
+    /* Find the best match type */
+    fuzzy_match_type_t best_type = fuzzy_match_none;
+    for (size_t i=0; i < comps->size(); i++)
+    {
+        best_type = std::min(best_type, comps->at(i).match.type);
+    }
+    /* If the best type is an exact match, reduce it to prefix match. Otherwise a tab completion will only show one match if it matches a file exactly. (see issue #959) */
+    if (best_type == fuzzy_match_exact)
+    {
+        best_type = fuzzy_match_prefix;
+    }
+    
+    /* Throw out completions whose match types are less suitable than the best. */
+    size_t i = comps->size();
+    while (i--)
+    {
+        if (comps->at(i).match.type > best_type)
+        {
+            comps->erase(comps->begin() + i);
+        }
+    }
+    
+    /* Remove duplicates */
+    sort(comps->begin(), comps->end(), completion_t::is_naturally_less_than);
+    comps->erase(std::unique(comps->begin(), comps->end(), completion_t::is_alphabetically_equal_to), comps->end());
+    
+    /* Sort the remainder by match type. They're already sorted alphabetically */
+    stable_sort(comps->begin(), comps->end(), compare_completions_by_match_type);
+}
+
 /** Class representing an attempt to compute completions */
 class completer_t
 {
     const completion_request_flags_t flags;
     const wcstring initial_cmd;
     std::vector<completion_t> completions;
+    const env_vars_snapshot_t &vars; //transient, stack-allocated
 
     /** Table of completions conditions that have already been tested and the corresponding test results */
     typedef std::map<wcstring, bool> condition_cache_t;
@@ -349,9 +388,10 @@ class completer_t
 
 
 public:
-    completer_t(const wcstring &c, completion_request_flags_t f) :
+    completer_t(const wcstring &c, completion_request_flags_t f, const env_vars_snapshot_t &evs) :
         flags(f),
-        initial_cmd(c)
+        initial_cmd(c),
+        vars(evs)
     {
     }
 
@@ -374,7 +414,9 @@ public:
     
     bool complete_from_docopt(const wcstring &cmd_orig, const parse_node_tree_t &tree, const parse_node_tree_t::parse_node_list_t &arg_nodes, const wcstring &src, bool cursor_in_last_arg);
 
-    void complete_param_expand(const wcstring &str, bool do_file, bool directories_only = false);
+    void complete_param_expand(const wcstring &str, bool do_file, bool handle_as_special_cd = false);
+    
+    void complete_special_cd(const wcstring &str);
 
     void complete_cmd(const wcstring &str,
                       bool use_function,
@@ -936,7 +978,7 @@ void completer_t::complete_cmd(const wcstring &str_cmd, bool use_function, bool 
 
     std::vector<completion_t> possible_comp;
 
-    env_var_t cdpath = env_get_string(L"CDPATH");
+    env_var_t cdpath = this->vars.get(L"CDPATH");
     if (cdpath.missing_or_empty())
         cdpath = L".";
 
@@ -963,7 +1005,7 @@ void completer_t::complete_cmd(const wcstring &str_cmd, bool use_function, bool 
         if (use_command)
         {
 
-            const env_var_t path = env_get_string(L"PATH");
+            const env_var_t path = this->vars.get(L"PATH");
             if (!path.missing())
             {
                 wcstring base_path;
@@ -1516,17 +1558,19 @@ bool completer_t::complete_from_docopt(const wcstring &cmd_unescape, const parse
 }
 
 /**
-   Perform file completion on the specified string
+   Perform generic (not command-specific) expansions on the specified string
 */
-void completer_t::complete_param_expand(const wcstring &str, bool do_file, bool directories_only)
+void completer_t::complete_param_expand(const wcstring &str, bool do_file, bool handle_as_special_cd)
 {
     expand_flags_t flags = EXPAND_SKIP_CMDSUBST | EXPAND_FOR_COMPLETIONS | this->expand_flags();
 
     if (! do_file)
         flags |= EXPAND_SKIP_WILDCARDS;
     
-    if (directories_only && do_file)
-        flags |= DIRECTORIES_ONLY;
+    if (handle_as_special_cd && do_file)
+    {
+        flags |= DIRECTORIES_ONLY | EXPAND_SPECIAL_CD | EXPAND_NO_DESCRIPTIONS;
+    }
 
     /* Squelch file descriptions per issue 254 */
     if (this->type() == COMPLETE_AUTOSUGGEST || do_file)
@@ -1623,6 +1667,7 @@ bool completer_t::complete_variable(const wcstring &str, size_t start_offset)
         wcstring desc;
         if (this->wants_descriptions())
         {
+            // Can't use this->vars here, it could be any variable
             env_var_t value_unescaped = env_get_string(env_name);
             if (value_unescaped.missing())
                 continue;
@@ -1770,7 +1815,7 @@ bool completer_t::try_complete_user(const wcstring &str)
     return res;
 }
 
-void complete(const wcstring &cmd_with_subcmds, std::vector<completion_t> &comps, completion_request_flags_t flags)
+void complete(const wcstring &cmd_with_subcmds, std::vector<completion_t> *out_comps, completion_request_flags_t flags, const env_vars_snapshot_t &vars)
 {
     /* Determine the innermost subcommand */
     const wchar_t *cmdsubst_begin, *cmdsubst_end;
@@ -1779,7 +1824,7 @@ void complete(const wcstring &cmd_with_subcmds, std::vector<completion_t> &comps
     const wcstring cmd = wcstring(cmdsubst_begin, cmdsubst_end - cmdsubst_begin);
 
     /* Make our completer */
-    completer_t completer(cmd, flags);
+    completer_t completer(cmd, flags, vars);
 
     wcstring current_command;
     const size_t pos = cmd.size();
@@ -1949,7 +1994,7 @@ void complete(const wcstring &cmd_with_subcmds, std::vector<completion_t> &comps
                     in_redirection = (redirection != NULL);
                 }
                 
-                bool do_file = false, directories_only = false;
+                bool do_file = false, handle_as_special_cd = false;
                 if (in_redirection)
                 {
                     do_file = true;
@@ -2026,8 +2071,8 @@ void complete(const wcstring &cmd_with_subcmds, std::vector<completion_t> &comps
                     if (completer.empty())
                         do_file = true;
                     
-                    /* Hack. If we're cd, do directories only (#1059) */
-                    directories_only = (original_command_unescape == L"cd");
+                    /* Hack. If we're cd, handle it specially (#1059, others) */
+                    handle_as_special_cd = (original_command_unescape == L"cd");
                     
                     /* And if we're autosuggesting, and the token is empty, don't do file suggestions */
                     if ((flags & COMPLETION_REQUEST_AUTOSUGGESTION) && current_argument.empty())
@@ -2037,12 +2082,12 @@ void complete(const wcstring &cmd_with_subcmds, std::vector<completion_t> &comps
                 }
 
                 /* This function wants the unescaped string */
-                completer.complete_param_expand(current_token, do_file, directories_only);
+                completer.complete_param_expand(current_token, do_file, handle_as_special_cd);
             }
         }
     }
 
-    comps = completer.get_completions();
+    *out_comps = completer.get_completions();
 }
 
 

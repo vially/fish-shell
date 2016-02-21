@@ -125,6 +125,9 @@ public:
     void prepend_token_prefix(const wcstring &prefix);
 };
 
+/** Sorts and remove any duplicate completions in the completion list, then puts them in priority order. */
+void completions_sort_and_prioritize(std::vector<completion_t> *comps);
+
 enum
 {
     COMPLETION_REQUEST_DEFAULT = 0,
@@ -215,9 +218,11 @@ void complete_remove_all(const wcstring &cmd, bool cmd_is_path);
 
 /** Find all completions of the command cmd, insert them into out.
  */
+class env_vars_snapshot_t;
 void complete(const wcstring &cmd,
-              std::vector<completion_t> &comp,
-              completion_request_flags_t flags);
+              std::vector<completion_t> *out_comps,
+              completion_request_flags_t flags,
+              const env_vars_snapshot_t &vars);
 
 /**
    Return a list of all current completions.

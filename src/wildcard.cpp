@@ -139,7 +139,7 @@ bool wildcard_has(const wcstring &str, bool internal)
    \param wc The wildcard.
    \param is_first Whether files beginning with dots should not be matched against wildcards.
 */
-static enum fuzzy_match_type_t wildcard_match_internal(const wchar_t *str, const wchar_t *wc, bool leading_dots_fail_to_match, bool is_first, enum fuzzy_match_type_t max_type)
+static enum fuzzy_match_type_t wildcard_match_internal(const wchar_t *str, const wchar_t *wc, bool leading_dots_fail_to_match, bool is_first)
 {
     if (*str == 0 && *wc==0)
     {
@@ -154,13 +154,6 @@ static enum fuzzy_match_type_t wildcard_match_internal(const wchar_t *str, const
         return wcscmp(str, wc) ? fuzzy_match_none : fuzzy_match_exact;
     }
     
-    /* Hackish fuzzy match support */
-    if (! wildcard_has(wc, true))
-    {
-        const string_fuzzy_match_t match = string_fuzzy_match_string(wc, str);
-        return (match.type <= max_type ? match.type : fuzzy_match_none);
-    }
-
     if (*wc == ANY_STRING || *wc == ANY_STRING_RECURSIVE)
     {
         /* Ignore hidden file */
@@ -178,7 +171,7 @@ static enum fuzzy_match_type_t wildcard_match_internal(const wchar_t *str, const
         /* Try all submatches */
         do
         {
-            enum fuzzy_match_type_t subresult = wildcard_match_internal(str, wc+1, leading_dots_fail_to_match, false, max_type);
+            enum fuzzy_match_type_t subresult = wildcard_match_internal(str, wc+1, leading_dots_fail_to_match, false);
             if (subresult != fuzzy_match_none)
             {
                 return subresult;
@@ -201,11 +194,11 @@ static enum fuzzy_match_type_t wildcard_match_internal(const wchar_t *str, const
             return fuzzy_match_none;
         }
 
-        return wildcard_match_internal(str+1, wc+1, leading_dots_fail_to_match, false, max_type);
+        return wildcard_match_internal(str+1, wc+1, leading_dots_fail_to_match, false);
     }
     else if (*wc == *str)
     {
-        return wildcard_match_internal(str+1, wc+1, leading_dots_fail_to_match, false, max_type);
+        return wildcard_match_internal(str+1, wc+1, leading_dots_fail_to_match, false);
     }
 
     return fuzzy_match_none;
@@ -237,14 +230,19 @@ static wcstring resolve_description(wcstring *completion, const wchar_t *explici
     }
 }
 
-/* A transient parameter pack needed by wildcard_complete.f */
+/* A transient parameter pack needed by wildcard_complete. */
 struct wc_complete_pack_t
 {
     const wcstring &orig; // the original string, transient
     const wchar_t *desc; // literal description
     wcstring(*desc_func)(const wcstring &); // function for generating descriptions
     expand_flags_t expand_flags;
-    wc_complete_pack_t(const wcstring &str) : orig(str) {}
+    wc_complete_pack_t(const wcstring &str, const wchar_t *des, wcstring(*df)(const wcstring &), expand_flags_t fl) :
+        orig(str),
+        desc(des),
+        desc_func(df),
+        expand_flags(fl)
+    {}
 };
 
 /* Weirdly specific and non-reusable helper function that makes its one call site much clearer */
@@ -412,23 +410,15 @@ bool wildcard_complete(const wcstring &str,
 {
     // Note out may be NULL
     assert(wc != NULL);
-    wc_complete_pack_t params(str);
-    params.desc = desc;
-    params.desc_func = desc_func;
-    params.expand_flags = expand_flags;
+    wc_complete_pack_t params(str, desc, desc_func, expand_flags);
     return wildcard_complete_internal(str.c_str(), wc, params, flags, out, true /* first call */);
 }
 
 
 bool wildcard_match(const wcstring &str, const wcstring &wc, bool leading_dots_fail_to_match)
 {
-    enum fuzzy_match_type_t match = wildcard_match_internal(str.c_str(), wc.c_str(), leading_dots_fail_to_match, true /* first */, fuzzy_match_exact);
+    enum fuzzy_match_type_t match = wildcard_match_internal(str.c_str(), wc.c_str(), leading_dots_fail_to_match, true /* first */);
     return match != fuzzy_match_none;
-}
-        
-enum fuzzy_match_type_t wildcard_match_fuzzy(const wcstring &str, const wcstring &wc, bool leading_dots_fail_to_match, enum fuzzy_match_type_t max_type)
-{
-    return wildcard_match_internal(str.c_str(), wc.c_str(), leading_dots_fail_to_match, true /* first */, max_type);
 }
 
 /**
@@ -617,9 +607,8 @@ static bool wildcard_test_flags_then_complete(const wcstring &filepath,
     }
     
     /* Compute the description */
-    bool wants_desc = !(expand_flags & EXPAND_NO_DESCRIPTIONS);
     wcstring desc;
-    if (wants_desc)
+    if (!(expand_flags & EXPAND_NO_DESCRIPTIONS))
     {
         desc = file_get_desc(filepath, lstat_res, lstat_buf, stat_res, stat_buf, stat_errno);
         
@@ -631,7 +620,7 @@ static bool wildcard_test_flags_then_complete(const wcstring &filepath,
         }
     }
     
-    /* Append a / if this is a directory */
+    /* Append a / if this is a directory. Note this requirement may be the only reason we have to call stat() in some cases.  */
     if (is_directory)
     {
         return wildcard_complete(filename + L'/', wc, desc.c_str(), NULL, out, expand_flags, COMPLETE_NO_SPACE);
@@ -644,7 +633,10 @@ static bool wildcard_test_flags_then_complete(const wcstring &filepath,
 
 class wildcard_expander_t
 {
-    /* The original string we are expanding */
+    /* Prefix, i.e. effective working directory */
+    const wcstring prefix;
+    
+    /* The original base we are expanding */
     const wcstring original_base;
     
     /* Original wildcard we are expanding. */
@@ -711,12 +703,76 @@ class wildcard_expander_t
         }
     }
     
+    /* Given a start point as an absolute path, for any directory that has exactly one non-hidden entity in it which is itself a directory, return that. The result is a relative path. For example, if start_point is '/usr' we may return 'local/bin/'.
+     
+     The result does not have a leading slash, but does have a trailing slash if non-empty. */
+    wcstring descend_unique_hierarchy(const wcstring &start_point)
+    {
+        assert(! start_point.empty() && start_point.at(0) == L'/');
+        
+        wcstring unique_hierarchy;
+        wcstring abs_unique_hierarchy = start_point;
+        
+        bool stop_descent = false;
+        DIR *dir;
+        while (!stop_descent && (dir = wopendir(abs_unique_hierarchy)))
+        {
+            /* We keep track of the single unique_entry entry. If we get more than one, it's not unique and we stop the descent. */
+            wcstring unique_entry;
+            
+            bool child_is_dir;
+            wcstring child_entry;
+            while (wreaddir_resolving(dir, abs_unique_hierarchy, child_entry, &child_is_dir))
+            {
+                if (child_entry.empty() || child_entry.at(0) == L'.')
+                {
+                    /* Either hidden, or . and .. entries. Skip them. */
+                    continue;
+                }
+                else if (child_is_dir && unique_entry.empty())
+                {
+                    /* First candidate */
+                    unique_entry = child_entry;
+                }
+                else
+                {
+                    /* We either have two or more candidates, or the child is not a directory. We're done. */
+                    stop_descent = true;
+                    break;
+                }
+            }
+            
+            /* We stop if we got two or more entries; also stop if we got zero. */
+            if (unique_entry.empty())
+            {
+                stop_descent = true;
+            }
+            
+            if (! stop_descent)
+            {
+                /* We have an entry in the unique hierarchy! */
+                append_path_component(unique_hierarchy, unique_entry);
+                unique_hierarchy.push_back(L'/');
+                
+                append_path_component(abs_unique_hierarchy, unique_entry);
+                abs_unique_hierarchy.push_back(L'/');
+            }
+            closedir(dir);
+        }
+        return unique_hierarchy;
+    }
+
+    
     void try_add_completion_result(const wcstring &filepath, const wcstring &filename, const wcstring &wildcard)
     {
         /* This function is only for the completions case */
         assert(this->flags & EXPAND_FOR_COMPLETIONS);
+        
+        wcstring abs_path = this->prefix;
+        append_path_component(abs_path, filepath);
+        
         size_t before = this->resolved_completions->size();
-        if (wildcard_test_flags_then_complete(filepath, filename, wildcard.c_str(), this->flags, this->resolved_completions))
+        if (wildcard_test_flags_then_complete(abs_path, filename, wildcard.c_str(), this->flags, this->resolved_completions))
         {
             /* Hack. We added this completion result based on the last component of the wildcard.
                Prepend all prior components of the wildcard to each completion that replaces its token. */
@@ -732,19 +788,37 @@ class wildcard_expander_t
                 c.prepend_token_prefix(wc_base);
                 c.prepend_token_prefix(this->original_base);
             }
+            
+            /* Hack. Implement EXPAND_SPECIAL_CD by descending the deepest unique hierarchy we can, and then appending any components to each new result. */
+            if (flags & EXPAND_SPECIAL_CD)
+            {
+                wcstring unique_hierarchy = this->descend_unique_hierarchy(abs_path);
+                if (! unique_hierarchy.empty())
+                {
+                    for (size_t i=before; i < after; i++)
+                    {
+                        completion_t &c = this->resolved_completions->at(i);
+                        c.completion.append(unique_hierarchy);
+                    }
+                }
+            }
+            
             this->did_add = true;
         }
     }
     
-    /* Helper to resolve an empty base directory */
-    static DIR *open_dir(const wcstring &base_dir)
+    /* Helper to resolve using our prefix */
+    DIR *open_dir(const wcstring &base_dir) const
     {
-        return wopendir(base_dir.empty() ? L"." : base_dir);
+        wcstring path = this->prefix;
+        append_path_component(path, base_dir);
+        return wopendir(path);
     }
     
 public:
     
-    wildcard_expander_t(const wcstring &orig_base, const wchar_t *orig_wc, expand_flags_t f, std::vector<completion_t> *r) :
+    wildcard_expander_t(const wcstring &pref, const wcstring &orig_base, const wchar_t *orig_wc, expand_flags_t f, std::vector<completion_t> *r) :
+        prefix(pref),
         original_base(orig_base),
         original_wildcard(orig_wc),
         flags(f),
@@ -1058,18 +1132,41 @@ void wildcard_expander_t::expand(const wcstring &base_dir, const wchar_t *wc)
 }
 
 
-int wildcard_expand_string(const wcstring &wc, const wcstring &base_dir, expand_flags_t flags, std::vector<completion_t> *output)
+int wildcard_expand_string(const wcstring &wc, const wcstring &working_directory, expand_flags_t flags, std::vector<completion_t> *output)
 {
     assert(output != NULL);
     /* Fuzzy matching only if we're doing completions */
     assert((flags & (EXPAND_FUZZY_MATCH | EXPAND_FOR_COMPLETIONS)) != EXPAND_FUZZY_MATCH);
+    
+    /* EXPAND_SPECIAL_CD requires DIRECTORIES_ONLY and EXPAND_FOR_COMPLETIONS and EXPAND_NO_DESCRIPTIONS */
+    assert(!(flags & EXPAND_SPECIAL_CD) ||
+           ((flags & DIRECTORIES_ONLY) && (flags & EXPAND_FOR_COMPLETIONS) && (flags & EXPAND_NO_DESCRIPTIONS)));
+    
     /* Hackish fix for 1631. We are about to call c_str(), which will produce a string truncated at any embedded nulls. We could fix this by passing around the size, etc. However embedded nulls are never allowed in a filename, so we just check for them and return 0 (no matches) if there is an embedded null. */
     if (wc.find(L'\0') != wcstring::npos)
     {
         return 0;
     }
     
-    wildcard_expander_t expander(base_dir, wc.c_str(), flags, output);
+    /* Compute the prefix and base dir. The prefix is what we prepend for filesystem operations (i.e. the working directory), the base_dir is the part of the wildcard consumed thus far, which we also have to append. The difference is that the base_dir is returned as part of the expansion, and the prefix is not.
+     
+     Check for a leading slash. If we find one, we have an absolute path: the prefix is empty, the base dir is /, and the wildcard is the remainder. If we don't find one, the prefix is the working directory, there's base dir is empty.
+     */
+    wcstring prefix, base_dir, effective_wc;
+    if (string_prefixes_string(L"/", wc))
+    {
+        prefix = L"";
+        base_dir = L"/";
+        effective_wc = wc.substr(1);
+    }
+    else
+    {
+        prefix = working_directory;
+        base_dir = L"";
+        effective_wc = wc;
+    }
+    
+    wildcard_expander_t expander(prefix, base_dir, effective_wc.c_str(), flags, output);
     expander.expand(base_dir, wc.c_str());
     return expander.status_code();
 }

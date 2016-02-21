@@ -26,6 +26,7 @@
 #include "env.h"
 #include "expand.h"
 #include "common.h"
+#include "complete.h"
 #include "output.h"
 #include "wildcard.h"
 #include "path.h"
@@ -66,52 +67,6 @@ static const wchar_t * const highlight_var[] =
 
 };
 
-/* If the given path looks like it's relative to the working directory, then prepend that working directory. This operates on unescaped paths only (so a ~ means a literal ~) */
-static wcstring apply_working_directory(const wcstring &path, const wcstring &working_directory)
-{
-    if (path.empty() || working_directory.empty())
-        return path;
-
-    /* We're going to make sure that if we want to prepend the wd, that the string has no leading / */
-    bool prepend_wd;
-    switch (path.at(0))
-    {
-        case L'/':
-        case HOME_DIRECTORY:
-            prepend_wd = false;
-            break;
-        default:
-            prepend_wd = true;
-            break;
-    }
-
-    if (! prepend_wd)
-    {
-        /* No need to prepend the wd, so just return the path we were given */
-        return path;
-    }
-    else
-    {
-        /* Remove up to one ./ */
-        wcstring path_component = path;
-        if (string_prefixes_string(L"./", path_component))
-        {
-            path_component.erase(0, 2);
-        }
-
-        /* Removing leading /s */
-        while (string_prefixes_string(L"/", path_component))
-        {
-            path_component.erase(0, 1);
-        }
-
-        /* Construct and return a new path */
-        wcstring new_path = working_directory;
-        append_path_component(new_path, path_component);
-        return new_path;
-    }
-}
-
 /* Determine if the filesystem containing the given fd is case insensitive. */
 typedef std::map<wcstring, bool> case_sensitivity_cache_t;
 bool fs_is_case_insensitive(const wcstring &path, int fd, case_sensitivity_cache_t &case_sensitivity_cache)
@@ -137,72 +92,13 @@ bool fs_is_case_insensitive(const wcstring &path, int fd, case_sensitivity_cache
     return result;
 }
 
-/* Given a start point as an absolute path, for any directory that has exactly one non-hidden entity in it which is itself a directory, return that. The result is a relative path. For example, if start_point is '/usr' we may return 'local/bin'.
- 
- The result does not have a leading slash, but does have a trailing slash if non-empty. */
-static wcstring descend_unique_hierarchy(const wcstring &start_point)
-{
-    assert(! start_point.empty() && start_point.at(0) == L'/');
-    
-    wcstring unique_hierarchy;
-    wcstring abs_unique_hierarchy = start_point;
-    
-    bool stop_descent = false;
-    DIR *dir;
-    while (!stop_descent && (dir = wopendir(abs_unique_hierarchy)))
-    {
-        /* We keep track of the single unique_entry entry. If we get more than one, it's not unique and we stop the descent. */
-        wcstring unique_entry;
-        
-        bool child_is_dir;
-        wcstring child_entry;
-        while (wreaddir_resolving(dir, abs_unique_hierarchy, child_entry, &child_is_dir))
-        {
-            if (child_entry.empty() || child_entry.at(0) == L'.')
-            {
-                /* Either hidden, or . and .. entries. Skip them. */
-                continue;
-            }
-            else if (child_is_dir && unique_entry.empty())
-            {
-                /* First candidate */
-                unique_entry = child_entry;
-            }
-            else
-            {
-                /* We either have two or more candidates, or the child is not a directory. We're done. */
-                stop_descent = true;
-                break;
-            }
-        }
-        
-        /* We stop if we got two or more entries; also stop if we got zero. */
-        if (unique_entry.empty())
-        {
-            stop_descent = true;
-        }
-        
-        if (! stop_descent)
-        {
-            /* We have an entry in the unique hierarchy! */
-            append_path_component(unique_hierarchy, unique_entry);
-            unique_hierarchy.push_back(L'/');
-            
-            append_path_component(abs_unique_hierarchy, unique_entry);
-            abs_unique_hierarchy.push_back(L'/');
-        }
-        closedir(dir);
-    }
-    return unique_hierarchy;
-}
-
 /* Tests whether the specified string cpath is the prefix of anything we could cd to. directories is a list of possible parent directories (typically either the working directory, or the cdpath). This does I/O!
  
    Hack: if out_suggested_cdpath is not NULL, it returns the autosuggestion for cd. This descends the deepest unique directory hierarchy.
 
    We expect the path to already be unescaped.
 */
-bool is_potential_path(const wcstring &potential_path_fragment, const wcstring_list_t &directories, path_flags_t flags, wcstring *out_suggested_cdpath)
+bool is_potential_path(const wcstring &potential_path_fragment, const wcstring_list_t &directories, path_flags_t flags)
 {
     ASSERT_IS_BACKGROUND_THREAD();
 
@@ -262,7 +158,7 @@ bool is_potential_path(const wcstring &potential_path_fragment, const wcstring_l
         {
             const wcstring &wd = directories.at(wd_idx);
 
-            const wcstring abs_path = apply_working_directory(clean_potential_path_fragment, wd);
+            const wcstring abs_path = path_apply_working_directory(clean_potential_path_fragment, wd);
 
             /* Skip this if it's empty or we've already checked it */
             if (abs_path.empty() || checked_paths.count(abs_path))
@@ -277,12 +173,6 @@ bool is_potential_path(const wcstring &potential_path_fragment, const wcstring_l
                 if (0 == wstat(abs_path, &buf) && S_ISDIR(buf.st_mode))
                 {
                     result = true;
-                    /* Return the path suffix, not the whole absolute path */
-                    if (out_suggested_cdpath)
-                    {
-                        out_suggested_cdpath->assign(clean_potential_path_fragment);
-                        append_path_component(*out_suggested_cdpath, descend_unique_hierarchy(abs_path));
-                    }
                 }
             }
             else
@@ -302,7 +192,6 @@ bool is_potential_path(const wcstring &potential_path_fragment, const wcstring_l
                     const bool do_case_insensitive = fs_is_case_insensitive(dir_name, dirfd(dir), case_sensitivity_cache);
                     
                     wcstring matched_file;
-                    bool match_is_case_insensitive = false;
                     
                     // We opened the dir_name; look for a string where the base name prefixes it
                     // Don't ask for the is_dir value unless we care, because it can cause extra filesystem access
@@ -316,59 +205,18 @@ bool is_potential_path(const wcstring &potential_path_fragment, const wcstring_l
                             continue;
                         }
                         
-                        if (string_prefixes_string(filename_fragment, ent))
+                        if (string_prefixes_string(filename_fragment, ent) ||
+                            (do_case_insensitive && string_prefixes_string_case_insensitive(filename_fragment, ent)))
                         {
-                            // We matched, case-sensitive. This is as good as it gets.
+                            // We matched
                             matched_file = ent;
-                            match_is_case_insensitive = false;
                             break;
-                        }
-                        else if (do_case_insensitive && string_prefixes_string_case_insensitive(filename_fragment, ent))
-                        {
-                            // Case insensitive match.
-                            // If we want to return a suggestion, we keep going in hopes of getting a case-sensitive match, which is better (#2672)
-                            // If we don't care about the suggestion, we're done
-                            matched_file = ent;
-                            match_is_case_insensitive = true;
-                            if (out_suggested_cdpath == NULL)
-                            {
-                                // Early out
-                                break;
-                            }
                         }
                     }
                     closedir(dir);
-                    
-                    /* Can't have a case insensitive match unless we're doing that */
-                    assert(do_case_insensitive || ! match_is_case_insensitive);
-                    
+
                     /* We succeeded if we found a match */
                     result = ! matched_file.empty();
-                    
-                    if (out_suggested_cdpath != NULL)
-                    {
-                        /* We want to return the path in the same "form" as it was given, preserving all magic, etc. Take the given path, get its basename. Append that to the output if the basename actually prefixes the path (which it won't if the given path contains no slashes), and isn't a slash (so we don't duplicate slashes). Then append the directory entry. */
-                        
-                        wcstring suggestion;
-                        const wcstring path_base = wdirname(potential_path_fragment);
-                        if (string_prefixes_string(path_base, potential_path_fragment) ||
-                            (do_case_insensitive && string_prefixes_string_case_insensitive(path_base, potential_path_fragment)))
-                        {
-                            suggestion.append(path_base);
-                        }
-                        append_path_component(suggestion, ent);
-                        
-                        /* A trailing '/' makes autosuggestion a bit nicer and is needed for the singles traversal */
-                        suggestion.push_back(L'/');
-                        
-                        /* Now descend the deepest unique hierarchy we have. */
-                        wcstring start_point = dir_name;
-                        append_path_component(start_point, ent);
-                        append_path_component(suggestion, descend_unique_hierarchy(start_point));
-                        
-                        /* Return our computed suggestion */
-                        out_suggested_cdpath->swap(suggestion);
-                    }
                 }
             }
         }
@@ -378,7 +226,7 @@ bool is_potential_path(const wcstring &potential_path_fragment, const wcstring_l
 
 
 /* Given a string, return whether it prefixes a path that we could cd into. Return that path in out_path. Expects path to be unescaped. */
-static bool is_potential_cd_path(const wcstring &path, const wcstring &working_directory, path_flags_t flags, wcstring *out_path)
+static bool is_potential_cd_path(const wcstring &path, const wcstring &working_directory, path_flags_t flags)
 {
     wcstring_list_t directories;
 
@@ -400,12 +248,12 @@ static bool is_potential_cd_path(const wcstring &path, const wcstring &working_d
         while (tokenizer.next(next_path))
         {
             /* Ensure that we use the working directory for relative cdpaths like "." */
-            directories.push_back(apply_working_directory(next_path, working_directory));
+            directories.push_back(path_apply_working_directory(next_path, working_directory));
         }
     }
 
     /* Call is_potential_path with all of these directories */
-    bool result = is_potential_path(path, directories, flags | PATH_REQUIRE_DIR, out_path);
+    bool result = is_potential_path(path, directories, flags | PATH_REQUIRE_DIR);
     return result;
 }
 
@@ -522,61 +370,6 @@ static bool autosuggest_parse_command(const wcstring &buff, wcstring *out_expand
                 *out_last_arg = *last_arg;
             }
         }
-    }
-    return result;
-}
-
-/* We have to return an escaped string here */
-bool autosuggest_suggest_special(const wcstring &str, const wcstring &working_directory, wcstring *out_suggestion)
-{
-    if (str.empty())
-        return false;
-
-    ASSERT_IS_BACKGROUND_THREAD();
-
-    /* Parse the string */
-    wcstring parsed_command;
-    parse_node_t last_arg_node(token_type_invalid);
-    if (! autosuggest_parse_command(str, &parsed_command, &last_arg_node))
-        return false;
-
-    bool result = false;
-    if (parsed_command == L"cd" && last_arg_node.type == symbol_argument && last_arg_node.has_source())
-    {
-        /* We can possibly handle this specially */
-        const wcstring escaped_dir = last_arg_node.get_source(str);
-        wcstring suggested_path;
-
-        /* We always return true because we recognized the command. This prevents us from falling back to dumber algorithms; for example we won't suggest a non-directory for the cd command. */
-        result = true;
-        out_suggestion->clear();
-
-        /* Unescape the parameter */
-        wcstring unescaped_dir;
-        bool unescaped = unescape_string(escaped_dir, &unescaped_dir, UNESCAPE_INCOMPLETE);
-
-        /* Determine the quote type we got from the input directory. */
-        wchar_t quote = L'\0';
-        parse_util_get_parameter_info(escaped_dir, 0, &quote, NULL, NULL);
-
-        /* Big hack to avoid expanding a tilde inside quotes */
-        path_flags_t path_flags = (quote == L'\0') ? PATH_EXPAND_TILDE : 0;
-        if (unescaped && is_potential_cd_path(unescaped_dir, working_directory, path_flags, &suggested_path))
-        {
-            /* Note: this looks really wrong for strings that have an "unescapable" character in them, e.g. a \t, because parse_util_escape_string_with_quote will insert that character */
-            wcstring escaped_suggested_path = parse_util_escape_string_with_quote(suggested_path, quote);
-
-            /* Return it */
-            out_suggestion->assign(str);
-            out_suggestion->erase(last_arg_node.source_start);
-            if (quote != L'\0') out_suggestion->push_back(quote);
-            out_suggestion->append(escaped_suggested_path);
-            if (quote != L'\0') out_suggestion->push_back(quote);
-        }
-    }
-    else
-    {
-        /* Either an error or some other command, so we don't handle it specially */
     }
     return result;
 }
@@ -1178,7 +971,7 @@ void highlighter_t::color_arguments(const parse_node_t &list_node)
             if (expand_one(param, EXPAND_SKIP_CMDSUBST))
             {
                 bool is_help = string_prefixes_string(param, L"--help") || string_prefixes_string(param, L"-h");
-                if (! is_help && this->io_ok && ! is_potential_cd_path(param, working_directory, PATH_EXPAND_TILDE, NULL))
+                if (! is_help && this->io_ok && ! is_potential_cd_path(param, working_directory, PATH_EXPAND_TILDE))
                 {
                     this->color_node(*child, highlight_spec_error);
                 }
@@ -1230,7 +1023,7 @@ void highlighter_t::color_redirection(const parse_node_t &redirection_node)
             else
             {
                 /* Ok, we successfully expanded our target. Now verify that it works with this redirection. We will probably need it as a path (but not in the case of fd redirections). Note that the target is now unescaped. */
-                const wcstring target_path = apply_working_directory(target, this->working_directory);
+                const wcstring target_path = path_apply_working_directory(target, this->working_directory);
                 switch (redirect_type)
                 {
                     case TOK_REDIRECT_FD:

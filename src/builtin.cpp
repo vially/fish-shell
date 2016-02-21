@@ -1702,7 +1702,6 @@ static unsigned int builtin_echo_digit(wchar_t wc, unsigned int base)
 static bool builtin_echo_parse_numeric_sequence(const wchar_t *str, size_t *consumed, unsigned char *out_val)
 {
     bool success = false;
-    unsigned char val = 0; //resulting character
     unsigned int start = 0; //the first character of the numeric part of the sequence
 
     unsigned int base = 0, max_digits = 0;
@@ -1728,6 +1727,7 @@ static bool builtin_echo_parse_numeric_sequence(const wchar_t *str, size_t *cons
     if (base != 0)
     {
         unsigned int idx;
+        unsigned char val = 0; //resulting character
         for (idx = start; idx < start + max_digits; idx++)
         {
             unsigned int digit = builtin_echo_digit(str[idx], base);
@@ -3900,6 +3900,7 @@ static int builtin_history(parser_t &parser, io_streams_t &streams, wchar_t **ar
     if (merge_history)
     {
         history->incorporate_external_changes();
+        return STATUS_BUILTIN_OK;
     }
 
     if (search_history)
