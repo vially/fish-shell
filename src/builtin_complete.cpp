@@ -226,7 +226,7 @@ static int builtin_complete(parser_t &parser, io_streams_t &streams, wchar_t **a
     wgetopter_t w;
     bool res=false;
     int argc=0;
-    int result_mode=SHARED;
+    complete_argument_flags_t arg_flags = argument_allow_files;
     int remove = 0;
     int authoritative = -1;
 
@@ -301,15 +301,13 @@ static int builtin_complete(parser_t &parser, io_streams_t &streams, wchar_t **a
                 break;
 
             case 'x':
-                result_mode |= EXCLUSIVE;
-                break;
-
             case 'f':
-                result_mode |= NO_FILES;
+                arg_flags &= ~argument_allow_files;
                 break;
 
             case 'r':
-                result_mode |= NO_COMMON;
+                // not yet implemented in docopt
+                //result_mode |= NO_COMMON;
                 break;
 
             case 'p':
@@ -531,7 +529,7 @@ static int builtin_complete(parser_t &parser, io_streams_t &streams, wchar_t **a
                                      short_opt.c_str(),
                                      gnu_opt,
                                      old_opt,
-                                     result_mode,
+                                     arg_flags,
                                      authoritative,
                                      condition,
                                      comp,

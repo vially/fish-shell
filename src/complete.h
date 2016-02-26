@@ -16,23 +16,6 @@
 #include <stdint.h>
 
 #include "common.h"
-/**
- * Use all completions
- */
-#define SHARED 0
-/**
- * Do not use file completion
- */
-#define NO_FILES 1
-/**
- * Require a parameter after completion
- */
-#define NO_COMMON 2
-/**
- * Only use the argument list specifies with completion after
- * option. This is the same as (NO_FILES | NO_COMMON)
- */
-#define EXCLUSIVE 3
 
 /**
  * Command is a path
@@ -137,6 +120,17 @@ enum
 };
 typedef uint32_t completion_request_flags_t;
 
+// Flags describing the argument to an option
+enum
+{
+    // Default behavior is to use whatever the completion says
+    argument_default,
+    
+    // This argument can have files
+    argument_allow_files = 1 << 0
+};
+typedef uint32_t complete_argument_flags_t;
+
 /**
 
   Add a completion.
@@ -193,7 +187,7 @@ void complete_add(const wchar_t *cmd,
                   bool cmd_is_path,
                   const wcstring &option,
                   complete_option_type_t option_type,
-                  int result_mode,
+                  complete_argument_flags_t argument_flags,
                   const wchar_t *condition,
                   const wchar_t *comp,
                   const wchar_t *desc,

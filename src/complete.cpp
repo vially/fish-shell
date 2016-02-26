@@ -521,7 +521,7 @@ void complete_add(const wchar_t *cmd,
                   bool cmd_is_path,
                   const wcstring &option,
                   complete_option_type_t option_type,
-                  int result_mode,
+                  complete_argument_flags_t arg_flags,
                   const wchar_t *condition,
                   const wchar_t *comp,
                   const wchar_t *desc,
@@ -573,7 +573,7 @@ void complete_add(const wchar_t *cmd,
     {
         lopt.metadata.description = desc;
     }
-    lopt.metadata.tag = result_mode;
+    lopt.metadata.tag = arg_flags;
     
     c->invalidate_handle();
     c->options.push_back(lopt);
@@ -1083,7 +1083,7 @@ bool completer_t::complete_from_docopt(const wcstring &cmd_unescape, const parse
     // Get existing registrations, and maybe add our legacy parser
     docopt_registration_set_t regs = docopt_get_registrations(cmd_unescape);
     shared_ptr<docopt_parser_t> legacy_parser = complete_rebuild_docopt_as_necessary(cmd_unescape);
-    if (legacy_parser != NULL)
+    if (legacy_parser.get() != NULL)
     {
         regs.add_legacy_parser(legacy_parser);
     }
@@ -1113,7 +1113,7 @@ bool completer_t::complete_from_docopt(const wcstring &cmd_unescape, const parse
                 this->complete_from_args(last_arg, suggestion.command, suggestion.description, local_flags);
 
                 // Maybe suppress file completions
-                suppress_file_completion = !! (suggestion.tag & NO_FILES);
+                suppress_file_completion = ! (suggestion.tag & argument_allow_files);
             }
         }
         else
@@ -1127,7 +1127,7 @@ bool completer_t::complete_from_docopt(const wcstring &cmd_unescape, const parse
 
                 // No partial argument to complete, just dump it in
                 append_completion(&this->completions, suggestion.token, suggestion.description, local_flags);
-                suppress_file_completion = !! (suggestion.tag & NO_FILES);
+                suppress_file_completion = ! (suggestion.tag & argument_allow_files);
             }
             else
             {
@@ -1149,7 +1149,7 @@ bool completer_t::complete_from_docopt(const wcstring &cmd_unescape, const parse
                         // Append a prefix completion that starts after the last argument
                         append_completion(&this->completions, wcstring(suggestion.token, last_arg.size()), suggestion.description, local_flags, match);
                     }
-                    suppress_file_completion = !! (suggestion.tag & NO_FILES);
+                    suppress_file_completion = ! (suggestion.tag & argument_allow_files);
                 }
             }
         }
@@ -1714,7 +1714,7 @@ wcstring complete_print()
             
             out.append(L"complete");
             
-            if (o.metadata.tag & NO_FILES)
+            if (! (o.metadata.tag & argument_allow_files))
             {
                 out.append(L" --no-files");
             }
