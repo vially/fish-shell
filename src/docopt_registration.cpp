@@ -232,30 +232,7 @@ class doc_register_t {
         }
         return success;
     }
-    
-    void register_direct_options(const wcstring &cmd, const std::vector<docopt_option_t> &options, docopt_registration_handle_t *out_handle)
-    {
-        shared_ptr<docopt_parser_t> parser(new docopt_parser_t());
-        parser->set_options(options);
-
-        scoped_lock locker(lock);
-        docopt_registration_set_t &regs = cmd_to_registration[cmd];
-        docopt_registration_handle_t handle = ++this->last_handle;
         
-        // Create our registration
-        // We will transfer ownership to a shared_ptr
-        docopt_registration_t *reg = new docopt_registration_t();
-        reg->handle = handle;
-        reg->parser = parser; // note shared_ptr
-        reg->last_arg_only = true; // match historic behavior of only looking at the last option
-        regs.registrations.insert(regs.registrations.begin(), shared_ptr<const docopt_registration_t>(reg));
-
-        if (out_handle)
-        {
-            *out_handle = handle;
-        }
-    }
-    
     void unregister(docopt_registration_handle_t handle)
     {
         if (handle == 0)
@@ -303,11 +280,6 @@ static doc_register_t default_register;
 bool docopt_register_usage(const wcstring &cmd, const wcstring &name, const wcstring &usage, const wcstring &description, parse_error_list_t *out_errors, docopt_registration_handle_t *out_handle)
 {
     return default_register.register_usage(cmd, name, usage, description, out_errors, out_handle);
-}
-
-void docopt_register_direct_options(const wcstring &cmd, const std::vector<docopt_option_t> &options, docopt_registration_handle_t *out_handle)
-{
-    return default_register.register_direct_options(cmd, options, out_handle);
 }
 
 void docopt_unregister(docopt_registration_handle_t handle)
@@ -483,6 +455,15 @@ bool docopt_registration_set_t::parse_arguments(const wcstring_list_t &argv, doc
     }
     
     return true;
+}
+
+void docopt_registration_set_t::add_legacy_parser(const shared_ptr<docopt_fish::argument_parser_t<wcstring> > &r)
+{
+    docopt_registration_t *reg = new docopt_registration_t();
+    reg->last_arg_only = true;
+    reg->parser = r;
+    // Note this line transfers ownership
+    this->registrations.push_back(shared_ptr<const docopt_registration_t>(reg));
 }
 
 /* Returns a reference to the value in the map for the given key, or NULL */

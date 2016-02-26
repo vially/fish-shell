@@ -80,6 +80,9 @@ public:
     /* Given a command and a list of arguments, parses it into an argument list. Returns by reference: a map from argument name to value, a list of errors, and a list of unused arguments. If there is no docopt registration, the result is false. */
     bool parse_arguments(const wcstring_list_t &argv, docopt_arguments_t *out_arguments, parse_error_list_t *out_errors, std::vector<size_t> *out_unused_arguments) const;
     
+    /* Adds a parser to the set. Used by legacy completion machinery. */
+    void add_legacy_parser(const shared_ptr<docopt_fish::argument_parser_t<wcstring> > &r);
+    
     bool empty() const
     {
         return this->registrations.empty();
@@ -144,8 +147,6 @@ class docopt_arguments_t
  */
 bool docopt_register_usage(const wcstring &cmd, const wcstring &condition, const wcstring &usage, const wcstring &description, parse_error_list_t *out_errors, docopt_registration_handle_t *out_handle = NULL);
 
-
-void docopt_register_direct_options(const wcstring &cmd, const std::vector<docopt_fish::base_annotated_option_t<wcstring> >& options, docopt_registration_handle_t *out_handle);
 
 /** Get the set of registrations for a given command */
 docopt_registration_set_t docopt_get_registrations(const wcstring &cmd);

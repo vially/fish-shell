@@ -41,6 +41,8 @@
 #include "parse_constants.h"
 #include "docopt_fish.h"
 
+typedef docopt_fish::argument_parser_t<wcstring> docopt_parser_t;
+
 /*
   Completion description strings, mostly for different types of files, such as sockets, block devices, etc.
 
@@ -76,6 +78,7 @@ static const wcstring &C_(const wcstring &s)
     return s;
 }
 #endif
+
 
 static void complete_load(const wcstring &name, bool reload);
 
@@ -169,10 +172,10 @@ public:
     option_list_t options;
     
     void invalidate_handle();
-    void ensure_handle();
+    shared_ptr<docopt_parser_t> ensure_handle();
     
-    /** Handle on current docopt. Set to 0 if it must be recomputed. */
-    docopt_registration_handle_t doc_handle;
+    /** Handle on current docopt. Set to NULL if it must be recomputed. */
+    shared_ptr<docopt_parser_t> doc_handle;
 
 public:
 
@@ -197,7 +200,7 @@ public:
     void remove_all_options();
 
     completion_entry_t(const wcstring &c, bool type, bool author) :
-        doc_handle(0),
+        doc_handle(),
         cmd(c),
         cmd_is_path(type),
         authoritative(author),
@@ -610,8 +613,9 @@ void complete_add(const wchar_t *cmd,
 
 // Have to determine ourselves if this is a path
 static void parse_cmd_string(const wcstring &str, wcstring &path, wcstring &cmd);
-static void complete_rebuild_docopt_as_necessary(const wcstring &cmd_or_path)
+static shared_ptr<docopt_parser_t> complete_rebuild_docopt_as_necessary(const wcstring &cmd_or_path)
 {
+    shared_ptr<docopt_parser_t> result;
     wcstring cmd, path;
     parse_cmd_string(cmd_or_path, path, cmd);
 
@@ -621,33 +625,30 @@ static void complete_rebuild_docopt_as_necessary(const wcstring &cmd_or_path)
         completion_entry_t *c = complete_find_exact_entry(cmd, false);
         if (c != NULL)
         {
-            c->ensure_handle();
+            result = c->ensure_handle();
         }
     }
-    if (! path.empty())
+    if (result.get() == NULL && ! path.empty())
     {
         completion_entry_t *c = complete_find_exact_entry(path, true);
         if (c != NULL)
         {
-            c->ensure_handle();
+            result = c->ensure_handle();
         }
     }
+    return result;
 }
 
 void completion_entry_t::invalidate_handle()
 {
     ASSERT_IS_LOCKED(completion_lock);
-    if (this->doc_handle != 0)
-    {
-        docopt_unregister(this->doc_handle);
-        this->doc_handle = 0;
-    }
+    this->doc_handle.reset();
 }
 
-void completion_entry_t::ensure_handle()
+shared_ptr<docopt_parser_t> completion_entry_t::ensure_handle()
 {
     ASSERT_IS_LOCKED(completion_lock);
-    if (this->doc_handle == 0 && ! this->options.empty())
+    if (this->doc_handle.get() == NULL && ! this->options.empty())
     {
         unsigned long option_index = 0;
         typedef docopt_fish::base_annotated_option_t<wcstring> doption_t;
@@ -687,9 +688,10 @@ void completion_entry_t::ensure_handle()
             option_index++;
         }
         
-        docopt_register_direct_options(this->cmd, doptions, &this->doc_handle);
-        assert(this->doc_handle != 0);
+        this->doc_handle.reset(new docopt_parser_t());
+        this->doc_handle->set_options(doptions);        
     }
+    return this->doc_handle;
 }
 
 /**
@@ -1487,7 +1489,15 @@ bool completer_t::complete_from_docopt(const wcstring &cmd_unescape, const parse
     // Only allow options as completions if the argument we're completing starts with a -
     const bool allow_options = string_prefixes_string(L"-", last_arg);
     
-    const docopt_registration_set_t regs = docopt_get_registrations(cmd_unescape);
+    // Get existing registrations, and maybe add our legacy parser
+    docopt_registration_set_t regs = docopt_get_registrations(cmd_unescape);
+    
+    shared_ptr<docopt_parser_t> legacy_parser = complete_rebuild_docopt_as_necessary(cmd_unescape);
+    if (legacy_parser.get() != NULL)
+    {
+        regs.add_legacy_parser(legacy_parser);
+    }
+    
     const std::vector<docopt_suggestion_t> suggestions = regs.suggest_next_argument(argv, flag_match_allow_incomplete);
     for (size_t i=0; i < suggestions.size(); i++)
     {
