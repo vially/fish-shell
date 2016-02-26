@@ -43,6 +43,8 @@
 
 typedef docopt_fish::argument_parser_t<wcstring> docopt_parser_t;
 
+typedef docopt_fish::base_annotated_option_t<wcstring> legacy_option_t;
+
 /*
   Completion description strings, mostly for different types of files, such as sockets, block devices, etc.
 
@@ -102,81 +104,25 @@ static inline wcstring_list_t complete_get_variable_names(void)
     }
 }
 
-/**
-   Struct describing a completion option entry.
-
-   If option is empty, the comp field must not be
-   empty and contains a list of arguments to the command.
- 
-   The type field determines how the option is to be interpreted:
-   either empty (args_only) or short, single-long ("old") or double-long ("GNU").
-   An invariant is that the option is empty if and only if the type is args_only.
-
-   If option is non-empty, it specifies a switch
-   for the command. If \c comp is also not empty, it contains a list
-   of non-switch arguments that may only follow directly after the
-   specified switch.
-*/
-typedef struct complete_entry_opt
-{
-    /* Text of the option (like 'foo') */
-    wcstring option;
-    /* Type of the option: args-oly, short, single_long, or double_long */
-    complete_option_type_t type;
-    /** Arguments to the option */
-    wcstring comp;
-    /** Description of the completion */
-    wcstring desc;
-    /** Condition under which to use the option */
-    wcstring condition;
-    /** Must be one of the values SHARED, NO_FILES, NO_COMMON,
-      EXCLUSIVE, and determines how completions should be performed
-      on the argument after the switch. */
-    int result_mode;
-    /** Completion flags */
-    complete_flags_t flags;
-
-    const wcstring localized_desc() const
-    {
-        return C_(desc);
-    }
-    
-    size_t expected_dash_count() const
-    {
-        switch (this->type)
-        {
-            case option_type_args_only:
-                return 0;
-            case option_type_short:
-            case option_type_single_long:
-                return 1;
-            case option_type_double_long:
-                return 2;
-        }
-        assert(0 && "Unreachable");
-    }
-    
-} complete_entry_opt_t;
-
 /* Last value used in the order field of completion_entry_t */
 static unsigned int kCompleteOrder = 0;
 
 /**
    Struct describing a command completion
 */
-typedef std::list<complete_entry_opt_t> option_list_t;
+typedef std::vector<legacy_option_t> legacy_option_list_t;
 class completion_entry_t
 {
 public:
-    /** List of all options */
-    option_list_t options;
+    /** List of all legacy options */
+    legacy_option_list_t options;
     
     void invalidate_handle();
     shared_ptr<docopt_parser_t> ensure_handle();
     
     /** Handle on current docopt. Set to NULL if it must be recomputed. */
     shared_ptr<docopt_parser_t> doc_handle;
-
+    
 public:
 
     /** Command string */
@@ -191,14 +137,11 @@ public:
     /** Order for when this completion was created. This aids in outputting completions sorted by time. */
     const unsigned int order;
 
-    /** Getters for option list. */
-    const option_list_t &get_options() const;
-
     /** Adds or removes an option. */
-    void add_option(const complete_entry_opt_t &opt);
+    void add_option(const legacy_option_t &opt);
     bool remove_option(const wcstring &option, complete_option_type_t type);
     void remove_all_options();
-
+    
     completion_entry_t(const wcstring &c, bool type, bool author) :
         doc_handle(),
         cmd(c),
@@ -238,20 +181,22 @@ static bool compare_completions_by_order(const completion_entry_t *p1, const com
 /** The lock that guards the list of completion entries */
 static pthread_mutex_t completion_lock = PTHREAD_MUTEX_INITIALIZER;
 
+/* Generates "unique" variable names for use in legacy completions */
+static wcstring unique_variable_name()
+{
+    static uint64_t kNextIndex = 0;
+    ASSERT_IS_LOCKED(completion_lock);
+    return format_string(L"<%llu>", ++kNextIndex);
+}
 
-void completion_entry_t::add_option(const complete_entry_opt_t &opt)
+void completion_entry_t::add_option(const legacy_option_t &opt)
 {
     ASSERT_IS_LOCKED(completion_lock);
     this->invalidate_handle();
-    options.push_front(opt);
+    options.push_back(opt);
 }
 
-const option_list_t &completion_entry_t::get_options() const
-{
-    ASSERT_IS_LOCKED(completion_lock);
-    return options;
-}
-
+// Save a little binary size by preventing this from being inlined everywhere
 completion_t::~completion_t()
 {
 }
@@ -593,17 +538,45 @@ void complete_add(const wchar_t *cmd,
     c = complete_get_exact_entry(cmd, cmd_is_path);
 
     /* Create our new option */
-    complete_entry_opt_t opt;
-    opt.option = option;
-    opt.type = option_type;
-    opt.result_mode = result_mode;
+    legacy_option_t lopt;
+    lopt.option = option;
+    int expected_dash_count = 1;
+    switch (option_type)
+    {
+        case option_type_args_only:
+        case option_type_short:
+            lopt.type = legacy_option_t::single_short;
+            break;
+        case option_type_single_long:
+            lopt.type = legacy_option_t::single_long;
+            break;
+        case option_type_double_long:
+            lopt.type = legacy_option_t::double_long;
+            expected_dash_count = 2;
+            break;
+    }
+    if (! option.empty())
+    {
+        lopt.option.assign(expected_dash_count, L'-');
+        lopt.option.append(option);
+    }
+    if (comp != NULL)
+    {
+        lopt.value_name = unique_variable_name();
+        lopt.metadata.command = comp;
+    }
+    if (condition != NULL)
+    {
+        lopt.metadata.condition = condition;
+    }
+    if (desc != NULL)
+    {
+        lopt.metadata.description = desc;
+    }
+    lopt.metadata.tag = result_mode;
     
-    if (comp) opt.comp = comp;
-    if (condition) opt.condition = condition;
-    if (desc) opt.desc = desc;
-    opt.flags = flags;
-
-    c->add_option(opt);
+    c->invalidate_handle();
+    c->options.push_back(lopt);
 }
 
 // Have to determine ourselves if this is a path
@@ -645,46 +618,8 @@ shared_ptr<docopt_parser_t> completion_entry_t::ensure_handle()
     ASSERT_IS_LOCKED(completion_lock);
     if (this->doc_handle.get() == NULL && ! this->options.empty())
     {
-        unsigned long option_index = 0;
-        typedef docopt_fish::base_annotated_option_t<wcstring> doption_t;
-        std::vector<doption_t> doptions;
-        for (option_list_t::const_iterator iter = this->options.begin();
-             iter != this->options.end();
-             ++iter)
-        {
-            doption_t dopt;
-            switch (iter->type)
-            {
-                case option_type_args_only:
-                case option_type_short:
-                    dopt.type = doption_t::single_short;
-                    break;
-                case option_type_single_long:
-                    dopt.type = doption_t::single_long;
-                    break;
-                case option_type_double_long:
-                    dopt.type = doption_t::double_long;
-                    break;
-            }
-            if (! iter->option.empty())
-            {
-                dopt.option.assign(iter->expected_dash_count(), L'-');
-                dopt.option.append(iter->option);
-            }
-            if (! iter->comp.empty())
-            {
-                dopt.value_name = format_string(L"<%lu>", option_index);
-                dopt.metadata.command = iter->comp;
-            }
-            dopt.metadata.condition = iter->condition;
-            dopt.metadata.description = iter->desc;
-            dopt.metadata.tag = iter->result_mode;
-            doptions.push_back(dopt);
-            option_index++;
-        }
-        
         this->doc_handle.reset(new docopt_parser_t());
-        this->doc_handle->set_options(doptions);        
+        this->doc_handle->set_options(this->options);
     }
     return this->doc_handle;
 }
@@ -697,7 +632,7 @@ shared_ptr<docopt_parser_t> completion_entry_t::ensure_handle()
 bool completion_entry_t::remove_option(const wcstring &option, complete_option_type_t type)
 {
     ASSERT_IS_LOCKED(completion_lock);
-    option_list_t::iterator iter = this->options.begin();
+    legacy_option_list_t::iterator iter = this->options.begin();
     while (iter != this->options.end())
     {
         if (iter->option == option && iter->type == type)
@@ -1772,56 +1707,49 @@ wcstring complete_print()
     for (std::vector<const completion_entry_t *>::const_iterator iter = all_completions.begin(); iter != all_completions.end(); ++iter)
     {
         const completion_entry_t *e = *iter;
-        const option_list_t &options = e->get_options();
-        for (option_list_t::const_iterator oiter = options.begin(); oiter != options.end(); ++oiter)
+        const legacy_option_list_t &options = e->options;
+        for (legacy_option_list_t::const_iterator oiter = options.begin(); oiter != options.end(); ++oiter)
         {
-            const complete_entry_opt_t *o = &*oiter;
-            const wchar_t *modestr[] =
+            const legacy_option_t &o = *oiter;
+            
+            out.append(L"complete");
+            
+            if (o.metadata.tag & NO_FILES)
             {
-                L"",
-                L" --no-files",
-                L" --require-parameter",
-                L" --exclusive"
+                out.append(L" --no-files");
             }
-            ;
-
-            append_format(out,
-                          L"complete%ls",
-                          modestr[o->result_mode]);
 
             append_switch(out,
                           e->cmd_is_path ? L"path" : L"command",
                           escape_string(e->cmd, ESCAPE_ALL));
-            
-            switch (o->type)
+        
+            if (! o.option.empty())
             {
-                case option_type_args_only:
-                    break;
-                    
-                case option_type_short:
-                    assert(! o->option.empty());
-                    append_format(out, L" --short-option '%lc'", o->option.at(0));
-                    break;
-                    
-                case option_type_single_long:
-                case option_type_double_long:
-                    append_switch(out,
-                                  o->type == option_type_single_long ? L"old-option" : L"long-option",
-                                  o->option);
-                    break;
+                switch (o.type)
+                {
+                    case legacy_option_t::single_short:
+                        append_switch(out, L"short-option", o.option);
+                        break;
+                    case legacy_option_t::single_long:
+                        append_switch(out, L"old-option", o.option);
+                        break;
+                    case legacy_option_t::double_long:
+                        append_switch(out, L"long-option", o.option);
+                        break;
+                }
             }
 
             append_switch(out,
                           L"description",
-                          C_(o->desc));
+                          C_(o.metadata.description));
 
             append_switch(out,
                           L"arguments",
-                          o->comp);
+                          o.metadata.command);
 
             append_switch(out,
                           L"condition",
-                          o->condition);
+                          o.metadata.condition);
 
             out.append(L"\n");
         }
