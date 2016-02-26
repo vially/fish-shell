@@ -2315,9 +2315,9 @@ static void test_docopt_complete(void)
     ;
     docopt_register_usage(L"", L"", desc2, L"", NULL);
     completions.clear();
-    complete(L"leaf --he ", &completions, COMPLETION_REQUEST_DEFAULT, vars);
+    complete(L"leaf --he", &completions, COMPLETION_REQUEST_DEFAULT, vars);
     do_test(completions.size() == 1);
-    do_test(completions.at(0).completion == L"--help");
+    do_test(completions.at(0).completion == L"lp");
 }
 
 static void test_docopt_args(void)
