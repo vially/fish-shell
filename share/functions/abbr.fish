@@ -23,9 +23,9 @@ function abbr --description 'Manage abbreviations' --signature '
 	
 		# Bail out early if the exact abbr is already in
 		# This depends on the separator staying the same, but that's the common case (config.fish)
-		contains -- $mode_arg $fish_user_abbreviations; and return 0
+		contains -- "$word_phrase" $fish_user_abbreviations; and return 0
 	
-		set -l kv (__fish_abbr_split $mode_arg)
+		set -l kv (__fish_abbr_split "$word_phrase")
 		set -l key $kv[1]
 		set -l value $kv[2]
 
@@ -51,7 +51,7 @@ function abbr --description 'Manage abbreviations' --signature '
 		return 0
 	
 	else if set -ql opt_erase
-		set -l key (__fish_abbr_split $mode_arg)[1]
+		set -l key (__fish_abbr_split "$word")[1]
 		if set -l idx (__fish_abbr_get_by_key $key)
 			set -e fish_user_abbreviations[$idx]
 			return 0
