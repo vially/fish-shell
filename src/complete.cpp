@@ -137,9 +137,8 @@ public:
     /** Order for when this completion was created. This aids in outputting completions sorted by time. */
     const unsigned int order;
 
-    /** Adds or removes an option. */
-    void add_option(const legacy_option_t &opt);
-    bool remove_option(const wcstring &option, complete_option_type_t type);
+    /** Removes one or many options. */
+    bool remove_option(const legacy_option_t &lopt);
     void remove_all_options();
     
     completion_entry_t(const wcstring &c, bool type, bool author) :
@@ -187,13 +186,6 @@ static wcstring unique_variable_name()
     static uint64_t kNextIndex = 0;
     ASSERT_IS_LOCKED(completion_lock);
     return format_string(L"<%llu>", ++kNextIndex);
-}
-
-void completion_entry_t::add_option(const legacy_option_t &opt)
-{
-    ASSERT_IS_LOCKED(completion_lock);
-    this->invalidate_handle();
-    options.push_back(opt);
 }
 
 // Save a little binary size by preventing this from being inlined everywhere
@@ -255,6 +247,34 @@ void completion_t::prepend_token_prefix(const wcstring &prefix)
     {
         this->completion.insert(0, prefix);
     }
+}
+
+// Given a bare option string like 'ignore-case', build a legacy option
+static legacy_option_t build_legacy_option(const wcstring &bare_option, complete_option_type_t option_type)
+{
+    legacy_option_t lopt;
+    size_t dash_count = 1;
+    switch (option_type)
+    {
+        case option_type_args_only:
+        case option_type_short:
+            lopt.type = legacy_option_t::single_short;
+            break;
+        case option_type_single_long:
+            lopt.type = legacy_option_t::single_long;
+            break;
+        case option_type_double_long:
+            lopt.type = legacy_option_t::double_long;
+            dash_count = 2;
+            break;
+    }
+    if (!bare_option.empty() && option_type != option_type_args_only)
+    {
+        lopt.option.reserve(bare_option.size() + dash_count);
+        lopt.option.append(dash_count, L'-');
+        lopt.option.append(bare_option);
+    }
+    return lopt;
 }
 
 
@@ -448,7 +468,7 @@ bool completer_t::condition_test(const wcstring &condition)
     {
         return true;
     }
-
+    
     if (this->type() == COMPLETE_AUTOSUGGEST)
     {
         /* Autosuggestion can't support conditions */
@@ -519,7 +539,7 @@ void complete_set_authoritative(const wchar_t *cmd, bool cmd_is_path, bool autho
 
 void complete_add(const wchar_t *cmd,
                   bool cmd_is_path,
-                  const wcstring &option,
+                  const wcstring &bare_option,
                   complete_option_type_t option_type,
                   complete_argument_flags_t arg_flags,
                   const wchar_t *condition,
@@ -529,7 +549,7 @@ void complete_add(const wchar_t *cmd,
 {
     CHECK(cmd,);
     // option should be  empty iff the option type is arguments only
-    assert(option.empty() == (option_type == option_type_args_only));
+    assert(bare_option.empty() == (option_type == option_type_args_only));
 
     /* Lock the lock that allows us to edit the completion entry list */
     scoped_lock lock(completion_lock);
@@ -538,28 +558,7 @@ void complete_add(const wchar_t *cmd,
     c = complete_get_exact_entry(cmd, cmd_is_path);
 
     /* Create our new option */
-    legacy_option_t lopt;
-    lopt.option = option;
-    int expected_dash_count = 1;
-    switch (option_type)
-    {
-        case option_type_args_only:
-        case option_type_short:
-            lopt.type = legacy_option_t::single_short;
-            break;
-        case option_type_single_long:
-            lopt.type = legacy_option_t::single_long;
-            break;
-        case option_type_double_long:
-            lopt.type = legacy_option_t::double_long;
-            expected_dash_count = 2;
-            break;
-    }
-    if (! option.empty())
-    {
-        lopt.option.assign(expected_dash_count, L'-');
-        lopt.option.append(option);
-    }
+    legacy_option_t lopt = build_legacy_option(bare_option, option_type);
     if (comp != NULL)
     {
         lopt.value_name = unique_variable_name();
@@ -629,13 +628,13 @@ shared_ptr<docopt_parser_t> completion_entry_t::ensure_handle()
    specified short / long option strings. Returns true if it is now
    empty and should be deleted, false if it's not empty. Must be called while locked.
 */
-bool completion_entry_t::remove_option(const wcstring &option, complete_option_type_t type)
+bool completion_entry_t::remove_option(const legacy_option_t &lopt)
 {
     ASSERT_IS_LOCKED(completion_lock);
     legacy_option_list_t::iterator iter = this->options.begin();
     while (iter != this->options.end())
     {
-        if (iter->option == option && iter->type == type)
+        if (iter->option == lopt.option && iter->type == lopt.type)
         {
             this->invalidate_handle();
             iter = this->options.erase(iter);
@@ -657,7 +656,7 @@ void completion_entry_t::remove_all_options()
 }
 
 
-void complete_remove(const wcstring &cmd, bool cmd_is_path, const wcstring &option, complete_option_type_t type)
+void complete_remove(const wcstring &cmd, bool cmd_is_path, const wcstring &bare_option, complete_option_type_t type)
 {
     scoped_lock lock(completion_lock);
 
@@ -666,7 +665,8 @@ void complete_remove(const wcstring &cmd, bool cmd_is_path, const wcstring &opti
     if (iter != completion_set.end())
     {
         completion_entry_t *entry = *iter;
-        bool delete_it = entry->remove_option(option, type);
+        const legacy_option_t lopt = build_legacy_option(bare_option, type);
+        bool delete_it = entry->remove_option(lopt);
         if (delete_it)
         {
             /* Delete this entry */
@@ -1015,17 +1015,26 @@ void completer_t::complete_from_args(const wcstring &str,
                                      complete_flags_t flags)
 {
     bool is_autosuggest = (this->type() == COMPLETE_AUTOSUGGEST);
-    parser_t parser(is_autosuggest ? PARSER_TYPE_COMPLETIONS_ONLY : PARSER_TYPE_GENERAL, false /* don't show errors */);
 
     /* If type is COMPLETE_AUTOSUGGEST, it means we're on a background thread, so don't call proc_push_interactive */
     if (! is_autosuggest)
+    {
         proc_push_interactive(0);
+    }
 
+    expand_flags_t eflags = 0;
+    if (is_autosuggest)
+    {
+        eflags |= EXPAND_NO_DESCRIPTIONS | EXPAND_SKIP_CMDSUBST;
+    }
+    
     std::vector<completion_t> possible_comp;
-    parser.expand_argument_list(args, &possible_comp);
+    parser_t::expand_argument_list(args, eflags, &possible_comp);
 
     if (! is_autosuggest)
+    {
         proc_pop_interactive();
+    }
 
     this->complete_strings(escape_string(str, ESCAPE_ALL), desc.c_str(), 0, possible_comp, flags);
 }
@@ -1286,8 +1295,8 @@ bool completer_t::try_complete_variable(const wcstring &str)
     enum {e_unquoted, e_single_quoted, e_double_quoted} mode = e_unquoted;
     const size_t len = str.size();
 
-    /* Get the position of the dollar heading a run of valid variable characters. -1 means none. */
-    size_t variable_start = -1;
+    /* Get the position of the dollar heading a (possibly empty) run of valid variable characters. npos means none. */
+    size_t variable_start = wcstring::npos;
 
     for (size_t in_pos=0; in_pos<len; in_pos++)
     {
@@ -1335,9 +1344,11 @@ bool completer_t::try_complete_variable(const wcstring &str)
         }
     }
 
-    /* Now complete if we have a variable start that's also not the last character */
+    /* Now complete if we have a variable start. Note the variable text may be empty; in that case don't generate an autosuggestion, but do allow tab completion */
+    bool allow_empty = ! (this->flags & COMPLETION_REQUEST_AUTOSUGGESTION);
+    bool text_is_empty = (variable_start == len);
     bool result = false;
-    if (variable_start != static_cast<size_t>(-1) && variable_start + 1 < len)
+    if (variable_start != wcstring::npos && (allow_empty || ! text_is_empty))
     {
         result = this->complete_variable(str, variable_start + 1);
     }

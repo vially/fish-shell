@@ -119,7 +119,7 @@ class doc_register_t {
     {
         bool success = true;
         const wcstring_list_t vars = parser.get_variables();
-        parser_t error_detector(PARSER_TYPE_ERRORS_ONLY, false);
+        parser_t error_detector;
         for (size_t i=0; i < vars.size(); i++)
         {
             const wcstring &var = vars.at(i);

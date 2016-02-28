@@ -162,9 +162,7 @@ static wcstring user_presentable_path(const wcstring &path)
 }
 
 
-parser_t::parser_t(enum parser_type_t type, bool errors) :
-    parser_type(type),
-    show_errors(errors),
+parser_t::parser_t() :
     cancellation_requested(false),
     is_within_fish_initialization(false)
 {
@@ -177,7 +175,7 @@ parser_t &parser_t::principal_parser(void)
 {
     ASSERT_IS_NOT_FORKED_CHILD();
     ASSERT_IS_MAIN_THREAD();
-    static parser_t parser(PARSER_TYPE_GENERAL, true);
+    static parser_t parser;
     if (! s_principal_parser)
     {
         s_principal_parser = &parser;
@@ -467,20 +465,9 @@ void parser_t::emit_profiling(const char *path) const
     }
 }
 
-void parser_t::expand_argument_list(const wcstring &arg_list_src, std::vector<completion_t> *output_arg_list)
+void parser_t::expand_argument_list(const wcstring &arg_list_src, expand_flags_t eflags, std::vector<completion_t> *output_arg_list)
 {
     assert(output_arg_list != NULL);
-    expand_flags_t eflags = 0;
-    if (! show_errors)
-        eflags |= EXPAND_NO_DESCRIPTIONS;
-    if (this->parser_type != PARSER_TYPE_GENERAL)
-        eflags |= EXPAND_SKIP_CMDSUBST;
-
-    /* Suppress calling proc_push_interactive off of the main thread. */
-    if (this->parser_type == PARSER_TYPE_GENERAL)
-    {
-        proc_push_interactive(0);
-    }
 
     /* Parse the string as an argument list */
     parse_node_tree_t tree;
@@ -508,11 +495,6 @@ void parser_t::expand_argument_list(const wcstring &arg_list_src, std::vector<co
                 break;
             }
         }
-    }
-
-    if (this->parser_type == PARSER_TYPE_GENERAL)
-    {
-        proc_pop_interactive();
     }
 }
 
@@ -846,17 +828,14 @@ int parser_t::eval(const wcstring &cmd, const io_chain_t &io, enum block_type_t 
     /* Parse the source into a tree, if we can */
     parse_node_tree_t tree;
     parse_error_list_t error_list;
-    if (! parse_tree_from_string(cmd, parse_flag_none, &tree, this->show_errors ? &error_list : NULL))
+    if (! parse_tree_from_string(cmd, parse_flag_none, &tree, &error_list))
     {
-        if (this->show_errors)
-        {
-            /* Get a backtrace */
-            wcstring backtrace_and_desc;
-            this->get_backtrace(cmd, error_list, &backtrace_and_desc);
+        /* Get a backtrace. This includes the message. */
+        wcstring backtrace_and_desc;
+        this->get_backtrace(cmd, error_list, &backtrace_and_desc);
 
-            /* Print it */
-            fprintf(stderr, "%ls", backtrace_and_desc.c_str());
-        }
+        /* Print it */
+        fprintf(stderr, "%ls", backtrace_and_desc.c_str());
 
         return 1;
     }

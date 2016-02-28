@@ -594,7 +594,7 @@ static void test_parser()
 {
     say(L"Testing parser");
 
-    parser_t parser(PARSER_TYPE_GENERAL, true);
+    parser_t parser;
 
     say(L"Testing block nesting");
     if (!parse_util_detect_errors(L"if; end"))
@@ -777,12 +777,11 @@ static void test_parser()
 
     say(L"Testing eval_args");
     completion_list_t comps;
-    parser_t::principal_parser().expand_argument_list(L"alpha 'beta gamma' delta", &comps);
+    parser_t::expand_argument_list(L"alpha 'beta gamma' delta", 0, &comps);
     do_test(comps.size() == 3);
     do_test(comps.at(0).completion == L"alpha");
     do_test(comps.at(1).completion == L"beta gamma");
     do_test(comps.at(2).completion == L"delta");
-
 }
 
 /* Wait a while and then SIGINT the main thread */
@@ -1320,7 +1319,7 @@ static void test_escape_sequences(void)
 class lru_node_test_t : public lru_node_t
 {
 public:
-    lru_node_test_t(const wcstring &tmp) : lru_node_t(tmp) { }
+    explicit lru_node_test_t(const wcstring &tmp) : lru_node_t(tmp) { }
 };
 
 class test_lru_t : public lru_cache_t<lru_node_test_t>
@@ -1955,7 +1954,7 @@ static void test_is_potential_path()
 int builtin_test(parser_t &parser, io_streams_t &streams, wchar_t **argv);
 static bool run_one_test_test(int expected, wcstring_list_t &lst, bool bracket)
 {
-    parser_t parser(PARSER_TYPE_GENERAL, true);
+    parser_t parser;
     size_t i, count = lst.size();
     wchar_t **argv = new wchar_t *[count+3];
     argv[0] = (wchar_t *)(bracket ? L"[" : L"test");
@@ -1994,7 +1993,7 @@ static bool run_test_test(int expected, const wcstring &str)
 static void test_test_brackets()
 {
     // Ensure [ knows it needs a ]
-    parser_t parser(PARSER_TYPE_GENERAL, true);
+    parser_t parser;
     io_streams_t streams;
 
     const wchar_t *argv1[] = {L"[", L"foo", NULL};
@@ -2107,7 +2106,19 @@ static void test_complete(void)
     const env_vars_snapshot_t &vars = env_vars_snapshot_t::current();
 
     completion_list_t completions;
+    complete(L"$", &completions, COMPLETION_REQUEST_DEFAULT, vars);
+    completions_sort_and_prioritize(&completions);
+    do_test(completions.size() == 6);
+    do_test(completions.at(0).completion == L"Bar1");
+    do_test(completions.at(1).completion == L"Bar2");
+    do_test(completions.at(2).completion == L"Bar3");
+    do_test(completions.at(3).completion == L"Foo1");
+    do_test(completions.at(4).completion == L"Foo2");
+    do_test(completions.at(5).completion == L"Foo3");
+
+    completions.clear();
     complete(L"$F", &completions, COMPLETION_REQUEST_DEFAULT, vars);
+    completions_sort_and_prioritize(&completions);
     do_test(completions.size() == 3);
     do_test(completions.at(0).completion == L"oo1");
     do_test(completions.at(1).completion == L"oo2");
@@ -2115,13 +2126,15 @@ static void test_complete(void)
 
     completions.clear();
     complete(L"$1", &completions, COMPLETION_REQUEST_DEFAULT, vars);
+    completions_sort_and_prioritize(&completions);
     do_test(completions.empty());
 
     completions.clear();
     complete(L"$1", &completions, COMPLETION_REQUEST_DEFAULT | COMPLETION_REQUEST_FUZZY_MATCH, vars);
+    completions_sort_and_prioritize(&completions);
     do_test(completions.size() == 2);
-    do_test(completions.at(0).completion == L"$Foo1");
-    do_test(completions.at(1).completion == L"$Bar1");
+    do_test(completions.at(0).completion == L"$Bar1");
+    do_test(completions.at(1).completion == L"$Foo1");
 
     if (system("mkdir -p '/tmp/complete_test/'")) err(L"mkdir failed");
     if (system("touch '/tmp/complete_test/testfile'")) err(L"touch failed");
@@ -4206,7 +4219,7 @@ static void test_wcstring_tok(void)
 int builtin_string(parser_t &parser, io_streams_t &streams, wchar_t **argv);
 static void run_one_string_test(const wchar_t **argv, int expected_rc, const wchar_t *expected_out)
 {
-    parser_t parser(PARSER_TYPE_GENERAL, true);
+    parser_t parser;
     io_streams_t streams;
     streams.stdin_is_directly_redirected = false; // read from argv instead of stdin
     int rc = builtin_string(parser, streams, const_cast<wchar_t**>(argv));
