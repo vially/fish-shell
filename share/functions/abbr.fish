@@ -21,6 +21,11 @@ function abbr --description 'Manage abbreviations' --signature '
 	# we have a word_phrase, and --show if we do not
 	if set -q word_phrase
 	
+		# Convert from old "key=value" to new "key value" syntax
+		if string match -qr '^[^ ]+=' -- $mode_arg
+			set mode_arg (string replace "=" " " -- $mode_arg)
+		end
+	
 		# Bail out early if the exact abbr is already in
 		# This depends on the separator staying the same, but that's the common case (config.fish)
 		contains -- "$word_phrase" $fish_user_abbreviations; and return 0
@@ -96,12 +101,8 @@ function __fish_abbr_get_by_key
 	# Going through all entries is still quicker than calling `seq`
 	set -l keys
 	for kv in $fish_user_abbreviations
-		if string match -qr '^[^ ]+=' -- $kv
-			# No need for bounds-checking because we already matched before
-			set keys $keys (string split "=" -m 1 -- $kv)[1]
-		else if string match -qr '^[^ ]+ .*' -- $kv
-			set keys $keys (string split " " -m 1 -- $kv)[1]
-		end
+		# If this does not match, we have screwed up before and the error should be reported
+		set keys $keys (string split " " -m 1 -- $kv)[1]
 	end
 	if set -l idx (contains -i -- $argv[1] $keys)
 		echo $idx
@@ -111,11 +112,6 @@ function __fish_abbr_get_by_key
 end
 
 function __fish_abbr_split -a input
-	if string match -qr '^[^ ]+=' -- $input
-		string split "=" -m 1 -- $input
-	else if string match -qr '^[^ ]+ .*' -- $input
-		string split " " -m 1 -- $input
-	else
-		echo $input
-	end
+	# Because we always save space-separated, we can be certain that this will match
+	string split " " -m 1 -- $input
 end

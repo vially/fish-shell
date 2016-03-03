@@ -752,17 +752,6 @@ static void test_parser()
     }
 
     say(L"Testing basic evaluation");
-#if 0
-    /* This fails now since the parser takes a wcstring&, and NULL converts to wchar_t * converts to wcstring which crashes (thanks C++) */
-    if (!parser.eval(0, 0, TOP))
-    {
-        err(L"Null input when evaluating undetected");
-    }
-#endif
-    if (!parser.eval(L"ls", io_chain_t(), WHILE))
-    {
-        err(L"Invalid block mode when evaluating undetected");
-    }
 
     /* Ensure that we don't crash on infinite self recursion and mutual recursion. These must use the principal parser because we cannot yet execute jobs on other parsers (!) */
     say(L"Testing recursion detection");
@@ -1069,7 +1058,16 @@ static void test_utf82wchar(const char *src, size_t slen, const wchar_t *dst, si
 
     do
     {
-        size = utf8_to_wchar(src, slen, mem, dlen, flags);
+        if (mem == NULL)
+        {
+            size = utf8_to_wchar(src, slen, NULL, flags);
+        }
+        else
+        {
+            std::wstring buff;
+            size = utf8_to_wchar(src, slen, &buff, flags);
+            std::copy(buff.begin(), buff.begin() + std::min(dlen, buff.size()), mem);
+        }
         if (res != size)
         {
             err(L"u2w: %s: FAILED (rv: %lu, must be %lu)", descr, size, res);
@@ -1231,8 +1229,10 @@ static void test_utf8()
                                                UTF8_IGNORE_ERROR, sizeof(wb1) / sizeof(*wb1), "ignore bad chars");
     test_utf82wchar(um, sizeof(um), wm, sizeof(wm) / sizeof(*wm), 0,
                     sizeof(wm) / sizeof(*wm), "mixed languages");
-    test_utf82wchar(um, sizeof(um), wm, sizeof(wm) / sizeof(*wm) - 1, 0,
-                    0, "boundaries -1");
+    // PCA this test was to ensure that if the output buffer was too small, we'd get 0
+    // we no longer have statically sized result buffers, so this test is disabled
+    //    test_utf82wchar(um, sizeof(um), wm, sizeof(wm) / sizeof(*wm) - 1, 0,
+    //                    0, "boundaries -1");
     test_utf82wchar(um, sizeof(um), wm, sizeof(wm) / sizeof(*wm) + 1, 0,
                     sizeof(wm) / sizeof(*wm), "boundaries +1");
     test_utf82wchar(um, sizeof(um), NULL, 0, 0,
@@ -1247,8 +1247,11 @@ static void test_utf8()
                     "invalid params, src buf not NULL");
     test_utf82wchar((const char *)NULL, 10, NULL, 0, 0, 0,
                     "invalid params, src length is not 0");
-    test_utf82wchar(u1, sizeof(u1), w1, 0, 0, 0,
-                    "invalid params, dst is not NULL");
+    
+    // PCA this test was to ensure that converting into a zero length output buffer would return 0
+    // we no longer statically size output buffers, so the test is disabled
+    //    test_utf82wchar(u1, sizeof(u1), w1, 0, 0, 0,
+    //                    "invalid params, dst is not NULL");
 
     /*
      * UCS-4 -> UTF-8 string.
