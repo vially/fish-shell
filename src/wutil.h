@@ -70,10 +70,8 @@ void safe_perror(const char *message);
 */
 const char *safe_strerror(int err);
 
-/**
-   Wide character version of getcwd().
-*/
-wchar_t *wgetcwd(wchar_t *buff, size_t sz);
+// Wide character version of getcwd().
+const wcstring wgetcwd();
 
 /**
    Wide character version of chdir()
@@ -145,8 +143,7 @@ struct file_id_t
     long change_nanoseconds;
     time_t mod_seconds;
     long mod_nanoseconds;
-    uint32_t generation;
-    
+        
     bool operator==(const file_id_t &rhs) const;
     bool operator!=(const file_id_t &rhs) const;
     

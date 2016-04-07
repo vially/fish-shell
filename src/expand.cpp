@@ -1908,13 +1908,15 @@ expand_error_t expand_string(const wcstring &input, std::vector<completion_t> *o
         output_storage.clear();
     }
     
-    /* Hack to un-expand tildes (see #647) */
-    if (!(flags & EXPAND_SKIP_HOME_DIRECTORIES))
+    if (total_result != EXPAND_ERROR)
     {
-        unexpand_tildes(input, &completions);
+        /* Hack to un-expand tildes (see #647) */
+        if (!(flags & EXPAND_SKIP_HOME_DIRECTORIES))
+        {
+            unexpand_tildes(input, &completions);
+        }
+        out_completions->insert(out_completions->end(), completions.begin(), completions.end());
     }
-    
-    out_completions->insert(out_completions->end(), completions.begin(), completions.end());
     return total_result;
 }
 
@@ -1991,62 +1993,6 @@ bool fish_xdm_login_hack_hack_hack_hack(std::vector<std::string> *cmds, int argc
 
             cmds->at(0) = new_cmd;
             result = true;
-        }
-    }
-    return result;
-}
-
-bool fish_openSUSE_dbus_hack_hack_hack_hack(std::vector<completion_t> *args)
-{
-    static signed char isSUSE = -1;
-    if (isSUSE == 0)
-        return false;
-
-    bool result = false;
-    if (args && ! args->empty())
-    {
-        const wcstring &cmd = args->at(0).completion;
-        if (cmd.find(L"DBUS_SESSION_BUS_") != wcstring::npos)
-        {
-            /* See if we are SUSE */
-            if (isSUSE < 0)
-            {
-                struct stat buf = {};
-                isSUSE = (0 == stat("/etc/SuSE-release", &buf));
-            }
-
-            if (isSUSE)
-            {
-                /* Look for an equal sign */
-                size_t where = cmd.find(L'=');
-                if (where != wcstring::npos)
-                {
-                    /* Oh my. It's presumably of the form foo=bar; find the = and split */
-                    const wcstring key = wcstring(cmd, 0, where);
-
-                    /* Trim whitespace and semicolon */
-                    wcstring val = wcstring(cmd, where+1);
-                    size_t last_good = val.find_last_not_of(L"\n ;");
-                    if (last_good != wcstring::npos)
-                        val.resize(last_good + 1);
-
-                    args->clear();
-                    append_completion(args, L"set");
-                    if (key == L"DBUS_SESSION_BUS_ADDRESS")
-                        append_completion(args, L"-x");
-                    append_completion(args, key);
-                    append_completion(args, val);
-                    result = true;
-                }
-                else if (string_prefixes_string(L"export DBUS_SESSION_BUS_ADDRESS;", cmd))
-                {
-                    /* Nothing, we already exported it */
-                    args->clear();
-                    append_completion(args, L"echo");
-                    append_completion(args, L"-n");
-                    result = true;
-                }
-            }
         }
     }
     return result;

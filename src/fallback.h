@@ -158,29 +158,13 @@ int vswprintf(wchar_t *out, size_t n, const wchar_t *filter, va_list va);
 #endif
 
 #ifndef HAVE_FGETWC
-/**
-   Fallback implementation of fgetwc
-*/
+// Fallback implementation of fgetwc.
 wint_t fgetwc(FILE *stream);
-
-/**
-   Fallback implementation of getwc
-*/
-wint_t getwc(FILE *stream);
-
 #endif
 
 #ifndef HAVE_FPUTWC
-
-/**
-   Fallback implementation of fputwc
-*/
+// Fallback implementation of fputwc.
 wint_t fputwc(wchar_t wc, FILE *stream);
-/**
-   Fallback implementation of putwc
-*/
-wint_t putwc(wchar_t wc, FILE *stream);
-
 #endif
 
 #ifndef HAVE_WCSTOK
@@ -411,53 +395,6 @@ extern int _nl_msg_cat_cntr;
    Send specified signal to specified process group.
  */
 int killpg(int pgr, int sig);
-#endif
-
-
-#ifndef HAVE_WORKING_GETOPT_LONG
-
-/**
-   Struct describing a long getopt option
- */
-struct option
-{
-    /**
-       Name of option
-     */
-    const char *name;
-    /**
-       Flag
-     */
-    int has_arg;
-    /**
-       Flag
-     */
-    int *flag;
-    /**
-       Return value
-     */
-    int val;
-}
-;
-
-#ifndef no_argument
-#define  no_argument 0
-#endif
-
-#ifndef required_argument
-#define  required_argument 1
-#endif
-
-#ifndef optional_argument
-#define  optional_argument 2
-#endif
-
-int getopt_long(int argc,
-                char * const argv[],
-                const char *optstring,
-                const struct option *longopts,
-                int *longindex);
-
 #endif
 
 #ifndef HAVE_SYSCONF

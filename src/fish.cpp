@@ -23,6 +23,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
 #include "config.h"
 
 #include <assert.h>
+#include <getopt.h>
 #include <limits.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -39,15 +40,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
 #include <sys/socket.h> // IWYU pragma: keep - suggests internal header
 #include <sys/un.h>
 #include <pwd.h>
-
-#ifdef HAVE_GETOPT_H
-#include <getopt.h>
-#endif
-
 #include <locale.h>
 
 #include "fallback.h" // IWYU pragma: keep
-
 #include "common.h"
 #include "reader.h"
 #include "builtin.h"
@@ -71,11 +66,6 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
 #ifndef PATH_MAX
 #define PATH_MAX 1024
 #endif
-
-/**
-   The string describing the single-character options accepted by the main fish binary
-*/
-#define GETOPT_STRING "+hilnvc:p:d:"
 
 /* If we are doing profiling, the filename to output to */
 static const char *s_profiling_output_filename = NULL;
@@ -370,7 +360,8 @@ static int read_init(const struct config_paths_t &paths)
  */
 static int fish_parse_opt(int argc, char **argv, std::vector<std::string> *cmds)
 {
-    const struct option long_options[] =
+    const char *short_opts = "+hilnvc:p:d:";
+    const struct option long_opts[] =
     {
         { "command", required_argument, NULL, 'c' },
         { "debug-level", required_argument, NULL, 'd' },
@@ -383,17 +374,15 @@ static int fish_parse_opt(int argc, char **argv, std::vector<std::string> *cmds)
         { NULL, 0, NULL, 0 }
     };
 
-    while (1)
+    int opt;
+    while ((opt = getopt_long(argc, argv, short_opts, long_opts, NULL)) != -1)
     {
-        int opt = getopt_long(argc, argv, GETOPT_STRING, long_options, NULL);
-        if (opt == -1)
-            break;
-
         switch (opt)
         {
             case 0:
             {
-                break;
+                fwprintf(stderr, _(L"getopt_long() unexpectedly returned zero\n"));
+                exit(127);
             }
 
             case 'c':
@@ -416,8 +405,9 @@ static int fish_parse_opt(int argc, char **argv, std::vector<std::string> *cmds)
                 }
                 else
                 {
-                    debug(0, _(L"Invalid value '%s' for debug level switch"), optarg);
-                    exit_without_destructors(1);
+                    fwprintf(stderr, _(L"Invalid value '%s' for debug level switch"),
+                            optarg);
+                    exit(1);
                 }
                 break;
             }
@@ -455,14 +445,15 @@ static int fish_parse_opt(int argc, char **argv, std::vector<std::string> *cmds)
 
             case 'v':
             {
-                fwprintf(stderr, _(L"%s, version %s\n"), PACKAGE_NAME,
+                fwprintf(stdout, _(L"%s, version %s\n"), PACKAGE_NAME,
                          get_fish_version());
-                exit_without_destructors(0);
+                exit(0);
             }
 
             default:
             {
-                exit_without_destructors(1);
+                // We assume getopt_long() has already emitted a diagnostic msg.
+                exit(1);
             }
 
         }
@@ -560,34 +551,30 @@ int main(int argc, char **argv)
             }
             reader_exit(0, 0);
         }
+        else if (my_optind == argc)
+        {
+            // Interactive mode
+            check_running_fishd();
+            res = reader_read(STDIN_FILENO, empty_ios);
+        }
         else
         {
-            if (my_optind == argc)
+            char *file = *(argv+(my_optind++));
+            int fd = open(file, O_RDONLY);
+            if (fd == -1)
             {
-                // Interactive mode
-                check_running_fishd();
-                res = reader_read(STDIN_FILENO, empty_ios);
+                perror(file);
             }
             else
             {
-                char **ptr;
-                char *file = *(argv+(my_optind++));
-                int i;
-                int fd;
-
-
-                if ((fd = open(file, O_RDONLY)) == -1)
-                {
-                    wperror(L"open");
-                    return 1;
-                }
-
                 // OK to not do this atomically since we cannot have gone multithreaded yet
                 set_cloexec(fd);
 
                 if (*(argv+my_optind))
                 {
                     wcstring sb;
+                    char **ptr;
+                    int i;
                     for (i=1,ptr = argv+my_optind; *ptr; i++, ptr++)
                     {
                         if (i != 1)

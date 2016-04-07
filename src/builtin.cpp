@@ -1904,18 +1904,18 @@ static int builtin_echo(parser_t &parser, io_streams_t &streams, wchar_t **argv)
     return STATUS_BUILTIN_OK;
 }
 
-/** The pwd builtin. We don't respect -P to resolve symbolic links because we try to always resolve them. */
+// The pwd builtin. We don't respect -P to resolve symbolic links because we
+// try to always resolve them.
 static int builtin_pwd(parser_t &parser, io_streams_t &streams, wchar_t **argv)
 {
-    wchar_t dir_path[4096];
-    wchar_t *res = wgetcwd(dir_path, 4096);
-    if (res == NULL)
+    wcstring res = wgetcwd();
+    if (res.empty())
     {
         return STATUS_BUILTIN_ERROR;
     }
     else
     {
-        streams.out.append(dir_path);
+        streams.out.append(res);
         streams.out.push_back(L'\n');
         return STATUS_BUILTIN_OK;
     }
@@ -2731,9 +2731,8 @@ static int builtin_read(parser_t &parser, io_streams_t &streams, wchar_t **argv)
 
         while (1)
         {
-            int finished=0;
-
-            wchar_t res=0;
+            int finished = 0;
+            wchar_t res = 0;
             mbstate_t state = {};
 
             while (!finished)
@@ -2745,24 +2744,26 @@ static int builtin_read(parser_t &parser, io_streams_t &streams, wchar_t **argv)
                     break;
                 }
 
-                size_t sz = mbrtowc(&res, &b, 1, &state);
-
-                switch (sz)
+                if (MB_CUR_MAX == 1) // single-byte locale
                 {
-                    case (size_t)(-1):
-                        memset(&state, '\0', sizeof(state));
-                        break;
+                    res = (unsigned char)b;
+                    finished = 1;
+                }
+                else {
+                    size_t sz = mbrtowc(&res, &b, 1, &state);
+                    switch (sz)
+                    {
+                        case (size_t)-1:
+                            memset(&state, 0, sizeof(state));
+                            break;
 
-                    case (size_t)(-2):
-                        break;
-                    case 0:
-                        finished = 1;
-                        break;
+                        case (size_t)-2:
+                            break;
 
-                    default:
-                        finished=1;
-                        break;
-
+                        default:
+                            finished = 1;
+                            break;
+                    }
                 }
             }
 
@@ -3337,15 +3338,16 @@ static int builtin_contains(parser_t &parser, io_streams_t &streams, wchar_t ** 
     {
         streams.err.append_format(_(L"%ls: Key not specified\n"), argv[0]);
     }
-
-
-    for (int i=w.woptind+1; i<argc; i++)
+    else
     {
-
-        if (!wcscmp(needle, argv[i]))
+        for (int i=w.woptind+1; i<argc; i++)
         {
-            if (should_output_index) streams.out.append_format( L"%d\n", i-w.woptind);
-            return 0;
+
+            if (!wcscmp(needle, argv[i]))
+            {
+                if (should_output_index) streams.out.append_format( L"%d\n", i-w.woptind);
+                return 0;
+            }
         }
     }
     return 1;
@@ -3405,7 +3407,7 @@ static int builtin_source(parser_t &parser, io_streams_t &streams, wchar_t **arg
     parser.push_block(new source_block_t(fn_intern));
     reader_push_current_filename(fn_intern);
 
-    env_set_argv((argc>2)?(argv+2):(argv+1));
+    env_set_argv(argc > 1 ? argv + 2 : argv + 1);
 
     res = reader_read(fd, streams.io_chain ? *streams.io_chain : io_chain_t());
 
@@ -3955,6 +3957,8 @@ static int builtin_history(parser_t &parser, io_streams_t &streams, wchar_t **ar
     return STATUS_BUILTIN_ERROR;
 }
 
+#if 0
+// Disabled for the 2.2.0 release: https://github.com/fish-shell/fish-shell/issues/1809.
 int builtin_parse(parser_t &parser, io_streams_t &streams, wchar_t **argv)
 {
     struct sigaction act;
@@ -3996,6 +4000,7 @@ int builtin_parse(parser_t &parser, io_streams_t &streams, wchar_t **argv)
     }
     return STATUS_BUILTIN_OK;
 }
+#endif
 
 int builtin_true(parser_t &parser, io_streams_t &streams, wchar_t **argv)
 {
@@ -4022,6 +4027,7 @@ static const builtin_data_t builtin_datas[]=
 {
     { 		L"[",  &builtin_test, N_(L"Test a condition")   },
 #if 0
+    // Disabled for the 2.2.0 release: https://github.com/fish-shell/fish-shell/issues/1809.
     { 		L"__fish_parse",  &builtin_parse, N_(L"Try out the new parser")  },
 #endif
     { 		L"and",  &builtin_generic, N_(L"Execute command if previous command suceeded")  },

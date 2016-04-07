@@ -53,6 +53,8 @@ The following parameters are available:
 
 The following special input functions are available:
 
+- `accept-autosuggestion`, accept the current autosuggestion completely
+
 - `backward-char`, moves one character to the left
 
 - `backward-bigword`, move one whitespace-delimited word to the left
@@ -63,6 +65,8 @@ The following special input functions are available:
 
 - `backward-kill-line`, move everything from the beginning of the line to the cursor to the killring
 
+- `backward-kill-path-component`, move one path component to the left of the cursor (everything from the last "/" or whitespace exclusive) to the killring
+
 - `backward-kill-word`, move the word to the left of the cursor to the killring
 
 - `backward-word`, move one word to the left
@@ -71,9 +75,13 @@ The following special input functions are available:
 
 - `beginning-of-line`, move to the beginning of the line
 
+- `begin-selection`, start selecting text
+
 - `capitalize-word`, make the current word begin with a capital letter
 
 - `complete`, guess the remainder of the current token
+
+- `complete-and-search`, invoke the searchable pager on completion options
 
 - `delete-char`, delete one character to the right of the cursor
 
@@ -86,6 +94,8 @@ The following special input functions are available:
 - `end-of-history`, move to the end of the history
 
 - `end-of-line`, move to the end of the line
+
+- `end-selection`, end selecting text
 
 - `explain`, print a description of possible problems with the current command
 
@@ -103,9 +113,19 @@ The following special input functions are available:
 
 - `kill-line`, move everything from the cursor to the end of the line to the killring
 
+- `kill-selection`, move the selected text to the killring
+
 - `kill-whole-line`, move the line to the killring
 
 - `kill-word`, move the next word to the killring
+
+- `suppress-autosuggestion`, remove the current autosuggestion
+
+- `swap-selection-start-stop`, go to the other end of the highlighted text without changing the selection
+
+- `transpose-chars`,  transpose two characters to the left of the cursor
+
+- `transpose-words`, transpose two words to the left of the cursor
 
 - `upcase-word`, make the current word uppercase
 
