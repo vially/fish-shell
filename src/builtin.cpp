@@ -429,7 +429,7 @@ static int builtin_bind_add(const wcstring &seq, const wcstring_list_t &cmds, co
 
 /// Erase specified key bindings
 ///
-/// \param seq an array of all key bindings to erase
+/// \param seq_list an array of all key bindings to erase
 /// \param all if specified, _all_ key bindings will be erased
 /// \param mode if specified, only bindings from that mode will be erased. If not given and \c all
 /// is \c false, \c DEFAULT_BIND_MODE will be used.
