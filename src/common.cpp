@@ -54,7 +54,7 @@ bool g_profiling_active = false;
 
 const wchar_t *program_name;
 
-int debug_level=1;
+int debug_level = 1;
 
 /// This struct maintains the current state of the terminal size. It is updated on demand after
 /// receiving a SIGWINCH. Do not touch this struct directly, it's managed with a rwlock. Use
@@ -80,11 +80,11 @@ void show_stackframe() {
 }
 
 int fgetws2(wcstring *s, FILE *f) {
-    int i=0;
+    int i = 0;
     wint_t c;
 
     while (1) {
-        errno=0;
+        errno = 0;
 
         c = fgetwc(f);
         if (errno == EILSEQ || errno == EINTR) {
@@ -106,9 +106,9 @@ int fgetws2(wcstring *s, FILE *f) {
                 i++;
                 s->push_back((wchar_t)c);
                 break;
+            }
         }
     }
-}
 }
 
 /// Converts the narrow character string \c in into its wide equivalent, and return it.
@@ -125,7 +125,7 @@ static wcstring str2wcs_internal(const char *in, const size_t in_len) {
     result.reserve(in_len);
     size_t in_pos = 0;
 
-    if (MB_CUR_MAX == 1) // single-byte locale, all values are legal
+    if (MB_CUR_MAX == 1)  // single-byte locale, all values are legal
     {
         while (in_pos < in_len) {
             result.push_back((unsigned char)in[in_pos]);
@@ -137,7 +137,7 @@ static wcstring str2wcs_internal(const char *in, const size_t in_len) {
     mbstate_t state = {};
     while (in_pos < in_len) {
         wchar_t wc = 0;
-        size_t ret = mbrtowc(&wc, &in[in_pos], in_len-in_pos, &state);
+        size_t ret = mbrtowc(&wc, &in[in_pos], in_len - in_pos, &state);
 
         // Determine whether to encode this characters with our crazy scheme.
         bool use_encode_direct = false;
@@ -186,7 +186,7 @@ wcstring str2wcstring(const std::string &in) {
 
 char *wcs2str(const wchar_t *in) {
     if (!in) return NULL;
-    size_t desired_size = MAX_UTF8_BYTES*wcslen(in)+1;
+    size_t desired_size = MAX_UTF8_BYTES * wcslen(in) + 1;
     char local_buff[512];
     if (desired_size <= sizeof local_buff / sizeof *local_buff) {
         // Convert into local buff, then use strdup() so we don't waste malloc'd space.
@@ -202,7 +202,7 @@ char *wcs2str(const wchar_t *in) {
 
     } else {
         // Here we probably allocate a buffer probably much larger than necessary.
-        char *out = (char *)malloc(MAX_UTF8_BYTES*wcslen(in)+1);
+        char *out = (char *)malloc(MAX_UTF8_BYTES * wcslen(in) + 1);
         if (!out) {
             DIE_MEM();
         }
@@ -266,7 +266,7 @@ static char *wcs2str_internal(const wchar_t *in, char *out) {
         if (in[in_pos] == INTERNAL_SEPARATOR) {
             // Do nothing.
         } else if (in[in_pos] >= ENCODE_DIRECT_BASE && in[in_pos] < ENCODE_DIRECT_BASE + 256) {
-            out[out_pos++] = in[in_pos]- ENCODE_DIRECT_BASE;
+            out[out_pos++] = in[in_pos] - ENCODE_DIRECT_BASE;
         } else if (MB_CUR_MAX == 1)  // single-byte locale (C/POSIX/ISO-8859)
         {
             // If `wc` contains a wide character we emit a question-mark.
@@ -309,7 +309,7 @@ void append_formatv(wcstring &target, const wchar_t *format, va_list va_orig) {
     // larger than max_size, at which point it will conclude that the error was probably due to a
     // badly formated string option, and return an error. Make sure to null terminate string before
     // that, though.
-    const size_t max_size = (128*1024*1024);
+    const size_t max_size = (128 * 1024 * 1024);
     wchar_t static_buff[256];
     size_t size = 0;
     wchar_t *buff = NULL;
@@ -448,7 +448,7 @@ __sentinel bool contains_internal(const wcstring &needle, int vararg_handle, ...
         // libc++ has an unfortunate implementation of operator== that unconditonally wcslen's the
         // wchar_t* parameter, so prefer wcscmp directly.
         if (!wcscmp(needle_cstr, arg)) {
-            res=1;
+            res = 1;
             break;
         }
     }
@@ -469,7 +469,7 @@ long read_blocked(int fd, void *buf, size_t count) {
 }
 
 ssize_t write_loop(int fd, const char *buff, size_t count) {
-    size_t out_cum=0;
+    size_t out_cum = 0;
     while (out_cum < count) {
         ssize_t out = write(fd, &buff[out_cum], count - out_cum);
         if (out < 0) {
@@ -632,27 +632,21 @@ void format_long_safe(wchar_t buff[64], long val) {
     }
 }
 
-void format_ullong_safe(wchar_t buff[64], unsigned long long val)
-{
-    if (val == 0)
-    {
+void format_ullong_safe(wchar_t buff[64], unsigned long long val) {
+    if (val == 0) {
         wcscpy(buff, L"0");
-    }
-    else
-    {
+    } else {
         /* Generate the string in reverse */
         size_t idx = 0;
-        while (val != 0)
-        {
+        while (val != 0) {
             unsigned long long rem = val % 10;
             buff[idx++] = L'0' + (wchar_t)(rem);
             val /= 10;
         }
         buff[idx] = 0;
-        
+
         size_t left = 0, right = idx - 1;
-        while (left < right)
-        {
+        while (left < right) {
             wchar_t tmp = buff[left];
             buff[left++] = buff[right];
             buff[right--] = tmp;
@@ -685,7 +679,7 @@ wcstring reformat_for_screen(const wcstring &msg) {
         while (1) {
             int overflow = 0;
 
-            int tok_width=0;
+            int tok_width = 0;
 
             // Tokenize on whitespace, and also calculate the width of the token.
             while (*pos && (!wcschr(L" \n\r\t", *pos))) {
@@ -702,24 +696,24 @@ wcstring reformat_for_screen(const wcstring &msg) {
 
             // If token is zero character long, we don't do anything.
             if (pos == start) {
-                start = pos = pos+1;
+                start = pos = pos + 1;
             } else if (overflow) {
                 // In case of overflow, we print a newline, except if we already are at position 0.
-                wchar_t *token = wcsndup(start, pos-start);
+                wchar_t *token = wcsndup(start, pos - start);
                 if (line_width != 0) buff.push_back(L'\n');
                 buff.append(format_string(L"%ls-\n", token));
                 free(token);
-                line_width=0;
+                line_width = 0;
             } else {
                 // Print the token.
-                wchar_t *token = wcsndup(start, pos-start);
+                wchar_t *token = wcsndup(start, pos - start);
                 if ((line_width + (line_width != 0 ? 1 : 0) + tok_width) > screen_width) {
                     buff.push_back(L'\n');
-                    line_width=0;
+                    line_width = 0;
                 }
-                buff.append(format_string(L"%ls%ls", line_width?L" ":L"", token));
+                buff.append(format_string(L"%ls%ls", line_width ? L" " : L"", token));
                 free(token);
-                line_width += (line_width!=0?1:0) + tok_width;
+                line_width += (line_width != 0 ? 1 : 0) + tok_width;
             }
 
             // Break on end of string.
@@ -727,7 +721,7 @@ wcstring reformat_for_screen(const wcstring &msg) {
                 break;
             }
 
-            start=pos;
+            start = pos;
         }
     } else {
         buff.append(msg);
@@ -743,11 +737,11 @@ static void escape_string_internal(const wchar_t *orig_in, size_t in_len, wcstri
 
     const wchar_t *in = orig_in;
     bool escape_all = !!(flags & ESCAPE_ALL);
-    bool no_quoted  = !!(flags & ESCAPE_NO_QUOTED);
+    bool no_quoted = !!(flags & ESCAPE_NO_QUOTED);
     bool no_tilde = !!(flags & ESCAPE_NO_TILDE);
 
-    int need_escape=0;
-    int need_complex_escape=0;
+    int need_escape = 0;
+    int need_complex_escape = 0;
 
     // Avoid dereferencing all over the place.
     wcstring &out = *out_str;
@@ -765,12 +759,12 @@ static void escape_string_internal(const wchar_t *orig_in, size_t in_len, wcstri
             out += L'\\';
             out += L'X';
 
-            tmp = val/16;
-            out += tmp > 9? L'a'+(tmp-10):L'0'+tmp;
+            tmp = val / 16;
+            out += tmp > 9 ? L'a' + (tmp - 10) : L'0' + tmp;
 
-            tmp = val%16;
-            out += tmp > 9? L'a'+(tmp-10):L'0'+tmp;
-            need_escape=need_complex_escape=1;
+            tmp = val % 16;
+            out += tmp > 9 ? L'a' + (tmp - 10) : L'0' + tmp;
+            need_escape = need_complex_escape = 1;
 
         } else {
             wchar_t c = *in;
@@ -778,36 +772,36 @@ static void escape_string_internal(const wchar_t *orig_in, size_t in_len, wcstri
                 case L'\t': {
                     out += L'\\';
                     out += L't';
-                    need_escape=need_complex_escape=1;
+                    need_escape = need_complex_escape = 1;
                     break;
                 }
                 case L'\n': {
                     out += L'\\';
                     out += L'n';
-                    need_escape=need_complex_escape=1;
+                    need_escape = need_complex_escape = 1;
                     break;
                 }
                 case L'\b': {
                     out += L'\\';
                     out += L'b';
-                    need_escape=need_complex_escape=1;
+                    need_escape = need_complex_escape = 1;
                     break;
                 }
                 case L'\r': {
                     out += L'\\';
                     out += L'r';
-                    need_escape=need_complex_escape=1;
+                    need_escape = need_complex_escape = 1;
                     break;
                 }
                 case L'\x1b': {
                     out += L'\\';
                     out += L'e';
-                    need_escape=need_complex_escape=1;
+                    need_escape = need_complex_escape = 1;
                     break;
                 }
                 case L'\\':
                 case L'\'': {
-                    need_escape=need_complex_escape=1;
+                    need_escape = need_complex_escape = 1;
                     if (escape_all) out += L'\\';
                     out += *in;
                     break;
@@ -847,7 +841,7 @@ static void escape_string_internal(const wchar_t *orig_in, size_t in_len, wcstri
                 case L'%':
                 case L'~': {
                     if (!no_tilde || c != L'~') {
-                        need_escape=1;
+                        need_escape = 1;
                         if (escape_all) out += L'\\';
                     }
                     out += *in;
@@ -859,18 +853,18 @@ static void escape_string_internal(const wchar_t *orig_in, size_t in_len, wcstri
                         if (*in < 27 && *in > 0) {
                             out += L'\\';
                             out += L'c';
-                            out += L'a' + *in -1;
+                            out += L'a' + *in - 1;
 
-                            need_escape=need_complex_escape=1;
+                            need_escape = need_complex_escape = 1;
                             break;
                         }
 
-                        int tmp = (*in)%16;
+                        int tmp = (*in) % 16;
                         out += L'\\';
                         out += L'x';
-                        out += ((*in>15)? L'1' : L'0');
-                        out += tmp > 9? L'a'+(tmp-10):L'0'+tmp;
-                        need_escape=need_complex_escape=1;
+                        out += ((*in > 15) ? L'1' : L'0');
+                        out += tmp > 9 ? L'a' + (tmp - 10) : L'0' + tmp;
+                        need_escape = need_complex_escape = 1;
                     } else {
                         out += *in;
                     }
@@ -951,20 +945,20 @@ size_t read_unquoted_escape(const wchar_t *input, wcstring *result, bool allow_i
         case L'U':
         case L'x':
         case L'X': {
-            long long res=0;
-            size_t chars=2;
-            int base=16;
+            long long res = 0;
+            size_t chars = 2;
+            int base = 16;
             bool byte_literal = false;
             wchar_t max_val = ASCII_MAX;
 
             switch (c) {
                 case L'u': {
-                    chars=4;
+                    chars = 4;
                     max_val = UCS2_MAX;
                     break;
                 }
                 case L'U': {
-                    chars=8;
+                    chars = 8;
                     max_val = WCHAR_MAX;
 
                     // Don't exceed the largest Unicode code point - see #1107.
@@ -982,8 +976,8 @@ size_t read_unquoted_escape(const wchar_t *input, wcstring *result, bool allow_i
                     break;
                 }
                 default: {
-                    base=8;
-                    chars=3;
+                    base = 8;
+                    chars = 3;
                     // Note that in_pos currently is just after the first post-backslash character;
                     // we want to start our escape from there.
                     assert(in_pos > 0);
@@ -993,17 +987,17 @@ size_t read_unquoted_escape(const wchar_t *input, wcstring *result, bool allow_i
             }
 
             for (size_t i = 0; i < chars; i++) {
-                long d = convert_digit(input[in_pos],base);
+                long d = convert_digit(input[in_pos], base);
                 if (d < 0) {
                     break;
                 }
 
-                res=(res*base)+d;
+                res = (res * base) + d;
                 in_pos++;
             }
 
             if (res <= max_val) {
-                result_char_or_none = (wchar_t)((byte_literal ? ENCODE_DIRECT_BASE : 0)+res);
+                result_char_or_none = (wchar_t)((byte_literal ? ENCODE_DIRECT_BASE : 0) + res);
             } else {
                 errored = true;
             }
@@ -1024,9 +1018,9 @@ size_t read_unquoted_escape(const wchar_t *input, wcstring *result, bool allow_i
         case L'c': {
             const wchar_t sequence_char = input[in_pos++];
             if (sequence_char >= L'a' && sequence_char <= (L'a' + 32)) {
-                result_char_or_none = sequence_char-L'a'+1;
+                result_char_or_none = sequence_char - L'a' + 1;
             } else if (sequence_char >= L'A' && sequence_char <= (L'A' + 32)) {
-                result_char_or_none = sequence_char-L'A'+1;
+                result_char_or_none = sequence_char - L'A' + 1;
             } else {
                 errored = true;
             }
@@ -1221,8 +1215,8 @@ static bool unescape_string_internal(const wchar_t *const input, const size_t in
                         // Literal backslash that doesn't escape anything! Leave things alone; we'll
                         // append the backslash itself.
                         break;
+                    }
                 }
-            }
             } else if (c == L'\'') {
                 to_append_or_none = unescape_special ? INTERNAL_SEPARATOR : NOT_A_WCHAR;
                 mode = mode_unquoted;
@@ -1242,7 +1236,7 @@ static bool unescape_string_internal(const wchar_t *const input, const size_t in
                             } else {
                                 to_append_or_none = L'\0';
                             }
-                        break;
+                            break;
                         }
                         case '\\':
                         case L'$':
@@ -1287,7 +1281,7 @@ static bool unescape_string_internal(const wchar_t *const input, const size_t in
     if (!errored) {
         output_str->swap(result);
     }
-    return ! errored;
+    return !errored;
 }
 
 bool unescape_string_in_place(wcstring *str, unescape_flags_t escape_special) {
@@ -1352,7 +1346,7 @@ void tokenize_variable_array(const wcstring &val, std::vector<wcstring> &out) {
         }
         out.resize(out.size() + 1);
         out.back().assign(val, pos, next_pos - pos);
-        pos = next_pos + 1; //skip the separator, or skip past the end
+        pos = next_pos + 1;  // skip the separator, or skip past the end
     }
 }
 
@@ -1443,7 +1437,7 @@ string_fuzzy_match_t string_fuzzy_match_string(const wcstring &string,
         result.type = fuzzy_match_substring;
         assert(match_against.size() >= string.size());
         result.match_distance_first = match_against.size() - string.size();
-        result.match_distance_second = location; //prefer earlier matches
+        result.match_distance_second = location;  // prefer earlier matches
     } else if (limit_type >= fuzzy_match_subsequence_insertions_only &&
                subsequence_in_string(string, match_against)) {
         result.type = fuzzy_match_subsequence_insertions_only;
@@ -1454,7 +1448,7 @@ string_fuzzy_match_t string_fuzzy_match_string(const wcstring &string,
     return result;
 }
 
-template<typename T>
+template <typename T>
 static inline int compare_ints(T a, T b) {
     if (a < b) return -1;
     if (a == b) return 0;
@@ -1470,7 +1464,7 @@ int string_fuzzy_match_t::compare(const string_fuzzy_match_t &rhs) const {
     } else if (this->match_distance_second != rhs.match_distance_second) {
         return compare_ints(this->match_distance_second, rhs.match_distance_second);
     }
-    return 0; //equal
+    return 0;  // equal
 }
 
 bool list_contains_string(const wcstring_list_t &list, const wcstring &str) {
@@ -1501,12 +1495,12 @@ int create_directory(const wcstring &d) {
         }
     }
 
-    return ok?0:-1;
+    return ok ? 0 : -1;
 }
 
 __attribute__((noinline)) void bugreport() {
     debug(1, _(L"This is a bug. Break on bugreport to debug."
-            L"If you can reproduce it, please send a bug report to %s."),
+               L"If you can reproduce it, please send a bug report to %s."),
           PACKAGE_BUGREPORT);
 }
 
@@ -1525,11 +1519,11 @@ wcstring format_size(long long sz) {
 
         for (i = 0; sz_name[i]; i++) {
             if (sz < (1024 * 1024) || !sz_name[i + 1]) {
-                long isz = ((long)sz)/1024;
+                long isz = ((long)sz) / 1024;
                 if (isz > 9)
                     result.append(format_string(L"%d%ls", isz, sz_name[i]));
                 else
-                    result.append(format_string(L"%.1f%ls", (double)sz/1024, sz_name[i]));
+                    result.append(format_string(L"%.1f%ls", (double)sz / 1024, sz_name[i]));
                 break;
             }
             sz /= 1024;
@@ -1564,7 +1558,7 @@ void append_str(char *buff, const char *str, size_t *inout_idx, size_t max_len) 
 
 void format_size_safe(char buff[128], unsigned long long sz) {
     const size_t buff_size = 128;
-    const size_t max_len = buff_size - 1; //need to leave room for a null terminator
+    const size_t max_len = buff_size - 1;  // need to leave room for a null terminator
     memset(buff, 0, buff_size);
     size_t idx = 0;
     const char *const sz_name[] = {"kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB", NULL};
@@ -1576,7 +1570,7 @@ void format_size_safe(char buff[128], unsigned long long sz) {
     } else {
         for (size_t i = 0; sz_name[i]; i++) {
             if (sz < (1024 * 1024) || !sz_name[i + 1]) {
-                unsigned long long isz = sz/1024;
+                unsigned long long isz = sz / 1024;
                 if (isz > 9) {
                     append_ull(buff, isz, &idx, max_len);
                 } else {
@@ -1613,7 +1607,7 @@ double timef() {
         return nan("");
     }
 
-    return (double)tv.tv_sec + 0.000001*tv.tv_usec;
+    return (double)tv.tv_sec + 0.000001 * tv.tv_usec;
 }
 
 void exit_without_destructors(int code) { _exit(code); }
@@ -1640,7 +1634,7 @@ void append_path_component(wcstring &path, const wcstring &component) {
         path.append(component);
     } else {
         size_t path_len = path.size();
-        bool path_slash = path.at(path_len-1) == L'/';
+        bool path_slash = path.at(path_len - 1) == L'/';
         bool comp_slash = component.at(0) == L'/';
         if (!path_slash && !comp_slash) {
             // Need a slash
@@ -1655,8 +1649,8 @@ void append_path_component(wcstring &path, const wcstring &component) {
 
 extern "C" {
 __attribute__((noinline)) void debug_thread_error(void) {
-        while (1) sleep(9999999);
-    }
+    while (1) sleep(9999999);
+}
 }
 
 void set_main_thread() { main_thread_id = pthread_self(); }
@@ -1673,7 +1667,7 @@ static pid_t initial_foreground_process_group = -1;
 
 bool is_forked_child(void) {
     // Just bail if nobody's called setup_fork_guards, e.g. some of our tools.
-    if (! initial_pid) return false;
+    if (!initial_pid) return false;
 
     bool is_child_of_fork = (getpid() != initial_pid);
     if (is_child_of_fork) {
@@ -1734,7 +1728,7 @@ void assert_is_background_thread(const char *who) {
 }
 
 void assert_is_locked(void *vmutex, const char *who, const char *caller) {
-    pthread_mutex_t *mutex = static_cast<pthread_mutex_t*>(vmutex);
+    pthread_mutex_t *mutex = static_cast<pthread_mutex_t *>(vmutex);
     if (0 == pthread_mutex_trylock(mutex)) {
         fprintf(stderr,
                 "Warning: %s is not locked when it should be in '%s'. Break on debug_thread_error "
@@ -1746,15 +1740,15 @@ void assert_is_locked(void *vmutex, const char *who, const char *caller) {
 }
 
 void scoped_lock::lock(void) {
-    assert(! locked);
-    assert(! is_forked_child());
+    assert(!locked);
+    assert(!is_forked_child());
     VOMIT_ON_FAILURE_NO_ERRNO(pthread_mutex_lock(lock_obj));
     locked = true;
 }
 
 void scoped_lock::unlock(void) {
     assert(locked);
-    assert(! is_forked_child());
+    assert(!is_forked_child());
     VOMIT_ON_FAILURE_NO_ERRNO(pthread_mutex_unlock(lock_obj));
     locked = false;
 }
@@ -1770,36 +1764,36 @@ scoped_lock::~scoped_lock() {
 }
 
 void scoped_rwlock::lock(void) {
-    assert(! (locked || locked_shared));
-    assert(! is_forked_child());
+    assert(!(locked || locked_shared));
+    assert(!is_forked_child());
     VOMIT_ON_FAILURE_NO_ERRNO(pthread_rwlock_rdlock(rwlock_obj));
     locked = true;
 }
 
 void scoped_rwlock::unlock(void) {
     assert(locked);
-    assert(! is_forked_child());
+    assert(!is_forked_child());
     VOMIT_ON_FAILURE_NO_ERRNO(pthread_rwlock_unlock(rwlock_obj));
     locked = false;
 }
 
 void scoped_rwlock::lock_shared(void) {
-    assert(! (locked || locked_shared));
-    assert(! is_forked_child());
+    assert(!(locked || locked_shared));
+    assert(!is_forked_child());
     VOMIT_ON_FAILURE_NO_ERRNO(pthread_rwlock_wrlock(rwlock_obj));
     locked_shared = true;
 }
 
 void scoped_rwlock::unlock_shared(void) {
     assert(locked_shared);
-    assert(! is_forked_child());
+    assert(!is_forked_child());
     VOMIT_ON_FAILURE_NO_ERRNO(pthread_rwlock_unlock(rwlock_obj));
     locked_shared = false;
 }
 
 void scoped_rwlock::upgrade(void) {
     assert(locked_shared);
-    assert(! is_forked_child());
+    assert(!is_forked_child());
     VOMIT_ON_FAILURE_NO_ERRNO(pthread_rwlock_unlock(rwlock_obj));
     locked = false;
     VOMIT_ON_FAILURE_NO_ERRNO(pthread_rwlock_wrlock(rwlock_obj));
@@ -1872,7 +1866,7 @@ static CharType_t **make_null_terminated_array_helper(
     // Now allocate their sum.
     unsigned char *base =
         static_cast<unsigned char *>(malloc(pointers_allocation_len + strings_allocation_len));
-    if (! base) return NULL;
+    if (!base) return NULL;
 
     // Divvy it up into the pointers and strings.
     CharType_t **pointers = reinterpret_cast<CharType_t **>(base);
@@ -1894,7 +1888,7 @@ static CharType_t **make_null_terminated_array_helper(
     assert((unsigned char *)strings - base ==
            (std::ptrdiff_t)(pointers_allocation_len + strings_allocation_len));
 
-    return reinterpret_cast<CharType_t**>(base);
+    return reinterpret_cast<CharType_t **>(base);
 }
 
 wchar_t **make_null_terminated_array(const wcstring_list_t &lst) {

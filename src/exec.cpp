@@ -43,13 +43,13 @@
 #include "wutil.h"  // IWYU pragma: keep
 
 /// File descriptor redirection error message.
-#define FD_ERROR   _( L"An error occurred while redirecting file descriptor %d" )
+#define FD_ERROR _(L"An error occurred while redirecting file descriptor %d")
 
 /// File descriptor redirection error message.
-#define WRITE_ERROR   _( L"An error occurred while writing output" )
+#define WRITE_ERROR _(L"An error occurred while writing output")
 
 /// File redirection error message.
-#define FILE_ERROR _( L"An error occurred while redirecting file '%s'" )
+#define FILE_ERROR _(L"An error occurred while redirecting file '%s'")
 
 /// Base open mode to pass to calls to open.
 #define OPEN_MASK 0666
@@ -93,7 +93,7 @@ int exec_pipe(int fd[2]) {
     }
 
     debug(4, L"Created pipe using fds %d and %d", fd[0], fd[1]);
-    
+
     // Pipes ought to be cloexec. Pipes are dup2'd the corresponding fds; the resulting fds are not
     // cloexec.
     set_cloexec(fd[0]);
@@ -160,11 +160,11 @@ char *get_interpreter(const char *command, char *interpreter, size_t buff_size) 
 static void safe_launch_process(process_t *p, const char *actual_cmd, const char *const *cargv,
                                 const char *const *cenvv) {
     int err;
-//  debug( 1, L"exec '%ls'", p->argv[0] );
+    //  debug( 1, L"exec '%ls'", p->argv[0] );
 
     // This function never returns, so we take certain liberties with constness.
-    char * const * envv = const_cast<char* const *>(cenvv);
-    char * const * argv = const_cast<char* const *>(cargv);
+    char *const *envv = const_cast<char *const *>(cenvv);
+    char *const *argv = const_cast<char *const *>(cargv);
 
     execve(actual_cmd, argv, envv);
 
@@ -188,7 +188,7 @@ static void safe_launch_process(process_t *p, const char *actual_cmd, const char
             char *argv2[128];
             argv2[0] = sh_command;
             for (size_t i = 1; i < sizeof argv2 / sizeof *argv2; i++) {
-                argv2[i] = argv[i-1];
+                argv2[i] = argv[i - 1];
                 if (argv2[i] == NULL) break;
             }
 
@@ -254,7 +254,7 @@ static bool io_transmogrify(const io_chain_t &in_chain, io_chain_t *out_chain,
 
     for (size_t idx = 0; idx < in_chain.size(); idx++) {
         const shared_ptr<io_data_t> &in = in_chain.at(idx);
-        shared_ptr<io_data_t> out; //gets allocated via new
+        shared_ptr<io_data_t> out;  // gets allocated via new
 
         switch (in->io_mode) {
             default:
@@ -385,7 +385,7 @@ void exec_job(parser_t &parser, job_t *j) {
     bool needs_keepalive = false;
     process_t keepalive;
 
-    CHECK(j,);
+    CHECK(j, );
     CHECK_BLOCK();
 
     // If fish was invoked with -n or --no-execute, then no_exec will be set and we do nothing.
@@ -407,7 +407,7 @@ void exec_job(parser_t &parser, job_t *j) {
 
         if ((io->io_mode == IO_BUFFER)) {
             CAST_INIT(io_buffer_t *, io_buffer, io.get());
-            assert(! io_buffer->is_input);
+            assert(!io_buffer->is_input);
         }
     }
 
@@ -440,12 +440,12 @@ void exec_job(parser_t &parser, job_t *j) {
             launch_process_nofork(j->first_process);
         } else {
             job_set_flag(j, JOB_CONSTRUCTED, 1);
-            j->first_process->completed=1;
+            j->first_process->completed = 1;
             return;
         }
         assert(0 && "This should be unreachable");
     }
-    
+
     // We may have block IOs that conflict with fd redirections. For example, we may have a command
     // with a redireciton like <&3; we may also have chosen 3 as the fd for our pipe. Ensure we have
     // no conflicts.
@@ -461,7 +461,7 @@ void exec_job(parser_t &parser, job_t *j) {
             }
         }
     }
-    
+
     signal_block();
 
     // See if we need to create a group keepalive process. This is a process that we create to make
@@ -588,7 +588,7 @@ void exec_job(parser_t &parser, job_t *j) {
 
         // Set up fds that will be used in the pipe.
         if (pipes_to_next_command) {
-//      debug( 1, L"%ls|%ls" , p->argv[0], p->next->argv[0]);
+            //      debug( 1, L"%ls|%ls" , p->argv[0], p->next->argv[0]);
             int local_pipe[2] = {-1, -1};
             if (exec_pipe(local_pipe) == -1) {
                 debug(1, PIPE_ERROR);
@@ -611,7 +611,7 @@ void exec_job(parser_t &parser, job_t *j) {
             // This tells the redirection about the fds, but the redirection does not close them.
             assert(local_pipe[0] >= 0);
             assert(local_pipe[1] >= 0);
-            memcpy(pipe_write->pipe_fd, local_pipe, sizeof(int)*2);
+            memcpy(pipe_write->pipe_fd, local_pipe, sizeof(int) * 2);
 
             // Record our pipes. The fds should be negative to indicate that we aren't overwriting
             // an fd we failed to close.
@@ -625,10 +625,10 @@ void exec_job(parser_t &parser, job_t *j) {
         // This is the IO buffer we use for storing the output of a block or function when it is in
         // a pipeline.
         shared_ptr<io_buffer_t> block_output_io_buffer;
-        
+
         // This is the io_streams we pass to internal builtins.
         std::auto_ptr<io_streams_t> builtin_io_streams;
-        
+
         switch (p->type) {
             case INTERNAL_FUNCTION: {
                 // Calls to function_get_definition might need to source a file as a part of
@@ -760,12 +760,12 @@ void exec_job(parser_t &parser, job_t *j) {
                                 break;
                             }
                             default: {
-                                local_builtin_stdin=-1;
+                                local_builtin_stdin = -1;
                                 debug(1, _(L"Unknown input redirection type %d"), in->io_mode);
                                 break;
                             }
+                        }
                     }
-                }
                 } else {
                     local_builtin_stdin = pipe_read->pipe_fd[0];
                 }
@@ -786,7 +786,7 @@ void exec_job(parser_t &parser, job_t *j) {
                             io_chain_get(p->io_chain(), STDIN_FILENO);
                         stdin_is_directly_redirected = stdin_io && stdin_io->io_mode != IO_CLOSE;
                     }
-                    
+
                     builtin_io_streams.reset(new io_streams_t());
                     builtin_io_streams->stdin_fd = local_builtin_stdin;
                     builtin_io_streams->out_is_redirected =
@@ -808,7 +808,7 @@ void exec_job(parser_t &parser, job_t *j) {
                     job_set_flag(j, JOB_FOREGROUND, 0);
 
                     signal_unblock();
-                    
+
                     p->status = builtin_run(parser, p->get_argv(), *builtin_io_streams);
 
                     signal_block();
@@ -853,7 +853,7 @@ void exec_job(parser_t &parser, job_t *j) {
                     // No buffer, so we exit directly. This means we have to manually set the exit
                     // status.
                     if (p->next == NULL) {
-                        proc_set_last_status(job_get_flag(j, JOB_NEGATE)?(!status):status);
+                        proc_set_last_status(job_get_flag(j, JOB_NEGATE) ? (!status) : status);
                     }
                     p->completed = 1;
                     break;
@@ -890,7 +890,7 @@ void exec_job(parser_t &parser, job_t *j) {
 
                 } else {
                     if (p->next == 0) {
-                        proc_set_last_status(job_get_flag(j, JOB_NEGATE)?(!status):status);
+                        proc_set_last_status(job_get_flag(j, JOB_NEGATE) ? (!status) : status);
                     }
                     p->completed = 1;
                 }
@@ -910,7 +910,7 @@ void exec_job(parser_t &parser, job_t *j) {
                     process_net_io_chain.get_io_for_fd(STDOUT_FILENO);
                 const shared_ptr<io_data_t> stderr_io =
                     process_net_io_chain.get_io_for_fd(STDERR_FILENO);
-                
+
                 assert(builtin_io_streams.get() != NULL);
                 const wcstring &stdout_buffer = builtin_io_streams->out.buffer();
                 const wcstring &stderr_buffer = builtin_io_streams->err.buffer();
@@ -923,8 +923,8 @@ void exec_job(parser_t &parser, job_t *j) {
                     if (p->next == NULL) {
                         const bool stdout_is_to_buffer =
                             stdout_io && stdout_io->io_mode == IO_BUFFER;
-                        const bool no_stdout_output =  stdout_buffer.empty();
-                        const bool no_stderr_output =  stderr_buffer.empty();
+                        const bool no_stdout_output = stdout_buffer.empty();
+                        const bool no_stderr_output = stderr_buffer.empty();
 
                         if (no_stdout_output && no_stderr_output) {
                             // The builtin produced no output and is not inside of a pipeline. No
@@ -972,13 +972,13 @@ void exec_job(parser_t &parser, job_t *j) {
                 }
 
                 if (fork_was_skipped) {
-                    p->completed=1;
+                    p->completed = 1;
                     if (p->next == 0) {
                         debug(3, L"Set status of %ls to %d using short circuit", j->command_wcstr(),
                               p->status);
 
                         int status = p->status;
-                        proc_set_last_status(job_get_flag(j, JOB_NEGATE)?(!status):status);
+                        proc_set_last_status(job_get_flag(j, JOB_NEGATE) ? (!status) : status);
                     }
                 } else {
                     // Ok, unfortunately, we have to do a real fork. Bummer. We work hard to make
@@ -1033,12 +1033,12 @@ void exec_job(parser_t &parser, job_t *j) {
                 // (/dev/tty?).
                 make_fd_blocking(STDIN_FILENO);
 
-                const char * const *argv = argv_array.get();
-                const char * const *envv = env_export_arr(false);
+                const char *const *argv = argv_array.get();
+                const char *const *envv = env_export_arr(false);
 
                 std::string actual_cmd_str = wcs2string(p->actual_cmd);
                 const char *actual_cmd = actual_cmd_str.c_str();
-                
+
                 const wchar_t *reader_current_filename(void);
                 if (g_log_forks) {
                     const wchar_t *file = reader_current_filename();
@@ -1064,7 +1064,7 @@ void exec_job(parser_t &parser, job_t *j) {
 
                         // This usleep can be used to test for various race conditions
                         // (https://github.com/fish-shell/fish-shell/issues/360).
-                        //usleep(10000);
+                        // usleep(10000);
 
                         if (spawn_ret != 0) {
                             safe_report_exec_error(spawn_ret, actual_cmd, argv, envv);
@@ -1163,19 +1163,19 @@ static int exec_subshell_internal(const wcstring &cmd, wcstring_list_t *lst,
     ASSERT_IS_MAIN_THREAD();
     int prev_subshell = is_subshell;
     const int prev_status = proc_get_last_status();
-    bool split_output=false;
+    bool split_output = false;
 
-    //fprintf(stderr, "subcmd %ls\n", cmd.c_str());
+    // fprintf(stderr, "subcmd %ls\n", cmd.c_str());
 
     const env_var_t ifs = env_get_string(L"IFS");
-    
+
     if (!ifs.missing_or_empty()) {
-        split_output=true;
+        split_output = true;
     }
 
-    is_subshell=1;
+    is_subshell = 1;
 
-    int subcommand_status = -1; //assume the worst
+    int subcommand_status = -1;  // assume the worst
 
     // IO buffer creation may fail (e.g. if we have too many open files to make a pipe), so this may
     // be null.

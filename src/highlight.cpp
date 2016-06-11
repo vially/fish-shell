@@ -36,7 +36,7 @@
 #define CURSOR_POSITION_INVALID ((size_t)(-1))
 
 /// Number of elements in the highlight_var array.
-#define VAR_COUNT ( sizeof(highlight_var)/sizeof(wchar_t *) )
+#define VAR_COUNT (sizeof(highlight_var) / sizeof(wchar_t *))
 
 /// The environment variables used to specify the color of different tokens. This matches the order
 /// in highlight_spec_t.
@@ -140,7 +140,7 @@ bool is_potential_path(const wcstring &potential_path_fragment, const wcstring_l
             checked_paths.insert(abs_path);
 
             // If we end with a slash, then it must be a directory.
-            bool must_be_full_dir = abs_path.at(abs_path.size()-1) == L'/';
+            bool must_be_full_dir = abs_path.at(abs_path.size() - 1) == L'/';
             if (must_be_full_dir) {
                 struct stat buf;
                 if (0 == wstat(abs_path, &buf) && S_ISDIR(buf.st_mode)) {
@@ -158,9 +158,9 @@ bool is_potential_path(const wcstring &potential_path_fragment, const wcstring_l
                     // Check if we're case insensitive.
                     const bool do_case_insensitive =
                         fs_is_case_insensitive(dir_name, dirfd(dir), case_sensitivity_cache);
-                    
+
                     wcstring matched_file;
-                    
+
                     // We opened the dir_name; look for a string where the base name prefixes it
                     // Don't ask for the is_dir value unless we care, because it can cause extra
                     // filesystem access.
@@ -171,7 +171,7 @@ bool is_potential_path(const wcstring &potential_path_fragment, const wcstring_l
                         if (require_dir && !is_dir) {
                             continue;
                         }
-                        
+
                         if (string_prefixes_string(filename_fragment, ent) ||
                             (do_case_insensitive &&
                              string_prefixes_string_case_insensitive(filename_fragment, ent))) {
@@ -183,7 +183,7 @@ bool is_potential_path(const wcstring &potential_path_fragment, const wcstring_l
                     closedir(dir);
 
                     // We succeeded if we found a match.
-                    result = ! matched_file.empty();
+                    result = !matched_file.empty();
                 }
             }
         }
@@ -254,7 +254,7 @@ rgb_color_t highlight_get_color(highlight_spec_t highlight, bool is_background) 
 
     env_var_t val_wstr = env_get_string(highlight_var[idx]);
 
-//  debug( 1, L"%d -> %d -> %ls", highlight, idx, val );
+    //  debug( 1, L"%d -> %d -> %ls", highlight, idx, val );
 
     if (val_wstr.missing()) val_wstr = env_get_string(highlight_var[0]);
 
@@ -262,7 +262,7 @@ rgb_color_t highlight_get_color(highlight_spec_t highlight, bool is_background) 
 
     // Handle modifiers.
     if (highlight & highlight_modifier_valid_path) {
-        env_var_t val2_wstr =  env_get_string(L"fish_color_valid_path");
+        env_var_t val2_wstr = env_get_string(L"fish_color_valid_path");
         const wcstring val2 = val2_wstr.missing() ? L"" : val2_wstr.c_str();
 
         rgb_color_t result2 = parse_color(val2, is_background);
@@ -377,7 +377,7 @@ bool autosuggest_validate_from_history(const history_item_t &item,
         if (cmd_ok) {
             const path_list_t &paths = item.get_required_paths();
             if (paths.empty()) {
-                suggestionOK= true;
+                suggestionOK = true;
             } else {
                 suggestionOK = detector.paths_are_valid(paths);
             }
@@ -448,14 +448,14 @@ static void color_argument_internal(const wcstring &buffstr,
     const size_t buff_len = buffstr.size();
     std::fill(colors, colors + buff_len, (highlight_spec_t)highlight_spec_param);
 
-    enum {e_unquoted, e_single_quoted, e_double_quoted} mode = e_unquoted;
-    int bracket_count=0;
+    enum { e_unquoted, e_single_quoted, e_double_quoted } mode = e_unquoted;
+    int bracket_count = 0;
     for (size_t in_pos = 0; in_pos < buff_len; in_pos++) {
         const wchar_t c = buffstr.at(in_pos);
         switch (mode) {
             case e_unquoted: {
                 if (c == L'\\') {
-                    int fill_color = highlight_spec_escape; //may be set to highlight_error
+                    int fill_color = highlight_spec_escape;  // may be set to highlight_error
                     const size_t backslash_pos = in_pos;
                     size_t fill_end = backslash_pos;
 
@@ -480,20 +480,20 @@ static void color_argument_internal(const wcstring &buffstr,
                         // Like \ci. So highlight three characters.
                         fill_end = in_pos + 1;
                     } else if (wcschr(L"uUxX01234567", escaped_char)) {
-                        long long res=0;
-                        int chars=2;
-                        int base=16;
+                        long long res = 0;
+                        int chars = 2;
+                        int base = 16;
                         wchar_t max_val = ASCII_MAX;
 
                         switch (escaped_char) {
                             case L'u': {
-                                chars=4;
+                                chars = 4;
                                 max_val = UCS2_MAX;
                                 in_pos++;
                                 break;
                             }
                             case L'U': {
-                                chars=8;
+                                chars = 8;
                                 max_val = WCHAR_MAX;
                                 in_pos++;
                                 break;
@@ -509,8 +509,8 @@ static void color_argument_internal(const wcstring &buffstr,
                             }
                             default: {
                                 // a digit like \12
-                                base=8;
-                                chars=3;
+                                base = 8;
+                                chars = 3;
                                 break;
                             }
                         }
@@ -599,9 +599,9 @@ static void color_argument_internal(const wcstring &buffstr,
                     if (in_pos + 1 < buff_len) {
                         const wchar_t escaped_char = buffstr.at(in_pos + 1);
                         if (escaped_char == L'\\' || escaped_char == L'\'') {
-                            colors[in_pos] = highlight_spec_escape; //backslash
-                            colors[in_pos + 1] = highlight_spec_escape; //escaped char
-                            in_pos += 1; //skip over backslash
+                            colors[in_pos] = highlight_spec_escape;      // backslash
+                            colors[in_pos + 1] = highlight_spec_escape;  // escaped char
+                            in_pos += 1;                                 // skip over backslash
                         }
                     }
                 } else if (c == L'\'') {
@@ -626,9 +626,9 @@ static void color_argument_internal(const wcstring &buffstr,
                         if (in_pos + 1 < buff_len) {
                             const wchar_t escaped_char = buffstr.at(in_pos + 1);
                             if (wcschr(L"\\\"\n$", escaped_char)) {
-                                colors[in_pos] = highlight_spec_escape; //backslash
-                                colors[in_pos + 1] = highlight_spec_escape; //escaped char
-                                in_pos += 1; //skip over backslash
+                                colors[in_pos] = highlight_spec_escape;      // backslash
+                                colors[in_pos + 1] = highlight_spec_escape;  // escaped char
+                                in_pos += 1;                                 // skip over backslash
                             }
                         }
                         break;
@@ -678,11 +678,11 @@ class highlighter_t {
                         highlight_spec_t color);
     // Colors the source range of a node with a given color.
     void color_node(const parse_node_t &node, highlight_spec_t color);
-    
+
     /* Color via docopt */
     void apply_docopt_coloring(const parse_node_t &plain_statement);
 
-public:
+   public:
     // Constructor
     highlighter_t(const wcstring &str, size_t pos, const env_vars_snapshot_t &ev,
                   const wcstring &wd, bool can_do_io)
@@ -890,14 +890,14 @@ void highlighter_t::color_redirection(const parse_node_t &redirection_node) {
                         // fd is at least zero and there was no overflow.
                         target_is_valid =
                             (iswdigit(target_cstr[0]) && *end == L'\0' && fd >= 0 && fd < INT_MAX);
-                    break;
+                        break;
                     }
                     case TOK_REDIRECT_IN: {
                         // Input redirections must have a readable non-directory.
                         struct stat buf = {};
                         target_is_valid = !waccess(target_path, R_OK) &&
                                           !wstat(target_path, &buf) && !S_ISDIR(buf.st_mode);
-                    break;
+                        break;
                     }
                     case TOK_REDIRECT_OUT:
                     case TOK_REDIRECT_APPEND:
@@ -921,7 +921,7 @@ void highlighter_t::color_redirection(const parse_node_t &redirection_node) {
                             // No err. We can write to it if it's not a directory and we have
                             // permission.
                             file_exists = true;
-                            file_is_writable = ! S_ISDIR(buf.st_mode) && ! waccess(target_path, W_OK);
+                            file_is_writable = !S_ISDIR(buf.st_mode) && !waccess(target_path, W_OK);
                         } else if (err == ENOENT) {
                             // File does not exist. Check if its parent directory is writable.
                             wcstring parent = wdirname(target_path);
@@ -945,15 +945,15 @@ void highlighter_t::color_redirection(const parse_node_t &redirection_node) {
                         // NOCLOB means that we must not overwrite files that exist.
                         target_is_valid = file_is_writable &&
                                           !(file_exists && redirect_type == TOK_REDIRECT_NOCLOB);
-                    break;
+                        break;
                     }
                     default: {
                         // We should not get here, since the node was marked as a redirection, but
                         // treat it as an error for paranoia.
                         target_is_valid = false;
                         break;
+                    }
                 }
-            }
             }
 
             if (redirection_target != NULL) {
@@ -1021,7 +1021,7 @@ static bool command_is_valid(const wcstring &cmd, enum parse_statement_decoratio
     if (!is_valid && command_ok) is_valid = path_get_path(cmd, NULL, vars);
 
     // Implicit cd
-    if (! is_valid && implicit_cd_ok)
+    if (!is_valid && implicit_cd_ok)
         is_valid = path_can_be_implicit_cd(cmd, NULL, working_directory.c_str(), vars);
 
     // Return what we got.
@@ -1052,7 +1052,7 @@ const highlighter_t::color_array_t &highlighter_t::highlight() {
         const parse_node_t &node = *iter;
 
         switch (node.type) {
-                // Color direct string descendants, e.g. 'for' and 'in'.
+            // Color direct string descendants, e.g. 'for' and 'in'.
             case symbol_while_header:
             case symbol_begin_header:
             case symbol_function_header:
@@ -1063,7 +1063,7 @@ const highlighter_t::color_array_t &highlighter_t::highlight() {
             case symbol_decorated_statement:
             case symbol_if_statement: {
                 this->color_children(node, parse_token_type_string, highlight_spec_command);
-            break;
+                break;
             }
             case symbol_switch_statement: {
                 const parse_node_t *literal_switch =
@@ -1072,7 +1072,7 @@ const highlighter_t::color_array_t &highlighter_t::highlight() {
                     this->parse_tree.get_child(node, 1, symbol_argument);
                 this->color_node(*literal_switch, highlight_spec_command);
                 this->color_node(*switch_arg, highlight_spec_param);
-            break;
+                break;
             }
             case symbol_for_header: {
                 // Color the 'for' and 'in' as commands.
@@ -1087,14 +1087,14 @@ const highlighter_t::color_array_t &highlighter_t::highlight() {
                 const parse_node_t *var_name_node =
                     this->parse_tree.get_child(node, 1, parse_token_type_string);
                 this->color_argument(*var_name_node);
-            break;
+                break;
             }
             case parse_token_type_pipe:
             case parse_token_type_background:
             case parse_token_type_end:
             case symbol_optional_background: {
                 this->color_node(node, highlight_spec_statement_terminator);
-            break;
+                break;
             }
             case symbol_plain_statement: {
                 // Get the decoration from the parent.
@@ -1123,8 +1123,8 @@ const highlighter_t::color_array_t &highlighter_t::highlight() {
                     }
                     this->color_node(*cmd_node,
                                      is_valid_cmd ? highlight_spec_command : highlight_spec_error);
-            }
-            break;
+                }
+                break;
             }
             case symbol_arguments_or_redirections_list:
             case symbol_argument_list: {
@@ -1133,7 +1133,7 @@ const highlighter_t::color_array_t &highlighter_t::highlight() {
                     this->color_arguments(node);
                     this->color_redirections(node);
                 }
-            break;
+                break;
             }
             case symbol_end_command: {
                 this->color_node(node, highlight_spec_command);
@@ -1151,23 +1151,20 @@ const highlighter_t::color_array_t &highlighter_t::highlight() {
             default: { break; }
         }
     }
-    
+
     /* Apply docopt color */
-    for (parse_node_tree_t::const_iterator iter = parse_tree.begin(); iter != parse_tree.end(); ++iter)
-    {
+    for (parse_node_tree_t::const_iterator iter = parse_tree.begin(); iter != parse_tree.end();
+         ++iter) {
         const parse_node_t &node = *iter;
-        if (node.type == symbol_plain_statement)
-        {
+        if (node.type == symbol_plain_statement) {
             this->apply_docopt_coloring(node);
         }
     }
 
-
-    if (this->io_ok && this->cursor_pos <= this->buff.size())
-    {
+    if (this->io_ok && this->cursor_pos <= this->buff.size()) {
         /* If the cursor is over an argument, and that argument is a valid path, underline it */
-        for (parse_node_tree_t::const_iterator iter = parse_tree.begin(); iter != parse_tree.end(); ++iter)
-        {
+        for (parse_node_tree_t::const_iterator iter = parse_tree.begin(); iter != parse_tree.end();
+             ++iter) {
             const parse_node_t &node = *iter;
 
             // Must be an argument with source.
@@ -1198,39 +1195,37 @@ const highlighter_t::color_array_t &highlighter_t::highlight() {
     return color_array;
 }
 
-void highlighter_t::apply_docopt_coloring(const parse_node_t &statement_node)
-{
+void highlighter_t::apply_docopt_coloring(const parse_node_t &statement_node) {
     assert(statement_node.type == symbol_plain_statement);
     wcstring_list_t argv;
-    
+
     // Program name
-    const parse_node_t *name = this->parse_tree.get_child(statement_node, 0, parse_token_type_string);
+    const parse_node_t *name =
+        this->parse_tree.get_child(statement_node, 0, parse_token_type_string);
     assert(name != NULL);
     argv.push_back(name->get_source(this->buff));
-    
+
     // All arguments
-    const parse_node_tree_t::parse_node_list_t args = this->parse_tree.find_nodes(statement_node, symbol_argument);
-    for (size_t i=0; i < args.size(); i++) {
+    const parse_node_tree_t::parse_node_list_t args =
+        this->parse_tree.find_nodes(statement_node, symbol_argument);
+    for (size_t i = 0; i < args.size(); i++) {
         const parse_node_t *arg = args.at(i);
         wcstring arg_src = arg->get_source(this->buff);
-        if (unescape_string_in_place(&arg_src, UNESCAPE_DEFAULT))
-        {
+        if (unescape_string_in_place(&arg_src, UNESCAPE_DEFAULT)) {
             argv.push_back(arg_src);
-        }
-        else
-        {
+        } else {
             this->color_node(*arg, highlight_spec_error);
         }
     }
-    
+
     docopt_registration_set_t regs = docopt_get_registrations(argv.at(0));
-    const std::vector<docopt_argument_status_t> statuses = regs.validate_arguments(argv, flag_match_allow_incomplete);
-    if (! statuses.empty())
-    {
+    const std::vector<docopt_argument_status_t> statuses =
+        regs.validate_arguments(argv, flag_match_allow_incomplete);
+    if (!statuses.empty()) {
         /* Apply these to the nodes. Ignore the program name. */
         assert(statuses.size() == argv.size());
         assert(statuses.size() == args.size() + 1);
-        for (size_t i=1; i < statuses.size(); i++) {
+        for (size_t i = 1; i < statuses.size(); i++) {
             const parse_node_t *arg = args.at(i - 1);
             if (statuses.at(i) == status_invalid) {
                 this->color_node(*arg, highlight_spec_error);
@@ -1269,11 +1264,11 @@ static void highlight_universal_internal(const wcstring &buffstr,
         // Highlight matching quotes.
         if ((buffstr.at(pos) == L'\'') || (buffstr.at(pos) == L'\"')) {
             std::vector<size_t> lst;
-            int level=0;
-            wchar_t prev_q=0;
-            const wchar_t * const buff = buffstr.c_str();
+            int level = 0;
+            wchar_t prev_q = 0;
+            const wchar_t *const buff = buffstr.c_str();
             const wchar_t *str = buff;
-            int match_found=0;
+            int match_found = 0;
 
             while (*str) {
                 switch (*str) {
@@ -1285,7 +1280,7 @@ static void highlight_universal_internal(const wcstring &buffstr,
                     case L'\'': {
                         if (level == 0) {
                             level++;
-                            lst.push_back(str-buff);
+                            lst.push_back(str - buff);
                             prev_q = *str;
                         } else {
                             if (prev_q == *str) {
@@ -1293,7 +1288,7 @@ static void highlight_universal_internal(const wcstring &buffstr,
 
                                 level--;
                                 pos1 = lst.back();
-                                pos2 = str-buff;
+                                pos2 = str - buff;
                                 if (pos1 == pos || pos2 == pos) {
                                     color.at(pos1) |=
                                         highlight_make_background(highlight_spec_match);
@@ -1301,15 +1296,15 @@ static void highlight_universal_internal(const wcstring &buffstr,
                                         highlight_make_background(highlight_spec_match);
                                     match_found = 1;
                                 }
-                                prev_q = *str==L'\"'?L'\'':L'\"';
+                                prev_q = *str == L'\"' ? L'\'' : L'\"';
                             } else {
                                 level++;
-                                lst.push_back(str-buff);
+                                lst.push_back(str - buff);
                                 prev_q = *str;
                             }
                         }
                         break;
-                }
+                    }
                 }
                 if ((*str == L'\0')) break;
                 str++;
@@ -1321,20 +1316,20 @@ static void highlight_universal_internal(const wcstring &buffstr,
         // Highlight matching parenthesis.
         const wchar_t c = buffstr.at(pos);
         if (wcschr(L"()[]{}", c)) {
-            int step = wcschr(L"({[", c)?1:-1;
+            int step = wcschr(L"({[", c) ? 1 : -1;
             wchar_t dec_char = *(wcschr(L"()[]{}", c) + step);
             wchar_t inc_char = c;
             int level = 0;
-            int match_found=0;
+            int match_found = 0;
             for (long i = pos; i >= 0 && (size_t)i < buffstr.size(); i += step) {
                 const wchar_t test_char = buffstr.at(i);
                 if (test_char == inc_char) level++;
                 if (test_char == dec_char) level--;
                 if (level == 0) {
                     long pos2 = i;
-                    color.at(pos)|=highlight_spec_match<<16;
-                    color.at(pos2)|=highlight_spec_match<<16;
-                    match_found=1;
+                    color.at(pos) |= highlight_spec_match << 16;
+                    color.at(pos2) |= highlight_spec_match << 16;
+                    match_found = 1;
                     break;
                 }
             }

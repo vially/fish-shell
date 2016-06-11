@@ -69,57 +69,57 @@ struct terminfo_mapping_t {
 
 /// Names of all the input functions supported.
 static const wchar_t *const name_arr[] = {L"beginning-of-line",
-    L"end-of-line",
-    L"forward-char",
-    L"backward-char",
-    L"forward-word",
-    L"backward-word",
-    L"forward-bigword",
-    L"backward-bigword",
-    L"history-search-backward",
-    L"history-search-forward",
-    L"delete-char",
-    L"backward-delete-char",
-    L"kill-line",
-    L"yank",
-    L"yank-pop",
-    L"complete",
-    L"complete-and-search",
-    L"beginning-of-history",
-    L"end-of-history",
-    L"backward-kill-line",
-    L"kill-whole-line",
-    L"kill-word",
-    L"kill-bigword",
-    L"backward-kill-word",
-    L"backward-kill-path-component",
-    L"backward-kill-bigword",
-    L"history-token-search-backward",
-    L"history-token-search-forward",
-    L"self-insert",
-    L"transpose-chars",
-    L"transpose-words",
-    L"upcase-word",
-    L"downcase-word",
-    L"capitalize-word",
-    L"vi-arg-digit",
-    L"vi-delete-to",
-    L"execute",
-    L"beginning-of-buffer",
-    L"end-of-buffer",
-    L"repaint",
-    L"force-repaint",
-    L"up-line",
-    L"down-line",
-    L"suppress-autosuggestion",
-    L"accept-autosuggestion",
-    L"begin-selection",
-    L"swap-selection-start-stop",
-    L"end-selection",
-    L"kill-selection",
-    L"forward-jump",
-    L"backward-jump",
-    L"and",
+                                          L"end-of-line",
+                                          L"forward-char",
+                                          L"backward-char",
+                                          L"forward-word",
+                                          L"backward-word",
+                                          L"forward-bigword",
+                                          L"backward-bigword",
+                                          L"history-search-backward",
+                                          L"history-search-forward",
+                                          L"delete-char",
+                                          L"backward-delete-char",
+                                          L"kill-line",
+                                          L"yank",
+                                          L"yank-pop",
+                                          L"complete",
+                                          L"complete-and-search",
+                                          L"beginning-of-history",
+                                          L"end-of-history",
+                                          L"backward-kill-line",
+                                          L"kill-whole-line",
+                                          L"kill-word",
+                                          L"kill-bigword",
+                                          L"backward-kill-word",
+                                          L"backward-kill-path-component",
+                                          L"backward-kill-bigword",
+                                          L"history-token-search-backward",
+                                          L"history-token-search-forward",
+                                          L"self-insert",
+                                          L"transpose-chars",
+                                          L"transpose-words",
+                                          L"upcase-word",
+                                          L"downcase-word",
+                                          L"capitalize-word",
+                                          L"vi-arg-digit",
+                                          L"vi-delete-to",
+                                          L"execute",
+                                          L"beginning-of-buffer",
+                                          L"end-of-buffer",
+                                          L"repaint",
+                                          L"force-repaint",
+                                          L"up-line",
+                                          L"down-line",
+                                          L"suppress-autosuggestion",
+                                          L"accept-autosuggestion",
+                                          L"begin-selection",
+                                          L"swap-selection-start-stop",
+                                          L"end-selection",
+                                          L"kill-selection",
+                                          L"forward-jump",
+                                          L"backward-jump",
+                                          L"and",
                                           L"cancel"};
 
 wcstring describe_char(wint_t c) {
@@ -133,90 +133,90 @@ wcstring describe_char(wint_t c) {
 
 /// Description of each supported input function.
 static const wchar_t *desc_arr[] = {
-  L"Move to beginning of line",
-  L"Move to end of line",
-  L"Move forward one character",
-  L"Move backward one character",
-  L"Move forward one word",
-  L"Move backward one word",
-  L"Search backward through list of previous commands",
-  L"Search forward through list of previous commands",
-  L"Delete one character forward",
-  L"Delete one character backward",
-  L"Move contents from cursor to end of line to killring",
-  L"Paste contents of killring",
-  L"Rotate to previous killring entry",
-  L"Guess the rest of the next input token",
-  L"Move to first item of history",
-  L"Move to last item of history",
-  L"Clear current line",
-  L"Move contents from beginning of line to cursor to killring",
-  L"Move entire line to killring",
-  L"Move next word to killring",
-  L"Move previous word to killring",
-  L"Write out key bindings",
-  L"Clear entire screen",
-  L"Quit the running program",
-  L"Search backward through list of previous commands for matching token",
-  L"Search forward through list of previous commands for matching token",
-  L"Insert the pressed key",
-  L"Do nothing",
-  L"End of file",
+    L"Move to beginning of line",
+    L"Move to end of line",
+    L"Move forward one character",
+    L"Move backward one character",
+    L"Move forward one word",
+    L"Move backward one word",
+    L"Search backward through list of previous commands",
+    L"Search forward through list of previous commands",
+    L"Delete one character forward",
+    L"Delete one character backward",
+    L"Move contents from cursor to end of line to killring",
+    L"Paste contents of killring",
+    L"Rotate to previous killring entry",
+    L"Guess the rest of the next input token",
+    L"Move to first item of history",
+    L"Move to last item of history",
+    L"Clear current line",
+    L"Move contents from beginning of line to cursor to killring",
+    L"Move entire line to killring",
+    L"Move next word to killring",
+    L"Move previous word to killring",
+    L"Write out key bindings",
+    L"Clear entire screen",
+    L"Quit the running program",
+    L"Search backward through list of previous commands for matching token",
+    L"Search forward through list of previous commands for matching token",
+    L"Insert the pressed key",
+    L"Do nothing",
+    L"End of file",
     L"Repeat command"};
 
 /// Internal code for each supported input function.
 static const wchar_t code_arr[] = {R_BEGINNING_OF_LINE,
-    R_END_OF_LINE,
-    R_FORWARD_CHAR,
-    R_BACKWARD_CHAR,
-    R_FORWARD_WORD,
-    R_BACKWARD_WORD,
-    R_FORWARD_BIGWORD,
-    R_BACKWARD_BIGWORD,
-    R_HISTORY_SEARCH_BACKWARD,
-    R_HISTORY_SEARCH_FORWARD,
-    R_DELETE_CHAR,
-    R_BACKWARD_DELETE_CHAR,
-    R_KILL_LINE,
-    R_YANK,
-    R_YANK_POP,
-    R_COMPLETE,
-    R_COMPLETE_AND_SEARCH,
-    R_BEGINNING_OF_HISTORY,
-    R_END_OF_HISTORY,
-    R_BACKWARD_KILL_LINE,
-    R_KILL_WHOLE_LINE,
-    R_KILL_WORD,
-    R_KILL_BIGWORD,
-    R_BACKWARD_KILL_WORD,
-    R_BACKWARD_KILL_PATH_COMPONENT,
-    R_BACKWARD_KILL_BIGWORD,
-    R_HISTORY_TOKEN_SEARCH_BACKWARD,
-    R_HISTORY_TOKEN_SEARCH_FORWARD,
-    R_SELF_INSERT,
-    R_TRANSPOSE_CHARS,
-    R_TRANSPOSE_WORDS,
-    R_UPCASE_WORD,
-    R_DOWNCASE_WORD,
-    R_CAPITALIZE_WORD,
-    R_VI_ARG_DIGIT,
-    R_VI_DELETE_TO,
-    R_EXECUTE,
-    R_BEGINNING_OF_BUFFER,
-    R_END_OF_BUFFER,
-    R_REPAINT,
-    R_FORCE_REPAINT,
-    R_UP_LINE,
-    R_DOWN_LINE,
-    R_SUPPRESS_AUTOSUGGESTION,
-    R_ACCEPT_AUTOSUGGESTION,
-    R_BEGIN_SELECTION,
-    R_SWAP_SELECTION_START_STOP,
-    R_END_SELECTION,
-    R_KILL_SELECTION,
-    R_FORWARD_JUMP,
-    R_BACKWARD_JUMP,
-    R_AND,
+                                   R_END_OF_LINE,
+                                   R_FORWARD_CHAR,
+                                   R_BACKWARD_CHAR,
+                                   R_FORWARD_WORD,
+                                   R_BACKWARD_WORD,
+                                   R_FORWARD_BIGWORD,
+                                   R_BACKWARD_BIGWORD,
+                                   R_HISTORY_SEARCH_BACKWARD,
+                                   R_HISTORY_SEARCH_FORWARD,
+                                   R_DELETE_CHAR,
+                                   R_BACKWARD_DELETE_CHAR,
+                                   R_KILL_LINE,
+                                   R_YANK,
+                                   R_YANK_POP,
+                                   R_COMPLETE,
+                                   R_COMPLETE_AND_SEARCH,
+                                   R_BEGINNING_OF_HISTORY,
+                                   R_END_OF_HISTORY,
+                                   R_BACKWARD_KILL_LINE,
+                                   R_KILL_WHOLE_LINE,
+                                   R_KILL_WORD,
+                                   R_KILL_BIGWORD,
+                                   R_BACKWARD_KILL_WORD,
+                                   R_BACKWARD_KILL_PATH_COMPONENT,
+                                   R_BACKWARD_KILL_BIGWORD,
+                                   R_HISTORY_TOKEN_SEARCH_BACKWARD,
+                                   R_HISTORY_TOKEN_SEARCH_FORWARD,
+                                   R_SELF_INSERT,
+                                   R_TRANSPOSE_CHARS,
+                                   R_TRANSPOSE_WORDS,
+                                   R_UPCASE_WORD,
+                                   R_DOWNCASE_WORD,
+                                   R_CAPITALIZE_WORD,
+                                   R_VI_ARG_DIGIT,
+                                   R_VI_DELETE_TO,
+                                   R_EXECUTE,
+                                   R_BEGINNING_OF_BUFFER,
+                                   R_END_OF_BUFFER,
+                                   R_REPAINT,
+                                   R_FORCE_REPAINT,
+                                   R_UP_LINE,
+                                   R_DOWN_LINE,
+                                   R_SUPPRESS_AUTOSUGGESTION,
+                                   R_ACCEPT_AUTOSUGGESTION,
+                                   R_BEGIN_SELECTION,
+                                   R_SWAP_SELECTION_START_STOP,
+                                   R_END_SELECTION,
+                                   R_KILL_SELECTION,
+                                   R_FORWARD_JUMP,
+                                   R_BACKWARD_JUMP,
+                                   R_AND,
                                    R_CANCEL};
 
 /// Mappings for the current input mode.
@@ -283,13 +283,12 @@ static void input_mapping_insert_sorted(const input_mapping_t &new_mapping) {
     mapping_list.insert(loc, new_mapping);
 }
 
-
 /// Adds an input mapping.
 void input_mapping_add(const wchar_t *sequence, const wcstring_list_t &commands_vector,
                        const wchar_t *mode, const wchar_t *sets_mode) {
-    CHECK(sequence,);
-    CHECK(mode,);
-    CHECK(sets_mode,);
+    CHECK(sequence, );
+    CHECK(mode, );
+    CHECK(sets_mode, );
 
     // debug( 0, L"Add mapping from %ls to %ls in mode %ls", escape(sequence, ESCAPE_ALL).c_str(),
     // escape(command, ESCAPE_ALL).c_str(), mode);
@@ -395,7 +394,7 @@ int input_init() {
             exit_without_destructors(1);
         }
     }
-    assert(! term.missing());
+    assert(!term.missing());
     output_set_term(term);
 
     input_terminfo_init();
@@ -518,7 +517,7 @@ static bool input_mapping_is_match(const input_mapping_t &m) {
     wint_t c = 0;
     int j;
 
-    //debug(0, L"trying mapping %ls\n", escape(m.seq.c_str(), ESCAPE_ALL).c_str());
+    // debug(0, L"trying mapping %ls\n", escape(m.seq.c_str(), ESCAPE_ALL).c_str());
     const wchar_t *str = m.seq.c_str();
     for (j = 0; str[j] != L'\0'; j++) {
         bool timed = (j > 0 && iswcntrl(str[0]));
@@ -556,7 +555,7 @@ static void input_mapping_execute_matching_or_generic(bool allow_commands) {
     for (int i = 0; i < mapping_list.size(); i++) {
         const input_mapping_t &m = mapping_list.at(i);
 
-        //debug(0, L"trying mapping (%ls,%ls,%ls)\n", escape(m.seq.c_str(), ESCAPE_ALL).c_str(),
+        // debug(0, L"trying mapping (%ls,%ls,%ls)\n", escape(m.seq.c_str(), ESCAPE_ALL).c_str(),
         //           m.mode.c_str(), m.sets_mode.c_str());
 
         if (m.mode != bind_mode) {
@@ -576,7 +575,7 @@ static void input_mapping_execute_matching_or_generic(bool allow_commands) {
     if (generic) {
         input_mapping_execute(*generic, allow_commands);
     } else {
-        //debug(0, L"no generic found, ignoring...");
+        // debug(0, L"no generic found, ignoring...");
         wchar_t c = input_common_readch(0);
         if (c == R_EOF) input_common_next_ch(c);
     }
@@ -637,7 +636,7 @@ wint_t input_readch(bool allow_commands) {
                     }
                 }
                 default: { return c; }
-        }
+            }
         } else {
             input_common_next_ch(c);
             input_mapping_execute_matching_or_generic(allow_commands);
@@ -894,7 +893,7 @@ bool input_terminfo_get_name(const wcstring &seq, wcstring *out_name) {
             continue;
         }
 
-        const wcstring map_buf = format_string(L"%s",  m.seq);
+        const wcstring map_buf = format_string(L"%s", m.seq);
         if (map_buf == seq) {
             out_name->assign(m.name);
             return true;

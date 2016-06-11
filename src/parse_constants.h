@@ -136,7 +136,7 @@ enum parse_error_code_t {
     parse_error_eval,
     parse_error_cmdsubst,
 
-    parse_error_generic, // unclassified error types
+    parse_error_generic,  // unclassified error types
 
     // Tokenizer errors.
     parse_error_tokenizer_unterminated_quote,
@@ -145,13 +145,13 @@ enum parse_error_code_t {
     parse_error_tokenizer_unterminated_escape,
     parse_error_tokenizer_other,
 
-    parse_error_unbalancing_end, //end outside of block
-    parse_error_unbalancing_else, //else outside of if
-    parse_error_unbalancing_case, //case outside of switch
+    parse_error_unbalancing_end,   // end outside of block
+    parse_error_unbalancing_else,  // else outside of if
+    parse_error_unbalancing_case,  // case outside of switch
 
-    parse_error_double_pipe, // foo || bar, has special error message
-    parse_error_double_background, // foo && bar, has special error message
-    
+    parse_error_double_pipe,        // foo || bar, has special error message
+    parse_error_double_background,  // foo && bar, has special error message
+
     // Error in docopt syntax
     parse_error_docopt
 };
@@ -197,70 +197,70 @@ void parse_error_offset_source_start(parse_error_list_t *errors, size_t amt);
       L"loop?")
 
 /// Error message when encountering an illegal command name.
-#define ILLEGAL_CMD_ERR_MSG _( L"Illegal command name '%ls'")
+#define ILLEGAL_CMD_ERR_MSG _(L"Illegal command name '%ls'")
 
 /// Error message when encountering an unknown builtin name.
-#define UNKNOWN_BUILTIN_ERR_MSG _( L"Unknown builtin '%ls'")
+#define UNKNOWN_BUILTIN_ERR_MSG _(L"Unknown builtin '%ls'")
 
 /// Error message when encountering a failed expansion, e.g. for the variable name in for loops.
-#define FAILED_EXPANSION_VARIABLE_NAME_ERR_MSG _( L"Unable to expand variable name '%ls'")
+#define FAILED_EXPANSION_VARIABLE_NAME_ERR_MSG _(L"Unable to expand variable name '%ls'")
 
 /// Error message when encountering a failed process expansion, e.g. %notaprocess.
-#define FAILED_EXPANSION_PROCESS_ERR_MSG _( L"Unable to find a process '%ls'")
+#define FAILED_EXPANSION_PROCESS_ERR_MSG _(L"Unable to find a process '%ls'")
 
 /// Error message when encountering an illegal file descriptor.
-#define ILLEGAL_FD_ERR_MSG _( L"Illegal file descriptor in redirection '%ls'")
+#define ILLEGAL_FD_ERR_MSG _(L"Illegal file descriptor in redirection '%ls'")
 
 /// Error message for wildcards with no matches.
-#define WILDCARD_ERR_MSG _( L"No matches for wildcard '%ls'.")
+#define WILDCARD_ERR_MSG _(L"No matches for wildcard '%ls'.")
 
 /// Error when using break outside of loop.
-#define INVALID_BREAK_ERR_MSG _( L"'break' while not inside of loop" )
+#define INVALID_BREAK_ERR_MSG _(L"'break' while not inside of loop")
 
 /// Error when using continue outside of loop.
-#define INVALID_CONTINUE_ERR_MSG _( L"'continue' while not inside of loop" )
+#define INVALID_CONTINUE_ERR_MSG _(L"'continue' while not inside of loop")
 
 /// Error when using return builtin outside of function definition.
-#define INVALID_RETURN_ERR_MSG _( L"'return' outside of function definition" )
+#define INVALID_RETURN_ERR_MSG _(L"'return' outside of function definition")
 
 // Error messages. The number is a reminder of how many format specifiers are contained.
 
 /// Error for $^.
-#define ERROR_BAD_VAR_CHAR1 _( L"$%lc is not a valid variable in fish." )
+#define ERROR_BAD_VAR_CHAR1 _(L"$%lc is not a valid variable in fish.")
 
 /// Error for ${a}.
-#define ERROR_BRACKETED_VARIABLE1 _( L"Variables cannot be bracketed. In fish, please use {$%ls}." )
+#define ERROR_BRACKETED_VARIABLE1 _(L"Variables cannot be bracketed. In fish, please use {$%ls}.")
 
 /// Error for "${a}".
 #define ERROR_BRACKETED_VARIABLE_QUOTED1 \
     _(L"Variables cannot be bracketed. In fish, please use \"$%ls\".")
 
 /// Error issued on $?.
-#define ERROR_NOT_STATUS _( L"$? is not the exit status. In fish, please use $status.")
+#define ERROR_NOT_STATUS _(L"$? is not the exit status. In fish, please use $status.")
 
 /// Error issued on $$.
-#define ERROR_NOT_PID _( L"$$ is not the pid. In fish, please use %%self.")
+#define ERROR_NOT_PID _(L"$$ is not the pid. In fish, please use %%self.")
 
 /// Error issued on $#.
-#define ERROR_NOT_ARGV_COUNT _( L"$# is not supported. In fish, please use 'count $argv'.")
+#define ERROR_NOT_ARGV_COUNT _(L"$# is not supported. In fish, please use 'count $argv'.")
 
 /// Error issued on $@.
-#define ERROR_NOT_ARGV_AT _( L"$@ is not supported. In fish, please use $argv.")
+#define ERROR_NOT_ARGV_AT _(L"$@ is not supported. In fish, please use $argv.")
 
 /// Error issued on $(...).
-#define ERROR_BAD_VAR_SUBCOMMAND1 _( L"$(...) is not supported. In fish, please use '(%ls)'." )
+#define ERROR_BAD_VAR_SUBCOMMAND1 _(L"$(...) is not supported. In fish, please use '(%ls)'.")
 
 /// Error issued on $*.
-#define ERROR_NOT_ARGV_STAR _( L"$* is not supported. In fish, please use $argv." )
+#define ERROR_NOT_ARGV_STAR _(L"$* is not supported. In fish, please use $argv.")
 
 /// Error issued on $.
-#define ERROR_NO_VAR_NAME _( L"Expected a variable name after this $.")
+#define ERROR_NO_VAR_NAME _(L"Expected a variable name after this $.")
 
 /// Error on ||.
-#define ERROR_BAD_OR _( L"Unsupported use of '||'. In fish, please use 'COMMAND; or COMMAND'.")
+#define ERROR_BAD_OR _(L"Unsupported use of '||'. In fish, please use 'COMMAND; or COMMAND'.")
 
 /// Error on &&.
-#define ERROR_BAD_AND _( L"Unsupported use of '&&'. In fish, please use 'COMMAND; and COMMAND'.")
+#define ERROR_BAD_AND _(L"Unsupported use of '&&'. In fish, please use 'COMMAND; and COMMAND'.")
 
 /// Error on foo=bar.
 #define ERROR_BAD_EQUALS_IN_COMMAND5                                                        \

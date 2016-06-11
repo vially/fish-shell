@@ -28,7 +28,7 @@ void iothread_drain_all(void);
 int iothread_perform_on_main_base(int (*handler)(void *), void *context);
 
 /// Helper templates.
-template<typename T>
+template <typename T>
 int iothread_perform(int (*handler)(T *), void (*completionCallback)(T *, int), T *context) {
     return iothread_perform_base((int (*)(void *))handler,
                                  (void (*)(void *, int))completionCallback,
@@ -36,20 +36,19 @@ int iothread_perform(int (*handler)(T *), void (*completionCallback)(T *, int), 
 }
 
 // Variant that takes no completion callback.
-template<typename T>
+template <typename T>
 int iothread_perform(int (*handler)(T *), T *context) {
     return iothread_perform_base((int (*)(void *))handler, (void (*)(void *, int))0,
                                  static_cast<void *>(context));
 }
 
-template<typename T>
+template <typename T>
 int iothread_perform_on_main(int (*handler)(T *), T *context) {
     return iothread_perform_on_main_base((int (*)(void *))handler, (void *)(context));
 }
 
-template<typename T>
-int iothread_perform_on_main(int (*handler)(T *), const T *context)
-{
+template <typename T>
+int iothread_perform_on_main(int (*handler)(T *), const T *context) {
     return iothread_perform_on_main_base((int (*)(void *))handler, (void *)(context));
 }
 #endif

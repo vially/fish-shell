@@ -29,7 +29,7 @@ enum jobs_mode_t {
 #ifdef HAVE__PROC_SELF_STAT
 /// Calculates the cpu usage (in percent) of the specified job.
 static int cpu_use(const job_t *j) {
-    double u=0;
+    double u = 0;
     process_t *p;
 
     for (p = j->first_process; p; p = p->next) {
@@ -38,13 +38,13 @@ static int cpu_use(const job_t *j) {
         gettimeofday(&t, 0);
         jiffies = proc_get_jiffies(p);
 
-        double t1 = 1000000.0*p->last_time.tv_sec+p->last_time.tv_usec;
-        double t2 = 1000000.0*t.tv_sec+t.tv_usec;
+        double t1 = 1000000.0 * p->last_time.tv_sec + p->last_time.tv_usec;
+        double t2 = 1000000.0 * t.tv_sec + t.tv_usec;
 
         // fwprintf( stderr, L"t1 %f t2 %f p1 %d p2 %d\n", t1, t2, jiffies, p->last_jiffies );
-        u += ((double)(jiffies-p->last_jiffies))/(t2-t1);
+        u += ((double)(jiffies - p->last_jiffies)) / (t2 - t1);
     }
-    return u*1000000;
+    return u * 1000000;
 }
 #endif
 
@@ -62,12 +62,12 @@ static void builtin_jobs_print(const job_t *j, int mode, int header, io_streams_
                 streams.out.append(_(L"State\tCommand\n"));
             }
 
-            streams.out.append_format( L"%d\t%d\t", j->job_id, j->pgid);
+            streams.out.append_format(L"%d\t%d\t", j->job_id, j->pgid);
 
 #ifdef HAVE__PROC_SELF_STAT
-            streams.out.append_format( L"%d%%\t", cpu_use(j));
+            streams.out.append_format(L"%d%%\t", cpu_use(j));
 #endif
-            streams.out.append(job_is_stopped(j)?_(L"stopped"):_(L"running"));
+            streams.out.append(job_is_stopped(j) ? _(L"stopped") : _(L"running"));
             streams.out.append(L"\t");
             streams.out.append(j->command_wcstr());
             streams.out.append(L"\n");
@@ -78,7 +78,7 @@ static void builtin_jobs_print(const job_t *j, int mode, int header, io_streams_
                 // Print table header before first job.
                 streams.out.append(_(L"Group\n"));
             }
-            streams.out.append_format( L"%d\n", j->pgid);
+            streams.out.append_format(L"%d\n", j->pgid);
             break;
         }
         case JOBS_PRINT_PID: {
@@ -88,7 +88,7 @@ static void builtin_jobs_print(const job_t *j, int mode, int header, io_streams_
             }
 
             for (p = j->first_process; p; p = p->next) {
-                streams.out.append_format( L"%d\n", p->pid);
+                streams.out.append_format(L"%d\n", p->pid);
             }
             break;
         }
@@ -99,14 +99,14 @@ static void builtin_jobs_print(const job_t *j, int mode, int header, io_streams_
             }
 
             for (p = j->first_process; p; p = p->next) {
-                streams.out.append_format( L"%ls\n", p->argv0());
+                streams.out.append_format(L"%ls\n", p->argv0());
             }
             break;
         }
     }
 }
 
-extern const wchar_t * const g_jobs_usage =
+extern const wchar_t *const g_jobs_usage =
     L"Usage:\n"
     L"       jobs [options] [<pid>...]\n"
     L"\n"
@@ -117,36 +117,27 @@ extern const wchar_t * const g_jobs_usage =
     L"       -l, --last  prints only the last job to be started.\n"
     L"       -p, --pid  prints the process ID for each process in all jobs.\n"
     L"Conditions:\n"
-    L"       <pid>  (jobs --pid)"
-;
+    L"       <pid>  (jobs --pid)";
 
 /** The jobs builtin. Used for printing running jobs. */
-int builtin_jobs(parser_t &parser, io_streams_t &streams, wchar_t **argv)
-{
+int builtin_jobs(parser_t &parser, io_streams_t &streams, wchar_t **argv) {
     docopt_arguments_t args;
     int status;
-    if (! parse_argv_or_show_help(parser, argv, &args, &status, streams))
-    {
+    if (!parse_argv_or_show_help(parser, argv, &args, &status, streams)) {
         return status;
     }
 
-    int found=0;
+    int found = 0;
     jobs_mode_t mode = JOBS_DEFAULT;
-    if (args.has(L"--pid"))
-    {
+    if (args.has(L"--pid")) {
         mode = JOBS_PRINT_PID;
-    }
-    else if (args.has(L"--command"))
-    {
+    } else if (args.has(L"--command")) {
         mode = JOBS_PRINT_COMMAND;
-    }
-    else if (args.has(L"--group"))
-    {
+    } else if (args.has(L"--group")) {
         mode = JOBS_PRINT_GROUP;
     }
-    
-    if (args.has(L"--last"))
-    {
+
+    if (args.has(L"--last")) {
         /* Ignore unconstructed jobs, i.e. ourself. */
         job_iterator_t jobs;
         const job_t *j;
@@ -156,23 +147,16 @@ int builtin_jobs(parser_t &parser, io_streams_t &streams, wchar_t **argv)
                 return 0;
             }
         }
-    }
-    else
-    {
+    } else {
         const wcstring_list_t &pids = args.get_list(L"<pid>");
-        if (! pids.empty())
-        {
-            for (size_t i=0; i < pids.size(); i++)
-            {
+        if (!pids.empty()) {
+            for (size_t i = 0; i < pids.size(); i++) {
                 int pid;
                 wchar_t *end;
-                errno=0;
-                pid=fish_wcstoi(pids.at(i).c_str(), &end, 10);
-                if (errno || *end)
-                {
-                    streams.err.append_format(_(L"%ls: '%ls' is not a job\n"),
-                                  argv[0],
-                                  argv[i]);
+                errno = 0;
+                pid = fish_wcstoi(pids.at(i).c_str(), &end, 10);
+                if (errno || *end) {
+                    streams.err.append_format(_(L"%ls: '%ls' is not a job\n"), argv[0], argv[i]);
                     return 1;
                 }
 

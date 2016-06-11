@@ -89,17 +89,17 @@ static void builtin_complete_remove_cmd(const wcstring &cmd, int cmd_type, const
         complete_remove(cmd, cmd_type, wcstring(1, short_opt[i]), option_type_short);
         removed = true;
     }
-    
+
     for (i = 0; i < old_opt.size(); i++) {
         complete_remove(cmd, cmd_type, old_opt.at(i), option_type_single_long);
         removed = true;
     }
-    
+
     for (i = 0; i < gnu_opt.size(); i++) {
         complete_remove(cmd, cmd_type, gnu_opt.at(i), option_type_double_long);
         removed = true;
     }
-    
+
     if (!removed) {
         // This means that all loops were empty.
         complete_remove_all(cmd, cmd_type);
@@ -123,51 +123,51 @@ static void builtin_complete_remove(const wcstring_list_t &cmd, const wcstring_l
 int builtin_complete(parser_t &parser, io_streams_t &streams, wchar_t **argv) {
     ASSERT_IS_MAIN_THREAD();
     wgetopter_t w;
-    bool res=false;
-    int argc=0;
+    bool res = false;
+    int argc = 0;
     complete_argument_flags_t arg_flags = argument_allow_files;
     int remove = 0;
     int authoritative = -1;
 
     wcstring short_opt;
     wcstring_list_t gnu_opt, old_opt;
-    const wchar_t *comp=L"", *desc=L"", *condition=L"";
+    const wchar_t *comp = L"", *desc = L"", *condition = L"";
 
     bool do_complete = false;
     wcstring do_complete_param;
 
     wcstring_list_t cmd;
     wcstring_list_t path;
-    
+
     bool do_signature = false;
     wcstring signature;
     wcstring_list_t wrap_targets;
 
-    static int recursion_level=0;
+    static int recursion_level = 0;
 
     argc = builtin_count_args(argv);
 
-    w.woptind=0;
+    w.woptind = 0;
 
     while (!res) {
         static const struct woption long_options[] = {{L"exclusive", no_argument, 0, 'x'},
-            { L"no-files", no_argument, 0, 'f' },
-            { L"require-parameter", no_argument, 0, 'r' },
-            { L"path", required_argument, 0, 'p' },
-            { L"command", required_argument, 0, 'c' },
-            { L"short-option", required_argument, 0, 's' },
-            { L"long-option", required_argument, 0, 'l' },
-            { L"old-option", required_argument, 0, 'o' },
-            { L"description", required_argument, 0, 'd' },
-            { L"arguments", required_argument, 0, 'a' },
-            { L"erase", no_argument, 0, 'e' },
-            { L"unauthoritative", no_argument, 0, 'u' },
-            { L"authoritative", no_argument, 0, 'A' },
-            { L"condition", required_argument, 0, 'n' },
-            { L"wraps", required_argument, 0, 'w' },
-            { L"do-complete", optional_argument, 0, 'C' },
-            { L"signature", required_argument, 0, 'g' },
-            { L"help", no_argument, 0, 'h' },
+                                                      {L"no-files", no_argument, 0, 'f'},
+                                                      {L"require-parameter", no_argument, 0, 'r'},
+                                                      {L"path", required_argument, 0, 'p'},
+                                                      {L"command", required_argument, 0, 'c'},
+                                                      {L"short-option", required_argument, 0, 's'},
+                                                      {L"long-option", required_argument, 0, 'l'},
+                                                      {L"old-option", required_argument, 0, 'o'},
+                                                      {L"description", required_argument, 0, 'd'},
+                                                      {L"arguments", required_argument, 0, 'a'},
+                                                      {L"erase", no_argument, 0, 'e'},
+                                                      {L"unauthoritative", no_argument, 0, 'u'},
+                                                      {L"authoritative", no_argument, 0, 'A'},
+                                                      {L"condition", required_argument, 0, 'n'},
+                                                      {L"wraps", required_argument, 0, 'w'},
+                                                      {L"do-complete", optional_argument, 0, 'C'},
+                                                      {L"signature", required_argument, 0, 'g'},
+                                                      {L"help", no_argument, 0, 'h'},
                                                       {0, 0, 0, 0}};
 
         int opt_index = 0;
@@ -180,26 +180,26 @@ int builtin_complete(parser_t &parser, io_streams_t &streams, wchar_t **argv) {
             case 0: {
                 if (long_options[opt_index].flag != 0) break;
                 streams.err.append_format(BUILTIN_ERR_UNKNOWN, argv[0],
-                              long_options[opt_index].name);
+                                          long_options[opt_index].name);
                 builtin_print_help(parser, streams, argv[0], streams.err);
                 res = true;
                 break;
 
-            case 'x':
-            case 'f':
-                arg_flags &= ~argument_allow_files;
-                break;
+                case 'x':
+                case 'f':
+                    arg_flags &= ~argument_allow_files;
+                    break;
 
-            case 'r':
-                // not yet implemented in docopt
-                //result_mode |= NO_COMMON;
-                break;
+                case 'r':
+                    // not yet implemented in docopt
+                    // result_mode |= NO_COMMON;
+                    break;
             }
             case 'p':
             case 'c': {
                 wcstring tmp;
                 if (unescape_string(w.woptarg, &tmp, UNESCAPE_SPECIAL)) {
-                    if (opt=='p')
+                    if (opt == 'p')
                         path.push_back(tmp);
                     else
                         cmd.push_back(tmp);
@@ -214,11 +214,11 @@ int builtin_complete(parser_t &parser, io_streams_t &streams, wchar_t **argv) {
                 break;
             }
             case 'u': {
-                authoritative=0;
+                authoritative = 0;
                 break;
             }
             case 'A': {
-                authoritative=1;
+                authoritative = 1;
                 break;
             }
             case 's': {
@@ -255,13 +255,13 @@ int builtin_complete(parser_t &parser, io_streams_t &streams, wchar_t **argv) {
                 if (arg == NULL) {
                     // This corresponds to using 'complete -C' in non-interactive mode.
                     // See #2361.
-                    builtin_missing_argument(parser, streams, argv[0], argv[w.woptind-1]);
+                    builtin_missing_argument(parser, streams, argv[0], argv[w.woptind - 1]);
                     return STATUS_BUILTIN_ERROR;
                 }
                 do_complete_param = arg;
                 break;
             }
-                
+
             case 'g':
                 do_signature = true;
                 signature = w.woptarg;
@@ -270,14 +270,14 @@ int builtin_complete(parser_t &parser, io_streams_t &streams, wchar_t **argv) {
             case 'h':
                 builtin_print_help(parser, streams, argv[0], streams.out);
                 return 0;
-            
+
             case '?':
-                builtin_unknown_option(parser, streams, argv[0], argv[w.woptind-1]);
+                builtin_unknown_option(parser, streams, argv[0], argv[w.woptind - 1]);
                 res = true;
                 break;
         }
     }
-    
+
     if (!res) {
         if (condition && wcslen(condition)) {
             const wcstring condition_string = condition;
@@ -285,7 +285,7 @@ int builtin_complete(parser_t &parser, io_streams_t &streams, wchar_t **argv) {
             if (parse_util_detect_errors(condition_string, &errors,
                                          false /* do not accept incomplete */)) {
                 streams.err.append_format(L"%ls: Condition '%ls' contained a syntax error", argv[0],
-                              condition);
+                                          condition);
                 for (size_t i = 0; i < errors.size(); i++) {
                     streams.err.append_format(L"\n%s: ", argv[0]);
                     streams.err.append(errors.at(i).describe(condition_string));
@@ -320,7 +320,7 @@ int builtin_complete(parser_t &parser, io_streams_t &streams, wchar_t **argv) {
 
             parse_util_token_extent(do_complete_param.c_str(), do_complete_param.size(), &token, 0,
                                     0, 0);
-            
+
             // Create a scoped transient command line, so that bulitin_commandline will see our
             // argument, not the reader buffer.
             builtin_commandline_scoped_transient_t temp_buffer(do_complete_param);
@@ -333,7 +333,7 @@ int builtin_complete(parser_t &parser, io_streams_t &streams, wchar_t **argv) {
                          env_vars_snapshot_t::current());
 
                 for (size_t i = 0; i < comp.size(); i++) {
-                    const completion_t &next =  comp.at(i);
+                    const completion_t &next = comp.at(i);
 
                     // Make a fake commandline, and then apply the completion to it.
                     const wcstring faux_cmdline = token;
@@ -378,15 +378,15 @@ int builtin_complete(parser_t &parser, io_streams_t &streams, wchar_t **argv) {
             streams.out.append(complete_print());
         } else {
             int flags = COMPLETE_AUTO_SPACE;
-        
+
             if (remove) {
                 builtin_complete_remove(cmd, path, short_opt.c_str(), gnu_opt, old_opt);
-                
+
             } else {
                 builtin_complete_add(cmd, path, short_opt.c_str(), gnu_opt, old_opt, arg_flags,
                                      authoritative, condition, comp, desc, flags);
             }
-                    
+
             // Handle wrap targets (probably empty). We only wrap commands, not paths.
             for (size_t w = 0; w < wrap_targets.size(); w++) {
                 const wcstring &wrap_target = wrap_targets.at(w);
@@ -397,36 +397,31 @@ int builtin_complete(parser_t &parser, io_streams_t &streams, wchar_t **argv) {
             }
         }
     }
-    
-    if (do_signature)
-    {
+
+    if (do_signature) {
         parse_error_list_t errors;
-        if (cmd.empty() && path.empty())
-        {
+        if (cmd.empty() && path.empty()) {
             // Here we attempt to infer the command
             docopt_register_usage(wcstring(), L"default", signature, desc, &errors);
-        }
-        else
-        {
+        } else {
             // Use a silly loop to handle commands and paths uniformly
-            for (size_t which=0; which < 2; which++)
-            {
+            for (size_t which = 0; which < 2; which++) {
                 const wcstring_list_t &cmd_or_path = (which ? cmd : path);
-                for (size_t i=0; i < cmd_or_path.size(); i++)
-                {
+                for (size_t i = 0; i < cmd_or_path.size(); i++) {
                     docopt_register_usage(cmd_or_path.at(i), L"default", signature, desc, &errors);
                 }
             }
         }
         // TODO: ought to be able to return failure here
         // Report only the first error, if we have one
-        if (! errors.empty())
-        {
+        if (!errors.empty()) {
             const parse_error_t &err = errors.front();
-            // The "is_interactive" param determines if we avoid the caret for really simple cases, like "command not found" for the first line
+            // The "is_interactive" param determines if we avoid the caret for really simple cases,
+            // like "command not found" for the first line
             // We always show the caret for docopt signatures
             bool is_interactive = false, skip_caret = false;
-            wcstring err_desc = err.describe_with_prefix(signature, wcstring(), is_interactive, skip_caret);
+            wcstring err_desc =
+                err.describe_with_prefix(signature, wcstring(), is_interactive, skip_caret);
             streams.err.append_format(L"%ls: %ls\n", argv[0], err_desc.c_str());
         }
         res = true;

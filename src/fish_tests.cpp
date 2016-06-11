@@ -34,7 +34,9 @@
 #include "color.h"
 #include "common.h"
 #include "complete.h"
+#include "docopt_registration.h"
 #include "env.h"
+#include "env_universal_common.h"
 #include "env_universal_common.h"
 #include "event.h"
 #include "expand.h"
@@ -59,14 +61,12 @@
 #include "signal.h"
 #include "tokenizer.h"
 #include "utf8.h"
-#include "env_universal_common.h"
-#include "docopt_registration.h"
 #include "util.h"
 #include "wcstringutil.h"
 #include "wildcard.h"
 #include "wutil.h"  // IWYU pragma: keep
 
-static const char * const * s_arguments;
+static const char *const *s_arguments;
 static int s_test_run_count = 0;
 
 // Indicate if we should test the given function. Either we test everything (all arguments) or we
@@ -99,7 +99,7 @@ static bool should_test_function(const char *func_name) {
 #define LAPS 50
 
 /// Number of encountered errors.
-static int err_count=0;
+static int err_count = 0;
 
 /// Print formatted output.
 static void say(const wchar_t *blah, ...) {
@@ -117,7 +117,7 @@ static void err(const wchar_t *blah, ...) {
     err_count++;
 
     // Xcode's term doesn't support color (even though TERM claims it does).
-    bool colorize = ! getenv("RUNNING_IN_XCODE");
+    bool colorize = !getenv("RUNNING_IN_XCODE");
 
     // Show errors in red.
     if (colorize) {
@@ -169,8 +169,8 @@ static int chdir_set_pwd(const char *path) {
 /// Test sane escapes.
 static void test_unescape_sane() {
     const struct test_t {
-        const wchar_t * input;
-        const wchar_t * expected;
+        const wchar_t *input;
+        const wchar_t *expected;
     } tests[] = {
         {L"abcd", L"abcd"},           {L"'abcd'", L"abcd"},
         {L"'abcd\\n'", L"abcd\\n"},   {L"\"abcd\\n\"", L"abcd\\n"},
@@ -210,7 +210,7 @@ static void test_escape_crazy() {
     for (size_t i = 0; i < ESCAPE_TEST_COUNT; i++) {
         random_string.clear();
         while (rand() % ESCAPE_TEST_LENGTH) {
-            random_string.push_back((rand() % ESCAPE_TEST_CHAR) +1);
+            random_string.push_back((rand() % ESCAPE_TEST_CHAR) + 1);
         }
 
         escaped_string = escape_string(random_string, ESCAPE_ALL);
@@ -237,26 +237,26 @@ static void test_format(void) {
     for (i = 0; i < sizeof tests / sizeof *tests; i++) {
         char buff[128];
         format_size_safe(buff, tests[i].val);
-        do_test(! strcmp(buff, tests[i].expected));
+        do_test(!strcmp(buff, tests[i].expected));
     }
 
     for (int j = -129; j <= 129; j++) {
         char buff1[128], buff2[128];
         format_long_safe(buff1, j);
         sprintf(buff2, "%d", j);
-        do_test(! strcmp(buff1, buff2));
+        do_test(!strcmp(buff1, buff2));
 
         wchar_t wbuf1[128], wbuf2[128];
         format_long_safe(wbuf1, j);
         swprintf(wbuf2, 128, L"%d", j);
-        do_test(! wcscmp(wbuf1, wbuf2));
+        do_test(!wcscmp(wbuf1, wbuf2));
     }
 
     long q = LONG_MIN;
     char buff1[128], buff2[128];
     format_long_safe(buff1, q);
     sprintf(buff2, "%ld", q);
-    do_test(! strcmp(buff1, buff2));
+    do_test(!strcmp(buff1, buff2));
 }
 
 /// Test wide/narrow conversion by creating random strings and verifying that the original string
@@ -367,7 +367,7 @@ static void test_tok() {
                          TOK_REDIRECT_APPEND, TOK_STRING,      TOK_STRING, TOK_END,
                          TOK_STRING};
 
-        say(L"Test correct tokenization");
+    say(L"Test correct tokenization");
 
     {
         tokenizer_t t(str, 0);
@@ -490,7 +490,7 @@ static parser_test_error_bits_t detect_argument_errors(const wcstring &src) {
         return PARSER_TEST_ERROR;
     }
 
-    assert(! tree.empty());
+    assert(!tree.empty());
     const parse_node_t *first_arg = tree.next_node_in_node_list(tree.at(0), symbol_argument, NULL);
     assert(first_arg != NULL);
     return parse_util_detect_errors_in_argument(*first_arg, first_arg->get_source(src));
@@ -665,7 +665,7 @@ static int signal_main(test_cancellation_info_t *info) {
 static void test_1_cancellation(const wchar_t *src) {
     shared_ptr<io_buffer_t> out_buff(io_buffer_t::create(STDOUT_FILENO, io_chain_t()));
     const io_chain_t io_chain(out_buff);
-    test_cancellation_info_t ctx = {pthread_self(), 0.25 /* seconds */ };
+    test_cancellation_info_t ctx = {pthread_self(), 0.25 /* seconds */};
     iothread_perform(signal_main, &ctx);
     parser_t::principal_parser().eval(src, io_chain, TOP);
     out_buff->read();
@@ -729,12 +729,12 @@ static void test_indents() {
     const indent_component_t components1[] = {{L"if foo", 0}, {L"end", 0}, {NULL, -1}};
 
     const indent_component_t components2[] = {{L"if foo", 0},
-        {L"", 1}, //trailing newline!
+                                              {L"", 1},  // trailing newline!
                                               {NULL, -1}};
 
     const indent_component_t components3[] = {{L"if foo", 0},
-        {L"foo", 1},
-        {L"end", 0}, //trailing newline!
+                                              {L"foo", 1},
+                                              {L"end", 0},  // trailing newline!
                                               {NULL, -1}};
 
     const indent_component_t components4[] = {{L"if foo", 0}, {L"if bar", 1}, {L"end", 1},
@@ -756,13 +756,13 @@ static void test_indents() {
         {L"switch foo", 0}, {L"case bar", 1}, {L"case baz", 1}, {L"quux", 2}, {L"", 2}, {NULL, -1}};
 
     const indent_component_t components11[] = {{L"switch foo", 0},
-        {L"cas", 1}, //parse error indentation handling
+                                               {L"cas", 1},  // parse error indentation handling
                                                {NULL, -1}};
 
     const indent_component_t components12[] = {{L"while false", 0},
-        {L"# comment", 1}, //comment indentation handling
-        {L"command", 1}, //comment indentation handling
-        {L"# comment2", 1}, //comment indentation handling
+                                               {L"# comment", 1},   // comment indentation handling
+                                               {L"command", 1},     // comment indentation handling
+                                               {L"# comment2", 1},  // comment indentation handling
                                                {NULL, -1}};
 
     const indent_component_t *tests[] = {components1, components2,  components3,  components4,
@@ -801,7 +801,7 @@ static void test_indents() {
             if (expected_indents.at(i) != indents.at(i)) {
                 err(L"Wrong indent at index %lu in test #%lu (expected %d, actual %d):\n%ls\n", i,
                     which + 1, expected_indents.at(i), indents.at(i), text.c_str());
-                break; //don't keep showing errors for the rest of the line
+                break;  // don't keep showing errors for the rest of the line
             }
         }
     }
@@ -933,7 +933,7 @@ static void test_wchar2utf8(const wchar_t *src, size_t slen, const char *dst, si
         goto finish;
     }
 
-    finish:
+finish:
     free(mem);
 }
 
@@ -1021,14 +1021,14 @@ static void test_utf8() {
     test_utf82wchar((const char *)NULL, 0, NULL, 0, 0, 0, "invalid params, all 0");
     test_utf82wchar(u1, 0, NULL, 0, 0, 0, "invalid params, src buf not NULL");
     test_utf82wchar((const char *)NULL, 10, NULL, 0, 0, 0, "invalid params, src length is not 0");
-    
+
     // PCA this test was to ensure that converting into a zero length output buffer would return 0
     // we no longer statically size output buffers, so the test is disabled
     //    test_utf82wchar(u1, sizeof(u1), w1, 0, 0, 0,
     //                    "invalid params, dst is not NULL");
 
     // UCS-4 -> UTF-8 string.
-    const char * const nullc = NULL;
+    const char *const nullc = NULL;
     test_wchar2utf8(wbom, sizeof(wbom) / sizeof(*wbom), ubom, sizeof(ubom), UTF8_SKIP_BOM,
                     sizeof(ubom), "BOM");
     test_wchar2utf8(wb2, sizeof(wb2) / sizeof(*wb2), nullc, 0, 0, 0, "prohibited wchars");
@@ -1086,13 +1086,13 @@ static void test_escape_sequences(void) {
 }
 
 class lru_node_test_t : public lru_node_t {
-public:
-    explicit lru_node_test_t(const wcstring &tmp) : lru_node_t(tmp) { }
+   public:
+    explicit lru_node_test_t(const wcstring &tmp) : lru_node_t(tmp) {}
 };
 
 class test_lru_t : public lru_cache_t<lru_node_test_t> {
-public:
-    test_lru_t() : lru_cache_t<lru_node_test_t>(16) { }
+   public:
+    test_lru_t() : lru_cache_t<lru_node_test_t>(16) {}
 
     std::vector<lru_node_test_t *> evicted_nodes;
 
@@ -1114,7 +1114,7 @@ static void test_lru(void) {
         if (i < 4) expected_evicted.push_back(node);
         // Adding the node the first time should work, and subsequent times should fail.
         do_test(cache.add_node(node));
-        do_test(! cache.add_node(node));
+        do_test(!cache.add_node(node));
     }
     do_test(cache.evicted_nodes == expected_evicted);
     cache.evict_all_nodes();
@@ -1137,7 +1137,7 @@ static void test_lru(void) {
 static bool expand_test(const wchar_t *in, expand_flags_t flags, ...) {
     std::vector<completion_t> output;
     va_list va;
-    bool res=true;
+    bool res = true;
     wchar_t *arg;
     parse_error_list_t errors;
 
@@ -1246,7 +1246,7 @@ static void test_expand() {
     // This is checking that .* does NOT match . and ..
     // (https://github.com/fish-shell/fish-shell/issues/270). But it does have to match literal
     // components (e.g. "./*" has to match the same as "*".
-    const wchar_t * const wnull = NULL;
+    const wchar_t *const wnull = NULL;
     expand_test(L"/tmp/fish_expand_test/.*", 0, L"/tmp/fish_expand_test/.foo", wnull,
                 L"Expansion not correctly handling dotfiles");
 
@@ -1267,7 +1267,7 @@ static void test_expand() {
                 L"/tmp/fish_expand_test/bax", L"/tmp/fish_expand_test/bax/xxx",
                 L"/tmp/fish_expand_test/baz", L"/tmp/fish_expand_test/baz/xxx",
                 L"/tmp/fish_expand_test/baz/yyy", wnull, L"Glob did the wrong thing 4");
-   
+
     // A trailing slash should only produce directories.
     expand_test(L"/tmp/fish_expand_test/b*/", 0, L"/tmp/fish_expand_test/b/",
                 L"/tmp/fish_expand_test/baz/", L"/tmp/fish_expand_test/bax/", wnull,
@@ -1276,10 +1276,10 @@ static void test_expand() {
     expand_test(L"/tmp/fish_expand_test/b**/", 0, L"/tmp/fish_expand_test/b/",
                 L"/tmp/fish_expand_test/baz/", L"/tmp/fish_expand_test/bax/", wnull,
                 L"Glob did the wrong thing 6");
- 
+
     expand_test(L"/tmp/fish_expand_test/**/q", 0, L"/tmp/fish_expand_test/lol/nub/q", wnull,
                 L"Glob did the wrong thing 7");
-    
+
     expand_test(L"/tmp/fish_expand_test/BA", EXPAND_FOR_COMPLETIONS, L"/tmp/fish_expand_test/bar",
                 L"/tmp/fish_expand_test/bax/", L"/tmp/fish_expand_test/baz/", wnull,
                 L"Case insensitive test did the wrong thing");
@@ -1378,45 +1378,45 @@ static void test_abbreviations(void) {
     if (expand_abbreviation(L"nothing", &result))
         err(L"Unexpected success with missing abbreviation");
 
-    if (! expand_abbreviation(L"gc", &result)) err(L"Unexpected failure with gc abbreviation");
+    if (!expand_abbreviation(L"gc", &result)) err(L"Unexpected failure with gc abbreviation");
     if (result != L"git checkout") err(L"Wrong abbreviation result for gc");
     result.clear();
 
-    if (! expand_abbreviation(L"foo", &result)) err(L"Unexpected failure with foo abbreviation");
+    if (!expand_abbreviation(L"foo", &result)) err(L"Unexpected failure with foo abbreviation");
     if (result != L"bar") err(L"Wrong abbreviation result for foo");
 
     bool expanded;
     expanded = reader_expand_abbreviation_in_command(L"just a command", 3, &result);
     if (expanded) err(L"Command wrongly expanded on line %ld", (long)__LINE__);
     expanded = reader_expand_abbreviation_in_command(L"gc somebranch", 0, &result);
-    if (! expanded) err(L"Command not expanded on line %ld", (long)__LINE__);
+    if (!expanded) err(L"Command not expanded on line %ld", (long)__LINE__);
 
     expanded = reader_expand_abbreviation_in_command(L"gc somebranch", wcslen(L"gc"), &result);
-    if (! expanded) err(L"gc not expanded");
+    if (!expanded) err(L"gc not expanded");
     if (result != L"git checkout somebranch")
         err(L"gc incorrectly expanded on line %ld to '%ls'", (long)__LINE__, result.c_str());
 
     // Space separation.
     expanded = reader_expand_abbreviation_in_command(L"gx somebranch", wcslen(L"gc"), &result);
-    if (! expanded) err(L"gx not expanded");
+    if (!expanded) err(L"gx not expanded");
     if (result != L"git checkout somebranch")
         err(L"gc incorrectly expanded on line %ld to '%ls'", (long)__LINE__, result.c_str());
 
     expanded = reader_expand_abbreviation_in_command(L"echo hi ; gc somebranch",
                                                      wcslen(L"echo hi ; g"), &result);
-    if (! expanded) err(L"gc not expanded on line %ld", (long)__LINE__);
+    if (!expanded) err(L"gc not expanded on line %ld", (long)__LINE__);
     if (result != L"echo hi ; git checkout somebranch")
         err(L"gc incorrectly expanded on line %ld", (long)__LINE__);
 
     expanded = reader_expand_abbreviation_in_command(
         L"echo (echo (echo (echo (gc ", wcslen(L"echo (echo (echo (echo (gc"), &result);
-    if (! expanded) err(L"gc not expanded on line %ld", (long)__LINE__);
+    if (!expanded) err(L"gc not expanded on line %ld", (long)__LINE__);
     if (result != L"echo (echo (echo (echo (git checkout ")
         err(L"gc incorrectly expanded on line %ld to '%ls'", (long)__LINE__, result.c_str());
 
     // If commands should be expanded.
     expanded = reader_expand_abbreviation_in_command(L"if gc", wcslen(L"if gc"), &result);
-    if (! expanded) err(L"gc not expanded on line %ld", (long)__LINE__);
+    if (!expanded) err(L"gc not expanded on line %ld", (long)__LINE__);
     if (result != L"if git checkout")
         err(L"gc incorrectly expanded on line %ld to '%ls'", (long)__LINE__, result.c_str());
 
@@ -1581,8 +1581,8 @@ static void test_1_word_motion(word_motion_t motion, move_word_style_t style,
     while (idx != end) {
         size_t char_idx = (motion == word_motion_left ? idx - 1 : idx);
         wchar_t wc = command.at(char_idx);
-        bool will_stop = ! sm.consume_char(wc);
-        //printf("idx %lu, looking at %lu (%c): %d\n", idx, char_idx, (char)wc, will_stop);
+        bool will_stop = !sm.consume_char(wc);
+        // printf("idx %lu, looking at %lu (%c): %d\n", idx, char_idx, (char)wc, will_stop);
         bool expected_stop = (stops.count(idx) > 0);
         if (will_stop != expected_stop) {
             wcstring tmp = command;
@@ -1650,18 +1650,18 @@ static void test_is_potential_path() {
     do_test(is_potential_path(L"alpha/", wds, PATH_REQUIRE_DIR));
     do_test(is_potential_path(L"aard", wds, 0));
 
-    do_test(! is_potential_path(L"balpha/", wds, PATH_REQUIRE_DIR));
-    do_test(! is_potential_path(L"aard", wds, PATH_REQUIRE_DIR));
-    do_test(! is_potential_path(L"aarde", wds, PATH_REQUIRE_DIR));
-    do_test(! is_potential_path(L"aarde", wds, 0));
+    do_test(!is_potential_path(L"balpha/", wds, PATH_REQUIRE_DIR));
+    do_test(!is_potential_path(L"aard", wds, PATH_REQUIRE_DIR));
+    do_test(!is_potential_path(L"aarde", wds, PATH_REQUIRE_DIR));
+    do_test(!is_potential_path(L"aarde", wds, 0));
 
     do_test(is_potential_path(L"/tmp/is_potential_path_test/aardvark", wds, 0));
     do_test(is_potential_path(L"/tmp/is_potential_path_test/al", wds, PATH_REQUIRE_DIR));
     do_test(is_potential_path(L"/tmp/is_potential_path_test/aardv", wds, 0));
 
-    do_test(! is_potential_path(L"/tmp/is_potential_path_test/aardvark", wds, PATH_REQUIRE_DIR));
-    do_test(! is_potential_path(L"/tmp/is_potential_path_test/al/", wds, 0));
-    do_test(! is_potential_path(L"/tmp/is_potential_path_test/ar", wds, 0));
+    do_test(!is_potential_path(L"/tmp/is_potential_path_test/aardvark", wds, PATH_REQUIRE_DIR));
+    do_test(!is_potential_path(L"/tmp/is_potential_path_test/al/", wds, 0));
+    do_test(!is_potential_path(L"/tmp/is_potential_path_test/ar", wds, 0));
 
     do_test(is_potential_path(L"/usr", wds, PATH_REQUIRE_DIR));
 }
@@ -1671,16 +1671,16 @@ int builtin_test(parser_t &parser, io_streams_t &streams, wchar_t **argv);
 static bool run_one_test_test(int expected, wcstring_list_t &lst, bool bracket) {
     parser_t parser;
     size_t i, count = lst.size();
-    wchar_t **argv = new wchar_t *[count+3];
+    wchar_t **argv = new wchar_t *[count + 3];
     argv[0] = (wchar_t *)(bracket ? L"[" : L"test");
     for (i = 0; i < count; i++) {
-        argv[i+1] = (wchar_t *)lst.at(i).c_str();
+        argv[i + 1] = (wchar_t *)lst.at(i).c_str();
     }
     if (bracket) {
-        argv[i+1] = (wchar_t *)L"]";
+        argv[i + 1] = (wchar_t *)L"]";
         i++;
     }
-    argv[i+1] = NULL;
+    argv[i + 1] = NULL;
     io_streams_t streams;
     int result = builtin_test(parser, streams, argv);
     delete[] argv;
@@ -1810,7 +1810,7 @@ static void test_complete(void) {
     const wcstring_list_t names(name_strs, name_strs + count);
 
     complete_set_variable_names(&names);
-    
+
     const env_vars_snapshot_t &vars = env_vars_snapshot_t::current();
 
     completion_list_t completions;
@@ -1894,8 +1894,8 @@ static void test_complete(void) {
     do_test(completions.size() == 0);
 
     // Trailing spaces (#1261).
-    complete_add(L"foobarbaz", false, wcstring(), option_type_args_only, argument_default, NULL, L"qux",
-                 NULL, COMPLETE_AUTO_SPACE);
+    complete_add(L"foobarbaz", false, wcstring(), option_type_args_only, argument_default, NULL,
+                 L"qux", NULL, COMPLETE_AUTO_SPACE);
     completions.clear();
     complete(L"foobarbaz ", &completions, COMPLETION_REQUEST_DEFAULT, vars);
     do_test(completions.size() == 1);
@@ -1916,7 +1916,7 @@ static void test_complete(void) {
         exit(-1);
     }
     if (chdir_set_pwd("/tmp/complete_test/")) err(L"chdir failed");
-    
+
     complete(L"cat te", &completions, COMPLETION_REQUEST_DEFAULT, vars);
     do_test(completions.size() == 1);
     do_test(completions.at(0).completion == L"stfile");
@@ -1979,37 +1979,35 @@ static void test_complete(void) {
     do_test(comma_join(complete_get_wrap_chain(L"wrapper1")) == L"wrapper1,wrapper2");
     complete_add_wrapper(L"wrapper2", L"wrapper3");
     do_test(comma_join(complete_get_wrap_chain(L"wrapper1")) == L"wrapper1,wrapper2,wrapper3");
-    complete_add_wrapper(L"wrapper3", L"wrapper1"); //loop!
+    complete_add_wrapper(L"wrapper3", L"wrapper1");  // loop!
     do_test(comma_join(complete_get_wrap_chain(L"wrapper1")) == L"wrapper1,wrapper2,wrapper3");
     complete_remove_wrapper(L"wrapper1", L"wrapper2");
     do_test(comma_join(complete_get_wrap_chain(L"wrapper1")) == L"wrapper1");
     do_test(comma_join(complete_get_wrap_chain(L"wrapper2")) == L"wrapper2,wrapper3,wrapper1");
 }
 
-static void test_docopt_complete(void)
-{
+static void test_docopt_complete(void) {
     say(L"Testing complete with docopt");
-    
+
     // any fake command
     const wcstring cmd = L"flea";
-    
+
     const env_vars_snapshot_t &vars = env_vars_snapshot_t::current();
-    
+
     // docopt description
     const wchar_t *usage =
-    L"Usage:\n"
-    L"       flea [options] [<pid>]\n"
-    L"\n"
-    L"Options:\n"
-    L"       -c, --command  Command Description\n"
-    L"       -g <val>, --group <val>\n"
-    L"       -x <dynval>\n"
-    L"       -h, --help  Help Description\n"
-    L"Arguments:\n"
-    L"       <val>  ONE TWO THREE\n"
-    L"       <dynval>  (echo ONE\\nTWO\\nTHREE)\n"
-    ;
-    
+        L"Usage:\n"
+        L"       flea [options] [<pid>]\n"
+        L"\n"
+        L"Options:\n"
+        L"       -c, --command  Command Description\n"
+        L"       -g <val>, --group <val>\n"
+        L"       -x <dynval>\n"
+        L"       -h, --help  Help Description\n"
+        L"Arguments:\n"
+        L"       <val>  ONE TWO THREE\n"
+        L"       <dynval>  (echo ONE\\nTWO\\nTHREE)\n";
+
     docopt_register_usage(cmd, L"", usage, L"", NULL);
     completion_list_t completions;
 
@@ -2017,7 +2015,7 @@ static void test_docopt_complete(void)
     do_test(completions.size() == 1);
     do_test(completions.at(0).completion == L"ommand");
     do_test(completions.at(0).description == L"Command Description");
-    
+
     completions.clear();
     complete(L"flea --group ", &completions, COMPLETION_REQUEST_DEFAULT, vars);
     do_test(completions.size() == 3);
@@ -2031,12 +2029,11 @@ static void test_docopt_complete(void)
     do_test(completions.at(0).completion == L"ONE");
     do_test(completions.at(1).completion == L"TWO");
     do_test(completions.at(2).completion == L"THREE");
-    
+
     const wchar_t *desc2 =
-    L"Usage:\n"
-    L"       leaf [<pid>]\n"
-    L"       leaf --help\n"
-    ;
+        L"Usage:\n"
+        L"       leaf [<pid>]\n"
+        L"       leaf --help\n";
     docopt_register_usage(L"", L"", desc2, L"", NULL);
     completions.clear();
     complete(L"leaf --he", &completions, COMPLETION_REQUEST_DEFAULT, vars);
@@ -2044,43 +2041,42 @@ static void test_docopt_complete(void)
     do_test(completions.at(0).completion == L"lp");
 }
 
-static void test_docopt_args(void)
-{
+static void test_docopt_args(void) {
     say(L"Testing argument parsing with docopt");
-    // This does not need to be a very complete test, since the docopt test suite is much more complete
+    // This does not need to be a very complete test, since the docopt test suite is much more
+    // complete
     const wcstring cmd = L"ogre";
-    
+
     // docopt descriptions
     const wchar_t *usage1 =
-    L"Usage:\n"
-    L"       ogre [options] [<pid>]\n"
-    L"\n"
-    L"Options:\n"
-    L"       -c, --command  Command Description\n"
-    L"       -g <val>, --group <val>\n"
-    ;
-    
+        L"Usage:\n"
+        L"       ogre [options] [<pid>]\n"
+        L"\n"
+        L"Options:\n"
+        L"       -c, --command  Command Description\n"
+        L"       -g <val>, --group <val>\n";
+
     const wchar_t *usage2 =
-    L"Usage:\n"
-    L"       ogre [options]\n"
-    L"\n"
-    L"Options:\n"
-    L"       -h, --help  Help\n"
-    ;
-    
+        L"Usage:\n"
+        L"       ogre [options]\n"
+        L"\n"
+        L"Options:\n"
+        L"       -h, --help  Help\n";
+
     docopt_register_usage(L"", L"", usage1, L"", NULL);
     docopt_register_usage(L"", L"", usage2, L"", NULL);
-    
+
     wcstring_list_t argv;
     argv.push_back(cmd);
     argv.push_back(L"--command");
     argv.push_back(L"--group");
     argv.push_back(L"grp");
-    
+
     docopt_arguments_t arguments;
     std::vector<size_t> unused_args;
     parse_error_list_t errors;
-    bool ret = docopt_get_registrations(cmd).parse_arguments(argv, &arguments, &errors, &unused_args);
+    bool ret =
+        docopt_get_registrations(cmd).parse_arguments(argv, &arguments, &errors, &unused_args);
     do_test(ret == true);
     do_test(arguments.size() == 3);
     do_test(arguments.has(L"--command"));
@@ -2144,14 +2140,14 @@ static void perform_one_autosuggestion_cd_test(const wcstring &command,
                                                const env_vars_snapshot_t &vars,
                                                const wcstring &expected, long line) {
     std::vector<completion_t> comps;
-    complete(command, &comps,COMPLETION_REQUEST_AUTOSUGGESTION, vars);
-    
+    complete(command, &comps, COMPLETION_REQUEST_AUTOSUGGESTION, vars);
+
     bool expects_error = (expected == L"<error>");
-    
+
     if (comps.empty() && !expects_error) {
         printf("line %ld: autosuggest_suggest_special() failed for command %ls\n", line,
                command.c_str());
-        do_test(! comps.empty());
+        do_test(!comps.empty());
         return;
     } else if (!comps.empty() && expects_error) {
         printf(
@@ -2160,11 +2156,11 @@ static void perform_one_autosuggestion_cd_test(const wcstring &command,
             line, command.c_str());
         do_test(comps.empty());
     }
-    
+
     if (!comps.empty()) {
         completions_sort_and_prioritize(&comps);
         const completion_t &suggestion = comps.at(0);
-        
+
         if (suggestion.completion != expected) {
             printf(
                 "line %ld: complete() for cd returned the wrong expected string for command %ls\n",
@@ -2194,15 +2190,15 @@ static void test_autosuggest_suggest_special() {
         err(L"mkdir failed");
     if (system("mkdir -p /tmp/autosuggest_test/start/unique2/.hiddenDir/moreStuff"))
         err(L"mkdir failed");
-    
+
     char saved_wd[PATH_MAX] = {};
     if (NULL == getcwd(saved_wd, sizeof saved_wd)) err(L"getcwd failed");
-    
+
     const wcstring wd = L"/tmp/autosuggest_test/";
     if (chdir_set_pwd(wcs2string(wd).c_str())) err(L"chdir failed");
-    
+
     env_set(L"AUTOSUGGEST_TEST_LOC", wd.c_str(), ENV_LOCAL);
-    
+
     const env_vars_snapshot_t &vars = env_vars_snapshot_t::current();
 
     perform_one_autosuggestion_cd_test(L"cd /tmp/autosuggest_test/0", vars, L"foobar/", __LINE__);
@@ -2254,23 +2250,23 @@ static void test_autosuggest_suggest_special() {
     perform_one_autosuggestion_cd_test(L"cd 5", vars, L"foo\"bar/", __LINE__);
     perform_one_autosuggestion_cd_test(L"cd \"5", vars, L"foo\"bar/", __LINE__);
     perform_one_autosuggestion_cd_test(L"cd '5", vars, L"foo\"bar/", __LINE__);
-    
+
     perform_one_autosuggestion_cd_test(L"cd $AUTOSUGGEST_TEST_LOC/0", vars, L"foobar/", __LINE__);
     perform_one_autosuggestion_cd_test(L"cd ~/test_autosuggest_suggest_specia", vars, L"l/",
                                        __LINE__);
-    
+
     perform_one_autosuggestion_cd_test(L"cd /tmp/autosuggest_test/start/", vars,
                                        L"unique2/unique3/", __LINE__);
 
     // A single quote should defeat tilde expansion.
     perform_one_autosuggestion_cd_test(L"cd '~/test_autosuggest_suggest_specia'", vars, L"<error>",
                                        __LINE__);
-    
+
     // Don't crash on ~ (issue #2696). Note this was wd dependent, hence why we set it.
     if (chdir_set_pwd("/tmp/autosuggest_test/")) err(L"chdir failed");
-    
+
     if (system("mkdir -p '/tmp/autosuggest_test/~hahaha/path1/path2/'")) err(L"mkdir failed");
-    
+
     perform_one_autosuggestion_cd_test(L"cd ~haha", vars, L"ha/path1/path2/", __LINE__);
     perform_one_autosuggestion_cd_test(L"cd ~hahaha/", vars, L"path1/path2/", __LINE__);
     if (chdir_set_pwd(saved_wd)) err(L"chdir failed");
@@ -2321,7 +2317,7 @@ void perf_complete() {
     wchar_t c;
     std::vector<completion_t> out;
     long long t1, t2;
-    int matches=0;
+    int matches = 0;
     double t;
     wchar_t str[3] = {0, 0, 0};
     int i;
@@ -2334,7 +2330,7 @@ void perf_complete() {
     t1 = get_time();
 
     for (c = L'a'; c <= L'z'; c++) {
-        str[0]=c;
+        str[0] = c;
         reader_set_buffer(str, 0);
 
         complete(str, &out, COMPLETION_REQUEST_DEFAULT, env_vars_snapshot_t::current());
@@ -2342,18 +2338,18 @@ void perf_complete() {
         matches += out.size();
         out.clear();
     }
-    t2=get_time();
+    t2 = get_time();
 
-    t = (double)(t2-t1)/(1000000*26);
+    t = (double)(t2 - t1) / (1000000 * 26);
 
     say(L"One letter command completion took %f seconds per completion, %f microseconds/match", t,
         (double)(t2 - t1) / matches);
 
-    matches=0;
+    matches = 0;
     t1 = get_time();
     for (i = 0; i < LAPS; i++) {
-        str[0]='a'+(rand()%26);
-        str[1]='a'+(rand()%26);
+        str[0] = 'a' + (rand() % 26);
+        str[1] = 'a' + (rand() % 26);
 
         reader_set_buffer(str, 0);
 
@@ -2362,9 +2358,9 @@ void perf_complete() {
         matches += out.size();
         out.clear();
     }
-    t2=get_time();
+    t2 = get_time();
 
-    t = (double)(t2-t1)/(1000000*LAPS);
+    t = (double)(t2 - t1) / (1000000 * LAPS);
 
     say(L"Two letter command completion took %f seconds per completion, %f microseconds/match", t,
         (double)(t2 - t1) / matches);
@@ -2378,12 +2374,12 @@ static void test_history_matches(history_search_t &search, size_t matches) {
         do_test(search.go_backwards());
         wcstring item = search.current_string();
     }
-    do_test(! search.go_backwards());
+    do_test(!search.go_backwards());
 
     for (i = 1; i < matches; i++) {
         do_test(search.go_forwards());
     }
-    do_test(! search.go_forwards());
+    do_test(!search.go_forwards());
 }
 
 static bool history_contains(history_t *history, const wcstring &txt) {
@@ -2515,15 +2511,15 @@ static void test_universal_callbacks() {
     uvars2.sync(NULL);
 
     // Change uvars1.
-    uvars1.set(L"alpha", L"2", false); //changes value
-    uvars1.set(L"beta", L"1", true); //changes export
-    uvars1.remove(L"delta"); //erases value
-    uvars1.set(L"epsilon", L"1", false); //changes nothing
+    uvars1.set(L"alpha", L"2", false);    // changes value
+    uvars1.set(L"beta", L"1", true);      // changes export
+    uvars1.remove(L"delta");              // erases value
+    uvars1.set(L"epsilon", L"1", false);  // changes nothing
     uvars1.sync(NULL);
 
     // Change uvars2. It should treat its value as correct and ignore changes from uvars1.
-    uvars2.set(L"lambda", L"1", false); //same value
-    uvars2.set(L"kappa", L"2", false); //different value
+    uvars2.set(L"lambda", L"1", false);  // same value
+    uvars2.set(L"kappa", L"2", false);   // different value
 
     // Now see what uvars2 sees.
     callback_data_list_t callbacks;
@@ -2585,8 +2581,8 @@ static void trigger_or_wait_for_notification(universal_notifier_t *notifier,
         case universal_notifier_t::strategy_named_pipe:
         case universal_notifier_t::strategy_null: {
             break;
+        }
     }
-}
 }
 
 static void test_notifiers_with_strategy(universal_notifier_t::notifier_strategy_t strategy) {
@@ -2632,7 +2628,7 @@ static void test_notifiers_with_strategy(universal_notifier_t::notifier_strategy
 
         // Named pipes have special cleanup requirements.
         if (strategy == universal_notifier_t::strategy_named_pipe) {
-            usleep(1000000 / 10); //corresponds to NAMED_PIPE_FLASH_DURATION_USEC
+            usleep(1000000 / 10);  // corresponds to NAMED_PIPE_FLASH_DURATION_USEC
             // Have to clean up the posted one first, so that the others see the pipe become no
             // longer readable.
             poll_notifier(notifiers[post_idx]);
@@ -2669,7 +2665,7 @@ static void test_universal_notifiers() {
 }
 
 class history_tests_t {
-public:
+   public:
     static void test_history(void);
     static void test_history_merge(void);
     static void test_history_formats(void);
@@ -2682,7 +2678,7 @@ static wcstring random_string(void) {
     wcstring result;
     size_t max = 1 + rand() % 32;
     while (max--) {
-        wchar_t c = 1 + rand()%ESCAPE_TEST_CHAR;
+        wchar_t c = 1 + rand() % ESCAPE_TEST_CHAR;
         result.push_back(c);
     }
     return result;
@@ -2741,7 +2737,7 @@ void history_tests_t::test_history(void) {
     // Read items back in reverse order and ensure they're the same.
     for (i = 100; i >= 1; i--) {
         history_item_t item = history.item_at_index(i);
-        do_test(! item.empty());
+        do_test(!item.empty());
         after.push_back(item);
     }
     do_test(before.size() == after.size());
@@ -2862,7 +2858,7 @@ void history_tests_t::test_history_races(void) {
     // Every write should add at least one item.
     do_test(hist_idx >= RACE_COUNT);
 
-    //hist->clear();
+    // hist->clear();
     delete hist;
 }
 
@@ -2939,12 +2935,12 @@ void history_tests_t::test_history_merge(void) {
         delete hists[i];
     }
     everything->clear();
-    delete everything; //not as scary as it looks
+    delete everything;  // not as scary as it looks
 }
 
 static bool install_sample_history(const wchar_t *name) {
     wcstring path;
-    if (! path_get_data(path)) {
+    if (!path_get_data(path)) {
         err(L"Failed to get data directory");
         return false;
     }
@@ -3244,7 +3240,7 @@ static void test_new_parser_ll2(void) {
         wcstring cmd, args;
         enum parse_statement_decoration_t deco = parse_statement_decoration_none;
         bool success = test_1_parse_ll2(tests[i].src, &cmd, &args, &deco);
-        if (! success)
+        if (!success)
             err(L"Parse of '%ls' failed on line %ld", tests[i].cmd.c_str(), (long)__LINE__);
         if (cmd != tests[i].cmd)
             err(L"When parsing '%ls', expected command '%ls' but got '%ls' on line %ld",
@@ -3382,7 +3378,7 @@ static wcstring_list_t separate_by_format_specifiers(const wchar_t *format) {
             while (iswdigit(*cursor)) cursor++;
             // Precision
             if (*cursor == L'.') {
-                    cursor++;
+                cursor++;
                 while (iswdigit(*cursor)) cursor++;
             }
             // Length modifier
@@ -3427,21 +3423,21 @@ static void test_error_messages() {
         const wchar_t *src;
         const wchar_t *error_text_format;
     } error_tests[] = {{L"echo $^", ERROR_BAD_VAR_CHAR1},
-        {L"echo foo${a}bar", ERROR_BRACKETED_VARIABLE1},
-        {L"echo foo\"${a}\"bar", ERROR_BRACKETED_VARIABLE_QUOTED1},
-        {L"echo foo\"${\"bar", ERROR_BAD_VAR_CHAR1},
-        {L"echo $?", ERROR_NOT_STATUS},
-        {L"echo $$", ERROR_NOT_PID},
-        {L"echo $#", ERROR_NOT_ARGV_COUNT},
-        {L"echo $@", ERROR_NOT_ARGV_AT},
-        {L"echo $*", ERROR_NOT_ARGV_STAR},
-        {L"echo $", ERROR_NO_VAR_NAME},
-        {L"echo foo\"$\"bar", ERROR_NO_VAR_NAME},
-        {L"echo \"foo\"$\"bar\"", ERROR_NO_VAR_NAME},
-        {L"echo foo $ bar", ERROR_NO_VAR_NAME},
-        {L"echo foo$(foo)bar", ERROR_BAD_VAR_SUBCOMMAND1},
-        {L"echo \"foo$(foo)bar\"", ERROR_BAD_VAR_SUBCOMMAND1},
-        {L"echo foo || echo bar", ERROR_BAD_OR},
+                       {L"echo foo${a}bar", ERROR_BRACKETED_VARIABLE1},
+                       {L"echo foo\"${a}\"bar", ERROR_BRACKETED_VARIABLE_QUOTED1},
+                       {L"echo foo\"${\"bar", ERROR_BAD_VAR_CHAR1},
+                       {L"echo $?", ERROR_NOT_STATUS},
+                       {L"echo $$", ERROR_NOT_PID},
+                       {L"echo $#", ERROR_NOT_ARGV_COUNT},
+                       {L"echo $@", ERROR_NOT_ARGV_AT},
+                       {L"echo $*", ERROR_NOT_ARGV_STAR},
+                       {L"echo $", ERROR_NO_VAR_NAME},
+                       {L"echo foo\"$\"bar", ERROR_NO_VAR_NAME},
+                       {L"echo \"foo\"$\"bar\"", ERROR_NO_VAR_NAME},
+                       {L"echo foo $ bar", ERROR_NO_VAR_NAME},
+                       {L"echo foo$(foo)bar", ERROR_BAD_VAR_SUBCOMMAND1},
+                       {L"echo \"foo$(foo)bar\"", ERROR_BAD_VAR_SUBCOMMAND1},
+                       {L"echo foo || echo bar", ERROR_BAD_OR},
                        {L"echo foo && echo bar", ERROR_BAD_AND}};
 
     parse_error_list_t errors;
@@ -3449,7 +3445,7 @@ static void test_error_messages() {
         const struct error_test_t *test = &error_tests[i];
         errors.clear();
         parse_util_detect_errors(test->src, &errors, false /* allow_incomplete */);
-        do_test(! errors.empty());
+        do_test(!errors.empty());
         if (!errors.empty()) {
             do_test1(string_matches_format(errors.at(0).text, test->error_text_format), test->src);
         }
@@ -3513,13 +3509,13 @@ static void test_highlighting(void) {
 
     // Command substitutions.
     const highlight_component_t components7[] = {{L"echo", highlight_spec_command},
-        {L"param1", highlight_spec_param},
-        {L"(", highlight_spec_operator},
-        {L"ls", highlight_spec_command},
-        {L"param2", highlight_spec_param},
-        {L")", highlight_spec_operator},
-        {L"|", highlight_spec_statement_terminator},
-        {L"cat", highlight_spec_command},
+                                                 {L"param1", highlight_spec_param},
+                                                 {L"(", highlight_spec_operator},
+                                                 {L"ls", highlight_spec_command},
+                                                 {L"param2", highlight_spec_param},
+                                                 {L")", highlight_spec_operator},
+                                                 {L"|", highlight_spec_statement_terminator},
+                                                 {L"cat", highlight_spec_command},
                                                  {NULL, -1}};
 
     // Redirections substitutions.
@@ -3570,30 +3566,30 @@ static void test_highlighting(void) {
         {NULL, -1}};
 
     const highlight_component_t components9[] = {{L"end", highlight_spec_error},
-        {L";", highlight_spec_statement_terminator},
-        {L"if", highlight_spec_command},
-        {L"end", highlight_spec_error},
+                                                 {L";", highlight_spec_statement_terminator},
+                                                 {L"if", highlight_spec_command},
+                                                 {L"end", highlight_spec_error},
                                                  {NULL, -1}};
 
     const highlight_component_t components10[] = {
         {L"echo", highlight_spec_command}, {L"'single_quote", highlight_spec_error}, {NULL, -1}};
 
     const highlight_component_t components11[] = {{L"echo", highlight_spec_command},
-        {L"$foo", highlight_spec_operator},
-        {L"\"", highlight_spec_quote},
-        {L"$bar", highlight_spec_operator},
-        {L"\"", highlight_spec_quote},
-        {L"$baz[", highlight_spec_operator},
-        {L"1 2..3", highlight_spec_param},
-        {L"]", highlight_spec_operator},
+                                                  {L"$foo", highlight_spec_operator},
+                                                  {L"\"", highlight_spec_quote},
+                                                  {L"$bar", highlight_spec_operator},
+                                                  {L"\"", highlight_spec_quote},
+                                                  {L"$baz[", highlight_spec_operator},
+                                                  {L"1 2..3", highlight_spec_param},
+                                                  {L"]", highlight_spec_operator},
                                                   {NULL, -1}};
 
     const highlight_component_t components12[] = {{L"for", highlight_spec_command},
-        {L"i", highlight_spec_param},
-        {L"in", highlight_spec_command},
-        {L"1 2 3", highlight_spec_param},
-        {L";", highlight_spec_statement_terminator},
-        {L"end", highlight_spec_command},
+                                                  {L"i", highlight_spec_param},
+                                                  {L"in", highlight_spec_command},
+                                                  {L"1 2 3", highlight_spec_param},
+                                                  {L";", highlight_spec_statement_terminator},
+                                                  {L"end", highlight_spec_command},
                                                   {NULL, -1}};
 
     const highlight_component_t components13[] = {
@@ -3603,7 +3599,7 @@ static void test_highlighting(void) {
         {L"][", highlight_spec_operator},
         {L"2", highlight_spec_param},
         {L"]", highlight_spec_operator},
-        {L"[3]", highlight_spec_param}, // two dollar signs, so last one is not an expansion
+        {L"[3]", highlight_spec_param},  // two dollar signs, so last one is not an expansion
         {NULL, -1}};
 
     const highlight_component_t *tests[] = {components1, components2,  components3,  components4,
@@ -3688,8 +3684,8 @@ static void run_one_string_test(const wchar_t **argv, int expected_rc,
                                 const wchar_t *expected_out) {
     parser_t parser;
     io_streams_t streams;
-    streams.stdin_is_directly_redirected = false; // read from argv instead of stdin
-    int rc = builtin_string(parser, streams, const_cast<wchar_t**>(argv));
+    streams.stdin_is_directly_redirected = false;  // read from argv instead of stdin
+    int rc = builtin_string(parser, streams, const_cast<wchar_t **>(argv));
     wcstring args;
     for (int i = 0; argv[i] != 0; i++) {
         args += escape_string(argv[i], ESCAPE_ALL) + L' ';
@@ -3700,8 +3696,8 @@ static void run_one_string_test(const wchar_t **argv, int expected_rc,
             args.c_str(), expected_rc, rc);
     } else if (streams.out.buffer() != expected_out) {
         err(L"Test failed on line %lu: [%ls]: expected [%ls] but got [%ls]", __LINE__, args.c_str(),
-                escape_string(expected_out, ESCAPE_ALL).c_str(),
-                escape_string(streams.out.buffer(), ESCAPE_ALL).c_str());
+            escape_string(expected_out, ESCAPE_ALL).c_str(),
+            escape_string(streams.out.buffer(), ESCAPE_ALL).c_str());
     }
 }
 
@@ -3711,175 +3707,175 @@ static void test_string(void) {
         int expected_rc;
         const wchar_t *expected_out;
     } string_tests[] = {
-        { {L"string", L"escape", 0},                                1, L"" },
-        { {L"string", L"escape", L"", 0},                           0, L"''\n" },
-        { {L"string", L"escape", L"-n", L"", 0},                    0, L"\n" },
-        { {L"string", L"escape", L"a", 0},                          0, L"a\n" },
-        { {L"string", L"escape", L"\x07", 0},                       0, L"\\cg\n" },
-        { {L"string", L"escape", L"\"x\"", 0},                      0, L"'\"x\"'\n" },
-        { {L"string", L"escape", L"hello world", 0},                0, L"'hello world'\n" },
-        { {L"string", L"escape", L"-n", L"hello world", 0},         0, L"hello\\ world\n" },
-        { {L"string", L"escape", L"hello", L"world", 0},            0, L"hello\nworld\n" },
-        { {L"string", L"escape", L"-n", L"~", 0},                   0, L"\\~\n" },
+        {{L"string", L"escape", 0}, 1, L""},
+        {{L"string", L"escape", L"", 0}, 0, L"''\n"},
+        {{L"string", L"escape", L"-n", L"", 0}, 0, L"\n"},
+        {{L"string", L"escape", L"a", 0}, 0, L"a\n"},
+        {{L"string", L"escape", L"\x07", 0}, 0, L"\\cg\n"},
+        {{L"string", L"escape", L"\"x\"", 0}, 0, L"'\"x\"'\n"},
+        {{L"string", L"escape", L"hello world", 0}, 0, L"'hello world'\n"},
+        {{L"string", L"escape", L"-n", L"hello world", 0}, 0, L"hello\\ world\n"},
+        {{L"string", L"escape", L"hello", L"world", 0}, 0, L"hello\nworld\n"},
+        {{L"string", L"escape", L"-n", L"~", 0}, 0, L"\\~\n"},
 
-        { {L"string", L"join", 0},                                  2, L"" },
-        { {L"string", L"join", L"", 0},                             1, L"" },
-        { {L"string", L"join", L"", L"", L"", L"", 0},              0, L"\n" },
-        { {L"string", L"join", L"", L"a", L"b", L"c", 0},           0, L"abc\n" },
-        { {L"string", L"join", L".", L"fishshell", L"com", 0},      0, L"fishshell.com\n" },
-        { {L"string", L"join", L"/", L"usr", 0},                    1, L"usr\n" },
-        { {L"string", L"join", L"/", L"usr", L"local", L"bin", 0},  0, L"usr/local/bin\n" },
-        { {L"string", L"join", L"...", L"3", L"2", L"1", 0},        0, L"3...2...1\n" },
-        { {L"string", L"join", L"-q", 0},                           2, L"" },
-        { {L"string", L"join", L"-q", L".", 0},                     1, L"" },
-        { {L"string", L"join", L"-q", L".", L".", 0},               1, L"" },
+        {{L"string", L"join", 0}, 2, L""},
+        {{L"string", L"join", L"", 0}, 1, L""},
+        {{L"string", L"join", L"", L"", L"", L"", 0}, 0, L"\n"},
+        {{L"string", L"join", L"", L"a", L"b", L"c", 0}, 0, L"abc\n"},
+        {{L"string", L"join", L".", L"fishshell", L"com", 0}, 0, L"fishshell.com\n"},
+        {{L"string", L"join", L"/", L"usr", 0}, 1, L"usr\n"},
+        {{L"string", L"join", L"/", L"usr", L"local", L"bin", 0}, 0, L"usr/local/bin\n"},
+        {{L"string", L"join", L"...", L"3", L"2", L"1", 0}, 0, L"3...2...1\n"},
+        {{L"string", L"join", L"-q", 0}, 2, L""},
+        {{L"string", L"join", L"-q", L".", 0}, 1, L""},
+        {{L"string", L"join", L"-q", L".", L".", 0}, 1, L""},
 
-        { {L"string", L"length", 0},                                1, L"" },
-        { {L"string", L"length", L"", 0},                           1, L"0\n" },
-        { {L"string", L"length", L"", L"", L"", 0},                 1, L"0\n0\n0\n" },
-        { {L"string", L"length", L"a", 0},                          0, L"1\n" },
-        { {L"string", L"length", L"\U0002008A", 0},                 0, L"1\n" },
-        { {L"string", L"length", L"um", L"dois", L"três", 0},       0, L"2\n4\n4\n" },
-        { {L"string", L"length", L"um", L"dois", L"três", 0},       0, L"2\n4\n4\n" },
-        { {L"string", L"length", L"-q", 0},                         1, L"" },
-        { {L"string", L"length", L"-q", L"", 0},                    1, L"" },
-        { {L"string", L"length", L"-q", L"a", 0},                   0, L"" },
+        {{L"string", L"length", 0}, 1, L""},
+        {{L"string", L"length", L"", 0}, 1, L"0\n"},
+        {{L"string", L"length", L"", L"", L"", 0}, 1, L"0\n0\n0\n"},
+        {{L"string", L"length", L"a", 0}, 0, L"1\n"},
+        {{L"string", L"length", L"\U0002008A", 0}, 0, L"1\n"},
+        {{L"string", L"length", L"um", L"dois", L"três", 0}, 0, L"2\n4\n4\n"},
+        {{L"string", L"length", L"um", L"dois", L"três", 0}, 0, L"2\n4\n4\n"},
+        {{L"string", L"length", L"-q", 0}, 1, L""},
+        {{L"string", L"length", L"-q", L"", 0}, 1, L""},
+        {{L"string", L"length", L"-q", L"a", 0}, 0, L""},
 
-        { {L"string", L"match", 0},                                         2, L"" },
-        { {L"string", L"match", L"", 0},                                    1, L"" },
-        { {L"string", L"match", L"", L"", 0},                               0, L"\n" },
-        { {L"string", L"match", L"?", L"a", 0},                             0, L"a\n" },
-        { {L"string", L"match", L"*", L"", 0},                              0, L"\n" },
-        { {L"string", L"match", L"**", L"", 0},                             0, L"\n" },
-        { {L"string", L"match", L"*", L"xyzzy", 0},                         0, L"xyzzy\n" },
-        { {L"string", L"match", L"**", L"plugh", 0},                        0, L"plugh\n" },
-        { {L"string", L"match", L"a*b", L"axxb", 0},                        0, L"axxb\n" },
-        { {L"string", L"match", L"a??b", L"axxb", 0},                       0, L"axxb\n" },
-        { {L"string", L"match", L"-i", L"a??B", L"axxb", 0},                0, L"axxb\n" },
-        { {L"string", L"match", L"-i", L"a??b", L"Axxb", 0},                0, L"Axxb\n" },
-        { {L"string", L"match", L"a*", L"axxb", 0},                         0, L"axxb\n" },
-        { {L"string", L"match", L"*a", L"xxa", 0},                          0, L"xxa\n" },
-        { {L"string", L"match", L"*a*", L"axa", 0},                         0, L"axa\n" },
-        { {L"string", L"match", L"*a*", L"xax", 0},                         0, L"xax\n" },
-        { {L"string", L"match", L"*a*", L"bxa", 0},                         0, L"bxa\n" },
-        { {L"string", L"match", L"*a", L"a", 0},                            0, L"a\n" },
-        { {L"string", L"match", L"a*", L"a", 0},                            0, L"a\n" },
-        { {L"string", L"match", L"a*b*c", L"axxbyyc", 0},                   0, L"axxbyyc\n" },
-        { {L"string", L"match", L"a*b?c", L"axxbyc", 0},                    0, L"axxbyc\n" },
-        { {L"string", L"match", L"*?", L"a", 0},                            0, L"a\n" },
-        { {L"string", L"match", L"*?", L"ab", 0},                           0, L"ab\n" },
-        { {L"string", L"match", L"?*", L"a", 0},                            0, L"a\n" },
-        { {L"string", L"match", L"?*", L"ab", 0},                           0, L"ab\n" },
-        { {L"string", L"match", L"\\*", L"*", 0},                           0, L"*\n" },
-        { {L"string", L"match", L"a*\\", L"abc\\", 0},                      0, L"abc\\\n" },
-        { {L"string", L"match", L"a*\\?", L"abc?", 0},                      0, L"abc?\n" },
+        {{L"string", L"match", 0}, 2, L""},
+        {{L"string", L"match", L"", 0}, 1, L""},
+        {{L"string", L"match", L"", L"", 0}, 0, L"\n"},
+        {{L"string", L"match", L"?", L"a", 0}, 0, L"a\n"},
+        {{L"string", L"match", L"*", L"", 0}, 0, L"\n"},
+        {{L"string", L"match", L"**", L"", 0}, 0, L"\n"},
+        {{L"string", L"match", L"*", L"xyzzy", 0}, 0, L"xyzzy\n"},
+        {{L"string", L"match", L"**", L"plugh", 0}, 0, L"plugh\n"},
+        {{L"string", L"match", L"a*b", L"axxb", 0}, 0, L"axxb\n"},
+        {{L"string", L"match", L"a??b", L"axxb", 0}, 0, L"axxb\n"},
+        {{L"string", L"match", L"-i", L"a??B", L"axxb", 0}, 0, L"axxb\n"},
+        {{L"string", L"match", L"-i", L"a??b", L"Axxb", 0}, 0, L"Axxb\n"},
+        {{L"string", L"match", L"a*", L"axxb", 0}, 0, L"axxb\n"},
+        {{L"string", L"match", L"*a", L"xxa", 0}, 0, L"xxa\n"},
+        {{L"string", L"match", L"*a*", L"axa", 0}, 0, L"axa\n"},
+        {{L"string", L"match", L"*a*", L"xax", 0}, 0, L"xax\n"},
+        {{L"string", L"match", L"*a*", L"bxa", 0}, 0, L"bxa\n"},
+        {{L"string", L"match", L"*a", L"a", 0}, 0, L"a\n"},
+        {{L"string", L"match", L"a*", L"a", 0}, 0, L"a\n"},
+        {{L"string", L"match", L"a*b*c", L"axxbyyc", 0}, 0, L"axxbyyc\n"},
+        {{L"string", L"match", L"a*b?c", L"axxbyc", 0}, 0, L"axxbyc\n"},
+        {{L"string", L"match", L"*?", L"a", 0}, 0, L"a\n"},
+        {{L"string", L"match", L"*?", L"ab", 0}, 0, L"ab\n"},
+        {{L"string", L"match", L"?*", L"a", 0}, 0, L"a\n"},
+        {{L"string", L"match", L"?*", L"ab", 0}, 0, L"ab\n"},
+        {{L"string", L"match", L"\\*", L"*", 0}, 0, L"*\n"},
+        {{L"string", L"match", L"a*\\", L"abc\\", 0}, 0, L"abc\\\n"},
+        {{L"string", L"match", L"a*\\?", L"abc?", 0}, 0, L"abc?\n"},
 
-        { {L"string", L"match", L"?", L"", 0},                              1, L"" },
-        { {L"string", L"match", L"?", L"ab", 0},                            1, L"" },
-        { {L"string", L"match", L"??", L"a", 0},                            1, L"" },
-        { {L"string", L"match", L"?a", L"a", 0},                            1, L"" },
-        { {L"string", L"match", L"a?", L"a", 0},                            1, L"" },
-        { {L"string", L"match", L"a??B", L"axxb", 0},                       1, L"" },
-        { {L"string", L"match", L"a*b", L"axxbc", 0},                       1, L"" },
-        { {L"string", L"match", L"*b", L"bbba", 0},                         1, L"" },
-        { {L"string", L"match", L"0x[0-9a-fA-F][0-9a-fA-F]", L"0xbad", 0},  1, L"" },
+        {{L"string", L"match", L"?", L"", 0}, 1, L""},
+        {{L"string", L"match", L"?", L"ab", 0}, 1, L""},
+        {{L"string", L"match", L"??", L"a", 0}, 1, L""},
+        {{L"string", L"match", L"?a", L"a", 0}, 1, L""},
+        {{L"string", L"match", L"a?", L"a", 0}, 1, L""},
+        {{L"string", L"match", L"a??B", L"axxb", 0}, 1, L""},
+        {{L"string", L"match", L"a*b", L"axxbc", 0}, 1, L""},
+        {{L"string", L"match", L"*b", L"bbba", 0}, 1, L""},
+        {{L"string", L"match", L"0x[0-9a-fA-F][0-9a-fA-F]", L"0xbad", 0}, 1, L""},
 
-        { {L"string", L"match", L"-a", L"*", L"ab", L"cde", 0},             0, L"ab\ncde\n" },
-        { {L"string", L"match", L"*", L"ab", L"cde", 0},                    0, L"ab\ncde\n" },
-        { {L"string", L"match", L"-n", L"*d*", L"cde", 0},                  0, L"1 3\n" },
-        { {L"string", L"match", L"-n", L"*x*", L"cde", 0},                  1, L"" },
-        { {L"string", L"match", L"-q", L"a*", L"b", L"c", 0},               1, L"" },
-        { {L"string", L"match", L"-q", L"a*", L"b", L"a", 0},               0, L"" },
+        {{L"string", L"match", L"-a", L"*", L"ab", L"cde", 0}, 0, L"ab\ncde\n"},
+        {{L"string", L"match", L"*", L"ab", L"cde", 0}, 0, L"ab\ncde\n"},
+        {{L"string", L"match", L"-n", L"*d*", L"cde", 0}, 0, L"1 3\n"},
+        {{L"string", L"match", L"-n", L"*x*", L"cde", 0}, 1, L""},
+        {{L"string", L"match", L"-q", L"a*", L"b", L"c", 0}, 1, L""},
+        {{L"string", L"match", L"-q", L"a*", L"b", L"a", 0}, 0, L""},
 
-        { {L"string", L"match", L"-r", 0},                                  2, L"" },
-        { {L"string", L"match", L"-r", L"", 0},                             1, L"" },
-        { {L"string", L"match", L"-r", L"", L"", 0},                        0, L"\n" },
-        { {L"string", L"match", L"-r", L".", L"a", 0},                      0, L"a\n" },
-        { {L"string", L"match", L"-r", L".*", L"", 0},                      0, L"\n" },
-        { {L"string", L"match", L"-r", L"a*b", L"b", 0},                    0, L"b\n" },
-        { {L"string", L"match", L"-r", L"a*b", L"aab", 0},                  0, L"aab\n" },
-        { {L"string", L"match", L"-r", L"-i", L"a*b", L"Aab", 0},           0, L"Aab\n" },
-        { {L"string", L"match", L"-r", L"-a", L"a[bc]", L"abadac", 0},      0, L"ab\nac\n" },
-        { {L"string", L"match", L"-r", L"a", L"xaxa", L"axax", 0},          0, L"a\na\n" },
-        { {L"string", L"match", L"-r", L"-a", L"a", L"xaxa", L"axax", 0},   0, L"a\na\na\na\n" },
-        { {L"string", L"match", L"-r", L"a[bc]", L"abadac", 0},             0, L"ab\n" },
-        { {L"string", L"match", L"-r", L"-q", L"a[bc]", L"abadac", 0},      0, L"" },
-        { {L"string", L"match", L"-r", L"-q", L"a[bc]", L"ad", 0},          1, L"" },
-        { {L"string", L"match", L"-r", L"(a+)b(c)", L"aabc", 0},            0, L"aabc\naa\nc\n" },
+        {{L"string", L"match", L"-r", 0}, 2, L""},
+        {{L"string", L"match", L"-r", L"", 0}, 1, L""},
+        {{L"string", L"match", L"-r", L"", L"", 0}, 0, L"\n"},
+        {{L"string", L"match", L"-r", L".", L"a", 0}, 0, L"a\n"},
+        {{L"string", L"match", L"-r", L".*", L"", 0}, 0, L"\n"},
+        {{L"string", L"match", L"-r", L"a*b", L"b", 0}, 0, L"b\n"},
+        {{L"string", L"match", L"-r", L"a*b", L"aab", 0}, 0, L"aab\n"},
+        {{L"string", L"match", L"-r", L"-i", L"a*b", L"Aab", 0}, 0, L"Aab\n"},
+        {{L"string", L"match", L"-r", L"-a", L"a[bc]", L"abadac", 0}, 0, L"ab\nac\n"},
+        {{L"string", L"match", L"-r", L"a", L"xaxa", L"axax", 0}, 0, L"a\na\n"},
+        {{L"string", L"match", L"-r", L"-a", L"a", L"xaxa", L"axax", 0}, 0, L"a\na\na\na\n"},
+        {{L"string", L"match", L"-r", L"a[bc]", L"abadac", 0}, 0, L"ab\n"},
+        {{L"string", L"match", L"-r", L"-q", L"a[bc]", L"abadac", 0}, 0, L""},
+        {{L"string", L"match", L"-r", L"-q", L"a[bc]", L"ad", 0}, 1, L""},
+        {{L"string", L"match", L"-r", L"(a+)b(c)", L"aabc", 0}, 0, L"aabc\naa\nc\n"},
         {{L"string", L"match", L"-r", L"-a", L"(a)b(c)", L"abcabc", 0},
          0,
          L"abc\na\nc\nabc\na\nc\n"},
-        { {L"string", L"match", L"-r", L"(a)b(c)", L"abcabc", 0},           0, L"abc\na\nc\n" },
-        { {L"string", L"match", L"-r", L"(a|(z))(bc)", L"abc", 0},          0, L"abc\na\nbc\n" },
-        { {L"string", L"match", L"-r", L"-n", L"a", L"ada", L"dad", 0},     0, L"1 1\n2 1\n" },
-        { {L"string", L"match", L"-r", L"-n", L"-a", L"a", L"bacadae", 0},  0, L"2 1\n4 1\n6 1\n" },
-        { {L"string", L"match", L"-r", L"-n", L"(a).*(b)", L"a---b", 0},    0, L"1 5\n1 1\n5 1\n" },
-        { {L"string", L"match", L"-r", L"-n", L"(a)(b)", L"ab", 0}, 0, L"1 2\n1 1\n2 1\n" },
-        { {L"string", L"match", L"-r", L"-n", L"(a)(b)", L"abab", 0}, 0, L"1 2\n1 1\n2 1\n" },
+        {{L"string", L"match", L"-r", L"(a)b(c)", L"abcabc", 0}, 0, L"abc\na\nc\n"},
+        {{L"string", L"match", L"-r", L"(a|(z))(bc)", L"abc", 0}, 0, L"abc\na\nbc\n"},
+        {{L"string", L"match", L"-r", L"-n", L"a", L"ada", L"dad", 0}, 0, L"1 1\n2 1\n"},
+        {{L"string", L"match", L"-r", L"-n", L"-a", L"a", L"bacadae", 0}, 0, L"2 1\n4 1\n6 1\n"},
+        {{L"string", L"match", L"-r", L"-n", L"(a).*(b)", L"a---b", 0}, 0, L"1 5\n1 1\n5 1\n"},
+        {{L"string", L"match", L"-r", L"-n", L"(a)(b)", L"ab", 0}, 0, L"1 2\n1 1\n2 1\n"},
+        {{L"string", L"match", L"-r", L"-n", L"(a)(b)", L"abab", 0}, 0, L"1 2\n1 1\n2 1\n"},
         {{L"string", L"match", L"-r", L"-n", L"-a", L"(a)(b)", L"abab", 0},
          0,
          L"1 2\n1 1\n2 1\n3 2\n3 1\n4 1\n"},
-        { {L"string", L"match", L"-r", L"*", L"", 0},                       2, L"" },
-        { {L"string", L"match", L"-r", L"-a", L"a*", L"b", 0},              0, L"\n\n" },
-        { {L"string", L"match", L"-r", L"foo\\Kbar", L"foobar", 0},         0, L"bar\n" },
-        { {L"string", L"match", L"-r", L"(foo)\\Kbar", L"foobar", 0},       0, L"bar\nfoo\n" },
-        { {L"string", L"match", L"-r", L"(?=ab\\K)", L"ab", 0},             0, L"\n" },
-        { {L"string", L"match", L"-r", L"(?=ab\\K)..(?=cd\\K)", L"abcd", 0}, 0, L"\n" },
+        {{L"string", L"match", L"-r", L"*", L"", 0}, 2, L""},
+        {{L"string", L"match", L"-r", L"-a", L"a*", L"b", 0}, 0, L"\n\n"},
+        {{L"string", L"match", L"-r", L"foo\\Kbar", L"foobar", 0}, 0, L"bar\n"},
+        {{L"string", L"match", L"-r", L"(foo)\\Kbar", L"foobar", 0}, 0, L"bar\nfoo\n"},
+        {{L"string", L"match", L"-r", L"(?=ab\\K)", L"ab", 0}, 0, L"\n"},
+        {{L"string", L"match", L"-r", L"(?=ab\\K)..(?=cd\\K)", L"abcd", 0}, 0, L"\n"},
 
-        { {L"string", L"replace", 0},                                       2, L"" },
-        { {L"string", L"replace", L"", 0},                                  2, L"" },
-        { {L"string", L"replace", L"", L"", 0},                             1, L"" },
-        { {L"string", L"replace", L"", L"", L"", 0},                        1, L"\n" },
-        { {L"string", L"replace", L"", L"", L" ", 0},                       1, L" \n" },
-        { {L"string", L"replace", L"a", L"b", L"", 0},                      1, L"\n" },
-        { {L"string", L"replace", L"a", L"b", L"a", 0},                     0, L"b\n" },
-        { {L"string", L"replace", L"a", L"b", L"xax", 0},                   0, L"xbx\n" },
-        { {L"string", L"replace", L"a", L"b", L"xax", L"axa", 0},           0, L"xbx\nbxa\n" },
-        { {L"string", L"replace", L"bar", L"x", L"red barn", 0},            0, L"red xn\n" },
-        { {L"string", L"replace", L"x", L"bar", L"red xn", 0},              0, L"red barn\n" },
-        { {L"string", L"replace", L"--", L"x", L"-", L"xyz", 0},            0, L"-yz\n" },
-        { {L"string", L"replace", L"--", L"y", L"-", L"xyz", 0},            0, L"x-z\n" },
-        { {L"string", L"replace", L"--", L"z", L"-", L"xyz", 0},            0, L"xy-\n" },
-        { {L"string", L"replace", L"-i", L"z", L"X", L"_Z_", 0},            0, L"_X_\n" },
-        { {L"string", L"replace", L"-a", L"a", L"A", L"aaa", 0},            0, L"AAA\n" },
-        { {L"string", L"replace", L"-i", L"a", L"z", L"AAA", 0},            0, L"zAA\n" },
-        { {L"string", L"replace", L"-q", L"x", L">x<", L"x", 0},            0, L"" },
-        { {L"string", L"replace", L"-a", L"x", L"", L"xxx", 0},             0, L"\n" },
-        { {L"string", L"replace", L"-a", L"***", L"_", L"*****", 0},        0, L"_**\n" },
-        { {L"string", L"replace", L"-a", L"***", L"***", L"******", 0},     0, L"******\n" },
-        { {L"string", L"replace", L"-a", L"a", L"b", L"xax", L"axa", 0},    0, L"xbx\nbxb\n" },
+        {{L"string", L"replace", 0}, 2, L""},
+        {{L"string", L"replace", L"", 0}, 2, L""},
+        {{L"string", L"replace", L"", L"", 0}, 1, L""},
+        {{L"string", L"replace", L"", L"", L"", 0}, 1, L"\n"},
+        {{L"string", L"replace", L"", L"", L" ", 0}, 1, L" \n"},
+        {{L"string", L"replace", L"a", L"b", L"", 0}, 1, L"\n"},
+        {{L"string", L"replace", L"a", L"b", L"a", 0}, 0, L"b\n"},
+        {{L"string", L"replace", L"a", L"b", L"xax", 0}, 0, L"xbx\n"},
+        {{L"string", L"replace", L"a", L"b", L"xax", L"axa", 0}, 0, L"xbx\nbxa\n"},
+        {{L"string", L"replace", L"bar", L"x", L"red barn", 0}, 0, L"red xn\n"},
+        {{L"string", L"replace", L"x", L"bar", L"red xn", 0}, 0, L"red barn\n"},
+        {{L"string", L"replace", L"--", L"x", L"-", L"xyz", 0}, 0, L"-yz\n"},
+        {{L"string", L"replace", L"--", L"y", L"-", L"xyz", 0}, 0, L"x-z\n"},
+        {{L"string", L"replace", L"--", L"z", L"-", L"xyz", 0}, 0, L"xy-\n"},
+        {{L"string", L"replace", L"-i", L"z", L"X", L"_Z_", 0}, 0, L"_X_\n"},
+        {{L"string", L"replace", L"-a", L"a", L"A", L"aaa", 0}, 0, L"AAA\n"},
+        {{L"string", L"replace", L"-i", L"a", L"z", L"AAA", 0}, 0, L"zAA\n"},
+        {{L"string", L"replace", L"-q", L"x", L">x<", L"x", 0}, 0, L""},
+        {{L"string", L"replace", L"-a", L"x", L"", L"xxx", 0}, 0, L"\n"},
+        {{L"string", L"replace", L"-a", L"***", L"_", L"*****", 0}, 0, L"_**\n"},
+        {{L"string", L"replace", L"-a", L"***", L"***", L"******", 0}, 0, L"******\n"},
+        {{L"string", L"replace", L"-a", L"a", L"b", L"xax", L"axa", 0}, 0, L"xbx\nbxb\n"},
 
-        { {L"string", L"replace", L"-r", 0},                                2, L"" },
-        { {L"string", L"replace", L"-r", L"", 0},                           2, L"" },
-        { {L"string", L"replace", L"-r", L"", L"", 0},                      1, L"" },
-        { {L"string", L"replace", L"-r", L"", L"", L"", 0},                 0, L"\n" },  // pcre2 behavior
-        { {L"string", L"replace", L"-r", L"", L"", L" ", 0},                0, L" \n" }, // pcre2 behavior
-        { {L"string", L"replace", L"-r", L"a", L"b", L"", 0},               1, L"\n" },
-        { {L"string", L"replace", L"-r", L"a", L"b", L"a", 0},              0, L"b\n" },
-        { {L"string", L"replace", L"-r", L".", L"x", L"abc", 0},            0, L"xbc\n" },
-        { {L"string", L"replace", L"-r", L".", L"", L"abc", 0},             0, L"bc\n" },
-        { {L"string", L"replace", L"-r", L"(\\w)(\\w)", L"$2$1", L"ab", 0}, 0, L"ba\n" },
-        { {L"string", L"replace", L"-r", L"(\\w)", L"$1$1", L"ab", 0},      0, L"aab\n" },
-        { {L"string", L"replace", L"-r", L"-a", L".", L"x", L"abc", 0},     0, L"xxx\n" },
-        { {L"string", L"replace", L"-r", L"-a", L"(\\w)", L"$1$1", L"ab", 0}, 0, L"aabb\n" },
-        { {L"string", L"replace", L"-r", L"-a", L".", L"", L"abc", 0},      0, L"\n" },
-        { {L"string", L"replace", L"-r", L"a", L"x", L"bc", L"cd", L"de", 0}, 1, L"bc\ncd\nde\n" },
-        { {L"string", L"replace", L"-r", L"a", L"x", L"aba", L"caa", 0},    0, L"xba\ncxa\n" },
-        { {L"string", L"replace", L"-r", L"-a", L"a", L"x", L"aba", L"caa", 0}, 0, L"xbx\ncxx\n" },
-        { {L"string", L"replace", L"-r", L"-i", L"A", L"b", L"xax", 0},     0, L"xbx\n" },
-        { {L"string", L"replace", L"-r", L"-i", L"[a-z]", L".", L"1A2B", 0}, 0, L"1.2B\n" },
-        { {L"string", L"replace", L"-r", L"A", L"b", L"xax", 0},            1, L"xax\n" },
-        { {L"string", L"replace", L"-r", L"a", L"$1", L"a", 0},             2, L"" },
-        { {L"string", L"replace", L"-r", L"(a)", L"$2", L"a", 0},           2, L"" },
-        { {L"string", L"replace", L"-r", L"*", L".", L"a", 0},              2, L"" },
-        { {L"string", L"replace", L"-r", L"^(.)", L"\t$1", L"abc", L"x", 0}, 0, L"\tabc\n\tx\n" },
+        {{L"string", L"replace", L"-r", 0}, 2, L""},
+        {{L"string", L"replace", L"-r", L"", 0}, 2, L""},
+        {{L"string", L"replace", L"-r", L"", L"", 0}, 1, L""},
+        {{L"string", L"replace", L"-r", L"", L"", L"", 0}, 0, L"\n"},    // pcre2 behavior
+        {{L"string", L"replace", L"-r", L"", L"", L" ", 0}, 0, L" \n"},  // pcre2 behavior
+        {{L"string", L"replace", L"-r", L"a", L"b", L"", 0}, 1, L"\n"},
+        {{L"string", L"replace", L"-r", L"a", L"b", L"a", 0}, 0, L"b\n"},
+        {{L"string", L"replace", L"-r", L".", L"x", L"abc", 0}, 0, L"xbc\n"},
+        {{L"string", L"replace", L"-r", L".", L"", L"abc", 0}, 0, L"bc\n"},
+        {{L"string", L"replace", L"-r", L"(\\w)(\\w)", L"$2$1", L"ab", 0}, 0, L"ba\n"},
+        {{L"string", L"replace", L"-r", L"(\\w)", L"$1$1", L"ab", 0}, 0, L"aab\n"},
+        {{L"string", L"replace", L"-r", L"-a", L".", L"x", L"abc", 0}, 0, L"xxx\n"},
+        {{L"string", L"replace", L"-r", L"-a", L"(\\w)", L"$1$1", L"ab", 0}, 0, L"aabb\n"},
+        {{L"string", L"replace", L"-r", L"-a", L".", L"", L"abc", 0}, 0, L"\n"},
+        {{L"string", L"replace", L"-r", L"a", L"x", L"bc", L"cd", L"de", 0}, 1, L"bc\ncd\nde\n"},
+        {{L"string", L"replace", L"-r", L"a", L"x", L"aba", L"caa", 0}, 0, L"xba\ncxa\n"},
+        {{L"string", L"replace", L"-r", L"-a", L"a", L"x", L"aba", L"caa", 0}, 0, L"xbx\ncxx\n"},
+        {{L"string", L"replace", L"-r", L"-i", L"A", L"b", L"xax", 0}, 0, L"xbx\n"},
+        {{L"string", L"replace", L"-r", L"-i", L"[a-z]", L".", L"1A2B", 0}, 0, L"1.2B\n"},
+        {{L"string", L"replace", L"-r", L"A", L"b", L"xax", 0}, 1, L"xax\n"},
+        {{L"string", L"replace", L"-r", L"a", L"$1", L"a", 0}, 2, L""},
+        {{L"string", L"replace", L"-r", L"(a)", L"$2", L"a", 0}, 2, L""},
+        {{L"string", L"replace", L"-r", L"*", L".", L"a", 0}, 2, L""},
+        {{L"string", L"replace", L"-r", L"^(.)", L"\t$1", L"abc", L"x", 0}, 0, L"\tabc\n\tx\n"},
 
-        { {L"string", L"split", 0},                                         2, L"" },
-        { {L"string", L"split", L":", 0},                                   1, L"" },
-        { {L"string", L"split", L".", L"www.ch.ic.ac.uk", 0},               0, L"www\nch\nic\nac\nuk\n" },
-        { {L"string", L"split", L"..", L"....", 0},                         0, L"\n\n\n" },
-        { {L"string", L"split", L"-m", L"x", L"..", L"....", 0},            2, L"" },
-        { {L"string", L"split", L"-m1", L"..", L"....", 0},                 0, L"\n..\n" },
+        {{L"string", L"split", 0}, 2, L""},
+        {{L"string", L"split", L":", 0}, 1, L""},
+        {{L"string", L"split", L".", L"www.ch.ic.ac.uk", 0}, 0, L"www\nch\nic\nac\nuk\n"},
+        {{L"string", L"split", L"..", L"....", 0}, 0, L"\n\n\n"},
+        {{L"string", L"split", L"-m", L"x", L"..", L"....", 0}, 2, L""},
+        {{L"string", L"split", L"-m1", L"..", L"....", 0}, 0, L"\n..\n"},
         {{L"string", L"split", L"-m0", L"/", L"/usr/local/bin/fish", 0},
          1,
          L"/usr/local/bin/fish\n"},
@@ -3889,73 +3885,73 @@ static void test_string(void) {
         {{L"string", L"split", L"-m1", L"-r", L"/", L"/usr/local/bin/fish", 0},
          0,
          L"/usr/local/bin\nfish\n"},
-        { {L"string", L"split", L"-r", L".", L"www.ch.ic.ac.uk", 0},        0, L"www\nch\nic\nac\nuk\n" },
-        { {L"string", L"split", L"--", L"--", L"a--b---c----d", 0},         0, L"a\nb\n-c\n\nd\n" },
-        { {L"string", L"split", L"-r", L"..", L"....", 0},                  0, L"\n\n\n" },
-        { {L"string", L"split", L"-r", L"--", L"--", L"a--b---c----d", 0},  0, L"a\nb-\nc\n\nd\n" },
-        { {L"string", L"split", L"", L"", 0},                               1, L"\n" },
-        { {L"string", L"split", L"", L"a", 0},                              1, L"a\n" },
-        { {L"string", L"split", L"", L"ab", 0},                             0, L"a\nb\n" },
-        { {L"string", L"split", L"", L"abc", 0},                            0, L"a\nb\nc\n" },
-        { {L"string", L"split", L"-m1", L"", L"abc", 0},                    0, L"a\nbc\n" },
-        { {L"string", L"split", L"-r", L"", L"", 0},                        1, L"\n" },
-        { {L"string", L"split", L"-r", L"", L"a", 0},                       1, L"a\n" },
-        { {L"string", L"split", L"-r", L"", L"ab", 0},                      0, L"a\nb\n" },
-        { {L"string", L"split", L"-r", L"", L"abc", 0},                     0, L"a\nb\nc\n" },
-        { {L"string", L"split", L"-r", L"-m1", L"", L"abc", 0},             0, L"ab\nc\n" },
-        { {L"string", L"split", L"-q", 0},                                  2, L"" },
-        { {L"string", L"split", L"-q", L":", 0},                            1, L"" },
-        { {L"string", L"split", L"-q", L"x", L"axbxc", 0},                  0, L"" },
+        {{L"string", L"split", L"-r", L".", L"www.ch.ic.ac.uk", 0}, 0, L"www\nch\nic\nac\nuk\n"},
+        {{L"string", L"split", L"--", L"--", L"a--b---c----d", 0}, 0, L"a\nb\n-c\n\nd\n"},
+        {{L"string", L"split", L"-r", L"..", L"....", 0}, 0, L"\n\n\n"},
+        {{L"string", L"split", L"-r", L"--", L"--", L"a--b---c----d", 0}, 0, L"a\nb-\nc\n\nd\n"},
+        {{L"string", L"split", L"", L"", 0}, 1, L"\n"},
+        {{L"string", L"split", L"", L"a", 0}, 1, L"a\n"},
+        {{L"string", L"split", L"", L"ab", 0}, 0, L"a\nb\n"},
+        {{L"string", L"split", L"", L"abc", 0}, 0, L"a\nb\nc\n"},
+        {{L"string", L"split", L"-m1", L"", L"abc", 0}, 0, L"a\nbc\n"},
+        {{L"string", L"split", L"-r", L"", L"", 0}, 1, L"\n"},
+        {{L"string", L"split", L"-r", L"", L"a", 0}, 1, L"a\n"},
+        {{L"string", L"split", L"-r", L"", L"ab", 0}, 0, L"a\nb\n"},
+        {{L"string", L"split", L"-r", L"", L"abc", 0}, 0, L"a\nb\nc\n"},
+        {{L"string", L"split", L"-r", L"-m1", L"", L"abc", 0}, 0, L"ab\nc\n"},
+        {{L"string", L"split", L"-q", 0}, 2, L""},
+        {{L"string", L"split", L"-q", L":", 0}, 1, L""},
+        {{L"string", L"split", L"-q", L"x", L"axbxc", 0}, 0, L""},
 
-        { {L"string", L"sub", 0},                                   1, L"" },
-        { {L"string", L"sub", L"abcde", 0},                         0, L"abcde\n"},
-        { {L"string", L"sub", L"-l", L"x", L"abcde", 0},            2, L""},
-        { {L"string", L"sub", L"-s", L"x", L"abcde", 0},            2, L""},
-        { {L"string", L"sub", L"-l0", L"abcde", 0},                 0, L"\n"},
-        { {L"string", L"sub", L"-l2", L"abcde", 0},                 0, L"ab\n"},
-        { {L"string", L"sub", L"-l5", L"abcde", 0},                 0, L"abcde\n"},
-        { {L"string", L"sub", L"-l6", L"abcde", 0},                 0, L"abcde\n"},
-        { {L"string", L"sub", L"-l-1", L"abcde", 0},                2, L""},
-        { {L"string", L"sub", L"-s0", L"abcde", 0},                 2, L""},
-        { {L"string", L"sub", L"-s1", L"abcde", 0},                 0, L"abcde\n"},
-        { {L"string", L"sub", L"-s5", L"abcde", 0},                 0, L"e\n"},
-        { {L"string", L"sub", L"-s6", L"abcde", 0},                 0, L"\n"},
-        { {L"string", L"sub", L"-s-1", L"abcde", 0},                0, L"e\n"},
-        { {L"string", L"sub", L"-s-5", L"abcde", 0},                0, L"abcde\n"},
-        { {L"string", L"sub", L"-s-6", L"abcde", 0},                0, L"abcde\n"},
-        { {L"string", L"sub", L"-s1", L"-l0", L"abcde", 0},         0, L"\n"},
-        { {L"string", L"sub", L"-s1", L"-l1", L"abcde", 0},         0, L"a\n"},
-        { {L"string", L"sub", L"-s2", L"-l2", L"abcde", 0},         0, L"bc\n"},
-        { {L"string", L"sub", L"-s-1", L"-l1", L"abcde", 0},        0, L"e\n"},
-        { {L"string", L"sub", L"-s-1", L"-l2", L"abcde", 0},        0, L"e\n"},
-        { {L"string", L"sub", L"-s-3", L"-l2", L"abcde", 0},        0, L"cd\n"},
-        { {L"string", L"sub", L"-s-3", L"-l4", L"abcde", 0},        0, L"cde\n"},
-        { {L"string", L"sub", L"-q", 0},                            1, L"" },
-        { {L"string", L"sub", L"-q", L"abcde", 0},                  0, L""},
+        {{L"string", L"sub", 0}, 1, L""},
+        {{L"string", L"sub", L"abcde", 0}, 0, L"abcde\n"},
+        {{L"string", L"sub", L"-l", L"x", L"abcde", 0}, 2, L""},
+        {{L"string", L"sub", L"-s", L"x", L"abcde", 0}, 2, L""},
+        {{L"string", L"sub", L"-l0", L"abcde", 0}, 0, L"\n"},
+        {{L"string", L"sub", L"-l2", L"abcde", 0}, 0, L"ab\n"},
+        {{L"string", L"sub", L"-l5", L"abcde", 0}, 0, L"abcde\n"},
+        {{L"string", L"sub", L"-l6", L"abcde", 0}, 0, L"abcde\n"},
+        {{L"string", L"sub", L"-l-1", L"abcde", 0}, 2, L""},
+        {{L"string", L"sub", L"-s0", L"abcde", 0}, 2, L""},
+        {{L"string", L"sub", L"-s1", L"abcde", 0}, 0, L"abcde\n"},
+        {{L"string", L"sub", L"-s5", L"abcde", 0}, 0, L"e\n"},
+        {{L"string", L"sub", L"-s6", L"abcde", 0}, 0, L"\n"},
+        {{L"string", L"sub", L"-s-1", L"abcde", 0}, 0, L"e\n"},
+        {{L"string", L"sub", L"-s-5", L"abcde", 0}, 0, L"abcde\n"},
+        {{L"string", L"sub", L"-s-6", L"abcde", 0}, 0, L"abcde\n"},
+        {{L"string", L"sub", L"-s1", L"-l0", L"abcde", 0}, 0, L"\n"},
+        {{L"string", L"sub", L"-s1", L"-l1", L"abcde", 0}, 0, L"a\n"},
+        {{L"string", L"sub", L"-s2", L"-l2", L"abcde", 0}, 0, L"bc\n"},
+        {{L"string", L"sub", L"-s-1", L"-l1", L"abcde", 0}, 0, L"e\n"},
+        {{L"string", L"sub", L"-s-1", L"-l2", L"abcde", 0}, 0, L"e\n"},
+        {{L"string", L"sub", L"-s-3", L"-l2", L"abcde", 0}, 0, L"cd\n"},
+        {{L"string", L"sub", L"-s-3", L"-l4", L"abcde", 0}, 0, L"cde\n"},
+        {{L"string", L"sub", L"-q", 0}, 1, L""},
+        {{L"string", L"sub", L"-q", L"abcde", 0}, 0, L""},
 
-        { {L"string", L"trim", 0},                                  1, L""},
-        { {L"string", L"trim", L""},                                1, L"\n"},
-        { {L"string", L"trim", L" "},                               0, L"\n"},
-        { {L"string", L"trim", L"  \f\n\r\t"},                      0, L"\n"},
-        { {L"string", L"trim", L" a"},                              0, L"a\n"},
-        { {L"string", L"trim", L"a "},                              0, L"a\n"},
-        { {L"string", L"trim", L" a "},                             0, L"a\n"},
-        { {L"string", L"trim", L"-l", L" a"},                       0, L"a\n"},
-        { {L"string", L"trim", L"-l", L"a "},                       1, L"a \n"},
-        { {L"string", L"trim", L"-l", L" a "},                      0, L"a \n"},
-        { {L"string", L"trim", L"-r", L" a"},                       1, L" a\n"},
-        { {L"string", L"trim", L"-r", L"a "},                       0, L"a\n"},
-        { {L"string", L"trim", L"-r", L" a "},                      0, L" a\n"},
-        { {L"string", L"trim", L"-c", L".", L" a"},                 1, L" a\n"},
-        { {L"string", L"trim", L"-c", L".", L"a "},                 1, L"a \n"},
-        { {L"string", L"trim", L"-c", L".", L" a "},                1, L" a \n"},
-        { {L"string", L"trim", L"-c", L".", L".a"},                 0, L"a\n"},
-        { {L"string", L"trim", L"-c", L".", L"a."},                 0, L"a\n"},
-        { {L"string", L"trim", L"-c", L".", L".a."},                0, L"a\n"},
-        { {L"string", L"trim", L"-c", L"\\/", L"/a\\"},             0, L"a\n"},
-        { {L"string", L"trim", L"-c", L"\\/", L"a/"},               0, L"a\n"},
-        { {L"string", L"trim", L"-c", L"\\/", L"\\a/"},             0, L"a\n"},
-        { {L"string", L"trim", L"-c", L"", L".a."},                 1, L".a.\n"},
+        {{L"string", L"trim", 0}, 1, L""},
+        {{L"string", L"trim", L""}, 1, L"\n"},
+        {{L"string", L"trim", L" "}, 0, L"\n"},
+        {{L"string", L"trim", L"  \f\n\r\t"}, 0, L"\n"},
+        {{L"string", L"trim", L" a"}, 0, L"a\n"},
+        {{L"string", L"trim", L"a "}, 0, L"a\n"},
+        {{L"string", L"trim", L" a "}, 0, L"a\n"},
+        {{L"string", L"trim", L"-l", L" a"}, 0, L"a\n"},
+        {{L"string", L"trim", L"-l", L"a "}, 1, L"a \n"},
+        {{L"string", L"trim", L"-l", L" a "}, 0, L"a \n"},
+        {{L"string", L"trim", L"-r", L" a"}, 1, L" a\n"},
+        {{L"string", L"trim", L"-r", L"a "}, 0, L"a\n"},
+        {{L"string", L"trim", L"-r", L" a "}, 0, L" a\n"},
+        {{L"string", L"trim", L"-c", L".", L" a"}, 1, L" a\n"},
+        {{L"string", L"trim", L"-c", L".", L"a "}, 1, L"a \n"},
+        {{L"string", L"trim", L"-c", L".", L" a "}, 1, L" a \n"},
+        {{L"string", L"trim", L"-c", L".", L".a"}, 0, L"a\n"},
+        {{L"string", L"trim", L"-c", L".", L"a."}, 0, L"a\n"},
+        {{L"string", L"trim", L"-c", L".", L".a."}, 0, L"a\n"},
+        {{L"string", L"trim", L"-c", L"\\/", L"/a\\"}, 0, L"a\n"},
+        {{L"string", L"trim", L"-c", L"\\/", L"a/"}, 0, L"a\n"},
+        {{L"string", L"trim", L"-c", L"\\/", L"\\a/"}, 0, L"a\n"},
+        {{L"string", L"trim", L"-c", L"", L".a."}, 1, L".a.\n"},
 
         {{0}, 0, 0}};
 
@@ -3987,10 +3983,10 @@ int main(int argc, char **argv) {
     }
 
     setlocale(LC_ALL, "");
-    //srand(time(0));
+    // srand(time(0));
     configure_thread_assertions_for_testing();
 
-    program_name=L"(ignore)";
+    program_name = L"(ignore)";
     s_arguments = argv + 1;
 
     say(L"Testing low-level functionality");
@@ -4002,7 +3998,7 @@ int main(int argc, char **argv) {
     builtin_init();
     reader_init();
     env_init();
-    
+
     signal_reset_handlers();
 
     if (should_test_function("highlighting")) test_highlighting();
@@ -4060,8 +4056,8 @@ int main(int argc, char **argv) {
 
     // Skip performance tests for now, since they seem to hang when running from inside make.
 
-//  say( L"Testing performance" );
-//  perf_complete();
+    //  say( L"Testing performance" );
+    //  perf_complete();
 
     reader_destroy();
     builtin_destroy();
@@ -4069,6 +4065,6 @@ int main(int argc, char **argv) {
     proc_destroy();
 
     if (err_count != 0) {
-        return(1);
+        return (1);
     }
 }

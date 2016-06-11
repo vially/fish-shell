@@ -23,7 +23,7 @@
 
 /// Avoid writing the type name twice in a common "static_cast-initialization". Caveat: This doesn't
 /// work with type names containing commas!
-#define CAST_INIT(type, dst, src) type dst = static_cast<type >(src)
+#define CAST_INIT(type, dst, src) type dst = static_cast<type>(src)
 
 // Common string type.
 typedef std::wstring wcstring;
@@ -51,13 +51,13 @@ typedef std::vector<wcstring> wcstring_list_t;
 // gives us 32 "characters" for internal use that we can guarantee should not
 // appear in our input stream. See http://www.unicode.org/faq/private_use.html.
 #define RESERVED_CHAR_BASE 0xFDD0u
-#define RESERVED_CHAR_END  0xFDF0u
+#define RESERVED_CHAR_END 0xFDF0u
 // Split the available noncharacter values into two ranges to ensure there are
 // no conflicts among the places we use these special characters.
 #define EXPAND_RESERVED_BASE RESERVED_CHAR_BASE
-#define EXPAND_RESERVED_END  (EXPAND_RESERVED_BASE + 16)
+#define EXPAND_RESERVED_END (EXPAND_RESERVED_BASE + 16)
 #define WILDCARD_RESERVED_BASE EXPAND_RESERVED_END
-#define WILDCARD_RESERVED_END  (WILDCARD_RESERVED_BASE + 16)
+#define WILDCARD_RESERVED_END (WILDCARD_RESERVED_BASE + 16)
 // Make sure the ranges defined above don't exceed the range for noncharacters.
 // This is to make sure we didn't do something stupid in subdividing the
 // Unicode range for our needs.
@@ -78,9 +78,9 @@ typedef std::vector<wcstring> wcstring_list_t;
 // of at least one use of a codepoint in that range: the Apple symbol (0xF8FF)
 // on Mac OS X. See http://www.unicode.org/faq/private_use.html.
 #define ENCODE_DIRECT_BASE 0xF600u
-#define ENCODE_DIRECT_END  (ENCODE_DIRECT_BASE + 256)
-#define INPUT_COMMON_BASE  0xF700u
-#define INPUT_COMMON_END   (INPUT_COMMON_BASE + 64)
+#define ENCODE_DIRECT_END (ENCODE_DIRECT_BASE + 256)
+#define INPUT_COMMON_BASE 0xF700u
+#define INPUT_COMMON_END (INPUT_COMMON_BASE + 64)
 
 // Flags for unescape_string functions.
 enum {
@@ -188,40 +188,40 @@ void write_ignore(int fd, const void *buff, size_t count);
 /// This macro is used to check that an input argument is not null. It is a bit lika a non-fatal
 /// form of assert. Instead of exit-ing on failure, the current function is ended at once. The
 /// second parameter is the return value of the current function on failure.
-#define CHECK( arg, retval )											\
+#define CHECK(arg, retval)                                                                \
     if (!(arg)) {                                                                         \
         debug(0, "function %s called with null value for argument %s. ", __func__, #arg); \
-		bugreport();													\
-		show_stackframe();												\
-		return retval;													\
-	}
+        bugreport();                                                                      \
+        show_stackframe();                                                                \
+        return retval;                                                                    \
+    }
 
 /// Pause for input, then exit the program. If supported, print a backtrace first.
-#define FATAL_EXIT()											\
-	{															\
-        char exit_read_buff;                                    \
-        show_stackframe();										\
-        read_ignore( 0, &exit_read_buff, 1 );                   \
-        exit_without_destructors( 1 );                          \
+#define FATAL_EXIT()                        \
+    {                                       \
+        char exit_read_buff;                \
+        show_stackframe();                  \
+        read_ignore(0, &exit_read_buff, 1); \
+        exit_without_destructors(1);        \
     }
 
 /// Exit program at once, leaving an error message about running out of memory.
-#define DIE_MEM()														\
-	{																	\
+#define DIE_MEM()                                                                             \
+    {                                                                                         \
         fwprintf(stderr, L"fish: Out of memory on line %ld of file %s, shutting down fish\n", \
                  (long)__LINE__, __FILE__);                                                   \
-		FATAL_EXIT();														\
-	}
+        FATAL_EXIT();                                                                         \
+    }
 
 /// Check if signals are blocked. If so, print an error message and return from the function
 /// performing this check.
-#define CHECK_BLOCK(retval) 											\
+#define CHECK_BLOCK(retval)                                                \
     if (signal_is_blocked()) {                                             \
         debug(0, "function %s called while blocking signals. ", __func__); \
-		bugreport();													\
-		show_stackframe();												\
-		return retval;													\
-	}
+        bugreport();                                                       \
+        show_stackframe();                                                 \
+        return retval;                                                     \
+    }
 
 /// Shorthand for wgettext call.
 #define _(wstr) wgettext(wstr)
@@ -231,7 +231,7 @@ void write_ignore(int fd, const void *buff, size_t count);
 #define N_(wstr) wstr
 
 /// Check if the specified string element is a part of the specified string list.
-#define contains( str, ... ) contains_internal( str, 0, __VA_ARGS__, NULL )
+#define contains(str, ...) contains_internal(str, 0, __VA_ARGS__, NULL)
 
 /// Print a stack trace to stderr.
 void show_stackframe();
@@ -380,7 +380,7 @@ void format_ullong_safe(wchar_t buff[64], unsigned long long val);
 /// "Narrows" a wide character string. This just grabs any ASCII characters and trunactes.
 void narrow_string_safe(char buff[64], const wchar_t *s);
 
-template<typename T>
+template <typename T>
 T from_string(const wcstring &x) {
     T result;
     std::wstringstream stream(x);
@@ -388,7 +388,7 @@ T from_string(const wcstring &x) {
     return result;
 }
 
-template<typename T>
+template <typename T>
 T from_string(const std::string &x) {
     T result = T();
     std::stringstream stream(x);
@@ -396,7 +396,7 @@ T from_string(const std::string &x) {
     return result;
 }
 
-template<typename T>
+template <typename T>
 wcstring to_string(const T &x) {
     std::wstringstream stream;
     stream << x;
@@ -404,50 +404,47 @@ wcstring to_string(const T &x) {
 }
 
 // wstringstream is a huge memory pig. Let's provide some specializations where we can.
-template<>
+template <>
 inline wcstring to_string(const long &x) {
     wchar_t buff[128];
     format_long_safe(buff, x);
     return wcstring(buff);
 }
 
-template<>
-inline wcstring to_string(const unsigned long long &x)
-{
+template <>
+inline wcstring to_string(const unsigned long long &x) {
     wchar_t buff[128];
     format_ullong_safe(buff, x);
     return wcstring(buff);
 }
 
-template<>
-inline bool from_string(const std::string &x)
-{
-    return ! x.empty() && strchr("YTyt1", x.at(0));
+template <>
+inline bool from_string(const std::string &x) {
+    return !x.empty() && strchr("YTyt1", x.at(0));
 }
 
-template<>
+template <>
 inline bool from_string(const wcstring &x) {
-    return ! x.empty() && wcschr(L"YTyt1", x.at(0));
+    return !x.empty() && wcschr(L"YTyt1", x.at(0));
 }
 
-template<>
+template <>
 inline wcstring to_string(const int &x) {
     return to_string(static_cast<long>(x));
 }
 
-template<>
-inline wcstring to_string(const size_t &x)
-{
+template <>
+inline wcstring to_string(const size_t &x) {
     return to_string(static_cast<unsigned long long>(x));
 }
 
 // A hackish thing to simulate rvalue references in C++98. The idea is that you can define a
 // constructor to take a moved_ref<T> and then swap() out of it.
-template<typename T>
+template <typename T>
 struct moved_ref {
     T &val;
-    
-    explicit moved_ref(T &v) : val(v) { }
+
+    explicit moved_ref(T &v) : val(v) {}
 };
 
 wchar_t **make_null_terminated_array(const wcstring_list_t &lst);
@@ -479,8 +476,8 @@ class null_terminated_array_t {
         array = NULL;
     }
 
-public:
-    null_terminated_array_t() : array(NULL) { }
+   public:
+    null_terminated_array_t() : array(NULL) {}
     explicit null_terminated_array_t(const string_list_t &argv)
         : array(make_null_terminated_array(argv)) {}
 
@@ -504,10 +501,10 @@ void convert_wide_array_to_narrow(const null_terminated_array_t<wchar_t> &arr,
 bool is_forked_child();
 
 class mutex_lock_t {
-    public:
+   public:
     pthread_mutex_t mutex;
     mutex_lock_t() { VOMIT_ON_FAILURE_NO_ERRNO(pthread_mutex_init(&mutex, NULL)); }
-    
+
     ~mutex_lock_t() { VOMIT_ON_FAILURE_NO_ERRNO(pthread_mutex_destroy(&mutex)); }
 };
 
@@ -520,7 +517,7 @@ class scoped_lock {
     scoped_lock &operator=(const scoped_lock &);
     scoped_lock(const scoped_lock &);
 
-public:
+   public:
     void lock(void);
     void unlock(void);
     explicit scoped_lock(pthread_mutex_t &mutex);
@@ -529,7 +526,7 @@ public:
 };
 
 class rwlock_t {
-public:
+   public:
     pthread_rwlock_t rwlock;
     rwlock_t() { VOMIT_ON_FAILURE_NO_ERRNO(pthread_rwlock_init(&rwlock, NULL)); }
 
@@ -546,7 +543,7 @@ class scoped_rwlock {
     scoped_rwlock &operator=(const scoped_lock &);
     explicit scoped_rwlock(const scoped_lock &);
 
-public:
+   public:
     void lock(void);
     void unlock(void);
     void lock_shared(void);
@@ -564,11 +561,11 @@ public:
 /// This can be handy when there are multiple code paths to exit a block.
 template <typename T>
 class scoped_push {
-    T * const ref;
+    T *const ref;
     T saved_value;
     bool restored;
 
-public:
+   public:
     explicit scoped_push(T *r) : ref(r), saved_value(*r), restored(false) {}
 
     scoped_push(T *r, const T &new_value) : ref(r), saved_value(*r), restored(false) {
@@ -594,7 +591,7 @@ class wcstokenizer {
     wcstokenizer &operator=(const wcstokenizer &);
     wcstokenizer(const wcstokenizer &);
 
-public:
+   public:
     wcstokenizer(const wcstring &s, const wcstring &separator);
     bool next(wcstring &result);
     ~wcstokenizer();
@@ -628,7 +625,7 @@ bool wcsvarchr(wchar_t chr);
 ///
 /// See fallback.h for the normal definitions.
 int fish_wcswidth(const wchar_t *str);
-int fish_wcswidth(const wcstring& str);
+int fish_wcswidth(const wcstring &str);
 
 /// This functions returns the end of the quoted substring beginning at \c in. The type of quoting
 /// character is detemrined by examining \c in. Returns 0 on error.
@@ -777,7 +774,7 @@ void assert_is_not_forked_child(const char *who);
 #define USE(var) (void)(var)
 
 extern "C" {
-    __attribute__((noinline)) void debug_thread_error(void);
+__attribute__((noinline)) void debug_thread_error(void);
 }
 
 #endif

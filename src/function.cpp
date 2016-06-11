@@ -38,7 +38,7 @@ static pthread_mutex_t functions_lock;
 
 /// Autoloader for functions.
 class function_autoload_t : public autoload_t {
-public:
+   public:
     function_autoload_t();
     virtual void command_removed(const wcstring &cmd);
 };
@@ -86,7 +86,7 @@ static int load(const wcstring &name) {
 static void autoload_names(std::set<wcstring> &names, int get_hidden) {
     size_t i;
 
-    const env_var_t path_var_wstr =  env_get_string(L"fish_function_path");
+    const env_var_t path_var_wstr = env_get_string(L"fish_function_path");
     if (path_var_wstr.missing()) return;
     const wchar_t *path_var = path_var_wstr.c_str();
 
@@ -121,13 +121,13 @@ void function_init() {
     // functions, etc.).
     pthread_mutexattr_t a;
     VOMIT_ON_FAILURE(pthread_mutexattr_init(&a));
-    VOMIT_ON_FAILURE(pthread_mutexattr_settype(&a,PTHREAD_MUTEX_RECURSIVE));
+    VOMIT_ON_FAILURE(pthread_mutexattr_settype(&a, PTHREAD_MUTEX_RECURSIVE));
     VOMIT_ON_FAILURE(pthread_mutex_init(&functions_lock, &a));
     VOMIT_ON_FAILURE(pthread_mutexattr_destroy(&a));
 }
 
 static std::map<wcstring, env_var_t> snapshot_vars(const wcstring_list_t &vars) {
-    std::map<wcstring,env_var_t> result;
+    std::map<wcstring, env_var_t> result;
     for (wcstring_list_t::const_iterator it = vars.begin(), end = vars.end(); it != end; ++it) {
         result.insert(std::make_pair(*it, env_get_string(*it)));
     }
@@ -137,30 +137,30 @@ static std::map<wcstring, env_var_t> snapshot_vars(const wcstring_list_t &vars) 
 function_info_t::function_info_t(const function_data_t &data, const wchar_t *filename,
                                  int def_offset, bool autoload)
     : definition(data.definition),
-    description(data.description),
-    definition_file(intern(filename)),
-    definition_offset(def_offset),
-    named_arguments(data.named_arguments),
-    inherit_vars(snapshot_vars(data.inherit_vars)),
-    is_autoload(autoload),
+      description(data.description),
+      definition_file(intern(filename)),
+      definition_offset(def_offset),
+      named_arguments(data.named_arguments),
+      inherit_vars(snapshot_vars(data.inherit_vars)),
+      is_autoload(autoload),
       shadows(data.shadows) {}
 
 function_info_t::function_info_t(const function_info_t &data, const wchar_t *filename,
                                  int def_offset, bool autoload)
     : definition(data.definition),
-    description(data.description),
-    definition_file(intern(filename)),
-    definition_offset(def_offset),
-    named_arguments(data.named_arguments),
-    inherit_vars(data.inherit_vars),
-    is_autoload(autoload),
+      description(data.description),
+      definition_file(intern(filename)),
+      definition_offset(def_offset),
+      named_arguments(data.named_arguments),
+      inherit_vars(data.inherit_vars),
+      is_autoload(autoload),
       shadows(data.shadows) {}
 
 void function_add(const function_data_t &data, const parser_t &parser, int definition_line_offset) {
     ASSERT_IS_MAIN_THREAD();
 
-    CHECK(! data.name.empty(),);
-    CHECK(data.definition,);
+    CHECK(!data.name.empty(), );
+    CHECK(data.definition, );
     scoped_lock lock(functions_lock);
 
     // Remove the old function.
@@ -215,7 +215,7 @@ static bool function_remove_ignore_autoload(const wcstring &name, bool tombstone
 
     loaded_functions.erase(iter);
     event_t ev(EVENT_ANY);
-    ev.function_name=name;
+    ev.function_name = name;
     event_remove(ev);
     return true;
 }
@@ -228,7 +228,7 @@ static const function_info_t *function_get(const wcstring &name) {
     // The caller must lock the functions_lock before calling this; however our mutex is currently
     // recursive, so trylock will never fail. We need a way to correctly check if a lock is locked
     // (or better yet, make our lock non-recursive).
-    //ASSERT_IS_LOCKED(functions_lock);
+    // ASSERT_IS_LOCKED(functions_lock);
     function_map_t::iterator iter = loaded_functions.find(name);
     if (iter == loaded_functions.end()) {
         return NULL;
@@ -255,7 +255,7 @@ wcstring_list_t function_get_named_arguments(const wcstring &name) {
 std::map<wcstring, env_var_t> function_get_inherit_vars(const wcstring &name) {
     scoped_lock lock(functions_lock);
     const function_info_t *func = function_get(name);
-    return func ? func->inherit_vars : std::map<wcstring,env_var_t>();
+    return func ? func->inherit_vars : std::map<wcstring, env_var_t>();
 }
 
 int function_get_shadows(const wcstring &name) {
@@ -338,10 +338,10 @@ void function_prepare_environment(const wcstring &name, const wchar_t *const *ar
     // 3. inherited variables
     // 4. docopt
     env_set_argv(argv);
-    
+
     // Argv
     env_set_argv(argv + 1);
- 
+
     // Named arguments
     const wcstring_list_t named_arguments = function_get_named_arguments(name);
     if (!named_arguments.empty()) {
@@ -352,47 +352,42 @@ void function_prepare_environment(const wcstring &name, const wchar_t *const *ar
             if (*arg) arg++;
         }
     }
-    
+
     for (std::map<wcstring, env_var_t>::const_iterator it = inherited_vars.begin(),
                                                        end = inherited_vars.end();
          it != end; ++it) {
         env_set(it->first, it->second.missing() ? NULL : it->second.c_str(), ENV_LOCAL | ENV_USER);
     }
-    
+
     // Docopt
     // TODO: argument validation / error handling
     docopt_registration_set_t regs = docopt_get_registrations(name);
-    if (!regs.empty())
-    {
-        
+    if (!regs.empty()) {
         size_t arg_count = 0;
-        while (argv[arg_count])
-        {
+        while (argv[arg_count]) {
             arg_count++;
         }
         const wcstring_list_t argv_strs(argv, argv + arg_count);
-        
+
         docopt_arguments_t doc_args;
         regs.parse_arguments(argv_strs, &doc_args, NULL, NULL);
-        
+
         /* Set each argument in the environment. */
-        wcstring joined_val; // storage
+        wcstring joined_val;  // storage
         typedef std::map<wcstring, wcstring_list_t> value_map_t;
         const value_map_t &vals = doc_args.values();
-        for (value_map_t::const_iterator iter = vals.begin(); iter != vals.end(); ++iter)
-        {
+        for (value_map_t::const_iterator iter = vals.begin(); iter != vals.end(); ++iter) {
             const wcstring_list_t &vals = iter->second;
             joined_val.clear();
-            for (size_t i=0; i < vals.size(); i++)
-            {
-                if (i > 0)
-                {
+            for (size_t i = 0; i < vals.size(); i++) {
+                if (i > 0) {
                     joined_val.append(ARRAY_SEP_STR);
                 }
                 joined_val.append(vals.at(i));
             }
-            int env_err = env_set(docopt_derive_variable_name(iter->first), joined_val.c_str(), ENV_LOCAL | ENV_USER);
-            assert(env_err == 0); //TODO!
+            int env_err = env_set(docopt_derive_variable_name(iter->first), joined_val.c_str(),
+                                  ENV_LOCAL | ENV_USER);
+            assert(env_err == 0);  // TODO!
         }
     }
 }

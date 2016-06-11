@@ -8,9 +8,9 @@
 #ifndef FISH_COMPLETE_H
 #define FISH_COMPLETE_H
 
-#include <vector>
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
+#include <vector>
 
 #include "common.h"
 
@@ -34,8 +34,7 @@
  */
 #define PROG_COMPLETE_SEP L'\t'
 
-enum
-{
+enum {
     /**
        Do not insert space afterwards if this is the only completion. (The
        default is to try insert a space)
@@ -57,15 +56,12 @@ enum
 };
 typedef int complete_flags_t;
 
-
-class completion_t
-{
-
-private:
+class completion_t {
+   private:
     /* No public default constructor */
     completion_t();
-public:
 
+   public:
     /* Destructor. Not inlining it saves code size. */
     ~completion_t();
 
@@ -90,39 +86,44 @@ public:
     */
     complete_flags_t flags;
 
-    /* Construction. Note: defining these so that they are not inlined reduces the executable size. */
-    explicit completion_t(const wcstring &comp, const wcstring &desc = wcstring(), string_fuzzy_match_t match = string_fuzzy_match_t(fuzzy_match_exact), complete_flags_t flags_val = 0);
+    /* Construction. Note: defining these so that they are not inlined reduces the executable size.
+     */
+    explicit completion_t(const wcstring &comp, const wcstring &desc = wcstring(),
+                          string_fuzzy_match_t match = string_fuzzy_match_t(fuzzy_match_exact),
+                          complete_flags_t flags_val = 0);
     completion_t(const completion_t &);
     completion_t &operator=(const completion_t &);
 
-    /* Compare two completions. No operating overlaoding to make this always explicit (there's potentially multiple ways to compare completions). */
-    
-    /* "Naturally less than" means in a natural ordering, where digits are treated as numbers. For example, foo10 is naturally greater than foo2 (but alphabetically less than it) */
+    /* Compare two completions. No operating overlaoding to make this always explicit (there's
+     * potentially multiple ways to compare completions). */
+
+    /* "Naturally less than" means in a natural ordering, where digits are treated as numbers. For
+     * example, foo10 is naturally greater than foo2 (but alphabetically less than it) */
     static bool is_naturally_less_than(const completion_t &a, const completion_t &b);
     static bool is_alphabetically_equal_to(const completion_t &a, const completion_t &b);
-    
+
     /* If this completion replaces the entire token, prepend a prefix. Otherwise do nothing. */
     void prepend_token_prefix(const wcstring &prefix);
 };
 
-/** Sorts and remove any duplicate completions in the completion list, then puts them in priority order. */
+/** Sorts and remove any duplicate completions in the completion list, then puts them in priority
+ * order. */
 void completions_sort_and_prioritize(std::vector<completion_t> *comps);
 
-enum
-{
+enum {
     COMPLETION_REQUEST_DEFAULT = 0,
-    COMPLETION_REQUEST_AUTOSUGGESTION = 1 << 0, // indicates the completion is for an autosuggestion
-    COMPLETION_REQUEST_DESCRIPTIONS = 1 << 1, // indicates that we want descriptions
-    COMPLETION_REQUEST_FUZZY_MATCH = 1 << 2 // indicates that we don't require a prefix match
+    COMPLETION_REQUEST_AUTOSUGGESTION = 1
+                                        << 0,  // indicates the completion is for an autosuggestion
+    COMPLETION_REQUEST_DESCRIPTIONS = 1 << 1,  // indicates that we want descriptions
+    COMPLETION_REQUEST_FUZZY_MATCH = 1 << 2    // indicates that we don't require a prefix match
 };
 typedef uint32_t completion_request_flags_t;
 
 // Flags describing the argument to an option
-enum
-{
+enum {
     // Default behavior is to use whatever the completion says
     argument_default,
-    
+
     // This argument can have files
     argument_allow_files = 1 << 0
 };
@@ -173,22 +174,15 @@ typedef uint32_t complete_argument_flags_t;
       If \c condition is empty, the completion is always used.
   \param flags A set of completion flags
 */
-enum complete_option_type_t
-{
-    option_type_args_only, // no option
-    option_type_short, // -x
-    option_type_single_long, // -foo
-    option_type_double_long // --foo
+enum complete_option_type_t {
+    option_type_args_only,    // no option
+    option_type_short,        // -x
+    option_type_single_long,  // -foo
+    option_type_double_long   // --foo
 };
-void complete_add(const wchar_t *cmd,
-                  bool cmd_is_path,
-                  const wcstring &option,
-                  complete_option_type_t option_type,
-                  complete_argument_flags_t argument_flags,
-                  const wchar_t *condition,
-                  const wchar_t *comp,
-                  const wchar_t *desc,
-                  int flags);
+void complete_add(const wchar_t *cmd, bool cmd_is_path, const wcstring &option,
+                  complete_option_type_t option_type, complete_argument_flags_t argument_flags,
+                  const wchar_t *condition, const wchar_t *comp, const wchar_t *desc, int flags);
 /**
   Sets whether the completion list for this command is complete. If
   true, any options not matching one of the provided options will be
@@ -199,9 +193,7 @@ void complete_set_authoritative(const wchar_t *cmd, bool cmd_type, bool authorit
 /**
   Remove a previously defined completion
 */
-void complete_remove(const wcstring &cmd,
-                     bool cmd_is_path,
-                     const wcstring &option,
+void complete_remove(const wcstring &cmd, bool cmd_is_path, const wcstring &option,
                      complete_option_type_t type);
 
 /** Removes all completions for a given command */
@@ -210,10 +202,8 @@ void complete_remove_all(const wcstring &cmd, bool cmd_is_path);
 /** Find all completions of the command cmd, insert them into out.
  */
 class env_vars_snapshot_t;
-void complete(const wcstring &cmd,
-              std::vector<completion_t> *out_comps,
-              completion_request_flags_t flags,
-              const env_vars_snapshot_t &vars);
+void complete(const wcstring &cmd, std::vector<completion_t> *out_comps,
+              completion_request_flags_t flags, const env_vars_snapshot_t &vars);
 
 /**
    Return a list of all current completions.
@@ -229,12 +219,16 @@ wcstring complete_print();
    \param flags completion flags
 
 */
-void append_completion(std::vector<completion_t> *completions, const wcstring &comp, const wcstring &desc = wcstring(), int flags = 0, string_fuzzy_match_t match = string_fuzzy_match_t(fuzzy_match_exact));
+void append_completion(std::vector<completion_t> *completions, const wcstring &comp,
+                       const wcstring &desc = wcstring(), int flags = 0,
+                       string_fuzzy_match_t match = string_fuzzy_match_t(fuzzy_match_exact));
 
 /* Function used for testing */
 void complete_set_variable_names(const wcstring_list_t *names);
 
-/* Support for "wrap targets." A wrap target is a command that completes liek another command. The target chain is the sequence of wraps (A wraps B wraps C...). Any loops in the chain are silently ignored. */
+/* Support for "wrap targets." A wrap target is a command that completes liek another command. The
+ * target chain is the sequence of wraps (A wraps B wraps C...). Any loops in the chain are silently
+ * ignored. */
 bool complete_add_wrapper(const wcstring &command, const wcstring &wrap_target);
 bool complete_remove_wrapper(const wcstring &command, const wcstring &wrap_target);
 wcstring_list_t complete_get_wrap_chain(const wcstring &command);

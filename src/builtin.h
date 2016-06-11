@@ -119,6 +119,8 @@ void builtin_wperror(const wchar_t *s, io_streams_t &streams);
 
 // Helper function to perform docopt parsing. Returns true if execution should continue.
 class docopt_arguments_t;
-bool parse_argv_or_show_help(parser_t &parser, const wchar_t * const * argv, docopt_arguments_t *out_args, int *out_status, io_streams_t &streams, bool dump_args = false);
+bool parse_argv_or_show_help(parser_t &parser, const wchar_t *const *argv,
+                             docopt_arguments_t *out_args, int *out_status, io_streams_t &streams,
+                             bool dump_args = false);
 
 #endif
