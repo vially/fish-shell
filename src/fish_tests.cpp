@@ -1987,15 +1987,15 @@ static void test_docopt_complete(void) {
     complete(L"flea --group ", &completions, COMPLETION_REQUEST_DEFAULT, vars);
     do_test(completions.size() == 3);
     do_test(completions.at(0).completion == L"ONE");
-    do_test(completions.at(1).completion == L"TWO");
     do_test(completions.at(2).completion == L"THREE");
-
+    do_test(completions.at(1).completion == L"TWO");
+    
     completions.clear();
     complete(L"flea -x ", &completions, COMPLETION_REQUEST_DEFAULT, vars);
     do_test(completions.size() == 3);
     do_test(completions.at(0).completion == L"ONE");
-    do_test(completions.at(1).completion == L"TWO");
     do_test(completions.at(2).completion == L"THREE");
+    do_test(completions.at(1).completion == L"TWO");
 
     const wchar_t *desc2 =
         L"Usage:\n"
@@ -3892,7 +3892,7 @@ int main(int argc, char **argv) {
             perror("chdir");
         }
     }
-
+    
     srand(time(0));
     configure_thread_assertions_for_testing();
 
@@ -3901,7 +3901,7 @@ int main(int argc, char **argv) {
 
     struct utsname uname_info;
     uname(&uname_info);
-
+    
     say(L"Testing low-level functionality");
     set_main_thread();
     setup_fork_guards();
@@ -3911,6 +3911,9 @@ int main(int argc, char **argv) {
     builtin_init();
     reader_init();
     env_init();
+    
+    // needed for completion tests
+    env_set(L"IFS", L"\n", ENV_DEFAULT);
 
     signal_reset_handlers();
 
