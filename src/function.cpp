@@ -346,7 +346,7 @@ void function_prepare_environment(const wcstring &name, const wchar_t *const *ar
     // 2. named arguments
     // 3. inherited variables
     // 4. docopt
-    env_set_argv(argv);
+    // Note that argv[0] is the function name
 
     // Argv
     env_set_argv(argv + 1);
@@ -356,7 +356,7 @@ void function_prepare_environment(const wcstring &name, const wchar_t *const *ar
     if (!named_arguments.empty()) {
         const wchar_t *const *arg;
         size_t i;
-        for (i = 0, arg = argv; i < named_arguments.size(); i++) {
+        for (i = 0, arg = argv + 1; i < named_arguments.size(); i++) {
             env_set(named_arguments.at(i).c_str(), *arg, ENV_LOCAL | ENV_USER);
             if (*arg) arg++;
         }
