@@ -77,7 +77,11 @@ function funced --description 'Edit function definition' --signature '
         return 0
     end
 
-    set tmpname (mktemp -t fish_funced.XXXXXXXXXX.fish)
+    # OSX mktemp is rather restricted - no suffix, no way to automatically use TMPDIR
+    # Create a directory so we can use a ".fish" suffix for the file - makes editors pick up that it's a fish file
+    set -q TMPDIR; or set -l TMPDIR /tmp
+    set -l tmpdir (mktemp -d $TMPDIR/fish.XXXXXX)
+    set -l tmpname $tmpdir/$funcname.fish
 
     if functions -q -- $funcname
         functions -- $funcname > $tmpname
@@ -110,6 +114,7 @@ function funced --description 'Edit function definition' --signature '
                 break
         end
     set -l stat $status
-    rm -f $tmpname >/dev/null
+    rm $tmpname >/dev/null
+    and rmdir $tmpdir >/dev/null
     return $stat
 end

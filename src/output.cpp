@@ -24,6 +24,7 @@
 
 #include "color.h"
 #include "common.h"
+#include "env.h"
 #include "fallback.h"  // IWYU pragma: keep
 #include "output.h"
 #include "wutil.h"  // IWYU pragma: keep
@@ -31,10 +32,7 @@
 static int writeb_internal(char c);
 
 /// The function used for output.
-static int (*out)(char c) = &writeb_internal;
-
-/// Name of terminal.
-static wcstring current_term;
+static int (*out)(char c) = writeb_internal;
 
 /// Whether term256 and term24bit are supported.
 static color_support_t color_support = 0;
@@ -58,9 +56,8 @@ void output_set_color_support(color_support_t val) { color_support = val; }
 unsigned char index_for_color(rgb_color_t c) {
     if (c.is_named() || !(output_get_color_support() & color_support_term256)) {
         return c.to_name_index();
-    } else {
-        return c.to_term256_index();
     }
+    return c.to_term256_index();
 }
 
 static bool write_color_escape(char *todo, unsigned char idx, bool is_fg) {
@@ -95,9 +92,8 @@ static bool write_foreground_color(unsigned char idx) {
         return write_color_escape(set_a_foreground, idx, true);
     } else if (set_foreground && set_foreground[0]) {
         return write_color_escape(set_foreground, idx, true);
-    } else {
-        return false;
     }
+    return false;
 }
 
 static bool write_background_color(unsigned char idx) {
@@ -105,9 +101,8 @@ static bool write_background_color(unsigned char idx) {
         return write_color_escape(set_a_background, idx, false);
     } else if (set_background && set_background[0]) {
         return write_color_escape(set_background, idx, false);
-    } else {
-        return false;
     }
+    return false;
 }
 
 void write_color(rgb_color_t color, bool is_fg) {
@@ -122,7 +117,7 @@ void write_color(rgb_color_t color, bool is_fg) {
         // Background: ^[48;2;<r>;<g>;<b>m
         color24_t rgb = color.to_color24();
         char buff[128];
-        snprintf(buff, sizeof buff, "\x1b[%u;2;%u;%u;%um", is_fg ? 38 : 48, rgb.rgb[0], rgb.rgb[1],
+        snprintf(buff, sizeof buff, "\x1b[%d;2;%u;%u;%um", is_fg ? 38 : 48, rgb.rgb[0], rgb.rgb[1],
                  rgb.rgb[2]);
         int (*writer)(char) = output_get_writer();
         if (writer) {
@@ -266,7 +261,7 @@ void set_color(rgb_color_t c, rgb_color_t c2) {
 }
 
 /// Default output method, simply calls write() on stdout.
-static int writeb_internal(char c) {
+static int writeb_internal(char c) {  // cppcheck
     write_loop(1, &c, 1);
     return 0;
 }
@@ -419,18 +414,13 @@ rgb_color_t parse_color(const wcstring &val, bool is_background) {
     return result;
 }
 
-void output_set_term(const wcstring &term) { current_term.assign(term); }
-
-const wchar_t *output_get_term() {
-    return current_term.empty() ? L"<unknown>" : current_term.c_str();
-}
-
 void writembs_check(char *mbs, const char *mbs_name, const char *file, long line) {
     if (mbs != NULL) {
         tputs(mbs, 1, &writeb);
     } else {
+        env_var_t term = env_get_string(L"TERM");
         debug(0, _(L"Tried to use terminfo string %s on line %ld of %s, which is undefined in "
                    L"terminal of type \"%ls\". Please report this error to %s"),
-              mbs_name, line, file, output_get_term(), PACKAGE_BUGREPORT);
+              mbs_name, line, file, term.c_str(), PACKAGE_BUGREPORT);
     }
 }

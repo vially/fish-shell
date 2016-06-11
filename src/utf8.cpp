@@ -13,6 +13,8 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
+#include "config.h"  // IWYU pragma: keep
+
 #include <stdint.h>  // IWYU pragma: keep
 #include <sys/types.h>
 #include <limits>
@@ -24,8 +26,6 @@
 #define _SEQ2 0xc0
 #define _SEQ3 0xe0
 #define _SEQ4 0xf0
-#define _SEQ5 0xf8
-#define _SEQ6 0xfc
 
 #define _BOM 0xfeff
 
@@ -34,8 +34,6 @@ typedef wchar_t utf8_wchar_t;
 #define UTF8_WCHAR_MAX ((size_t)std::numeric_limits<utf8_wchar_t>::max())
 
 typedef std::basic_string<utf8_wchar_t> utf8_wstring_t;
-
-bool is_wchar_ucs2() { return UTF8_WCHAR_MAX <= 0xFFFF; }
 
 static size_t utf8_to_wchar_internal(const char *in, size_t insize, utf8_wstring_t *result,
                                      int flags);
@@ -127,9 +125,8 @@ static int __utf8_forbitten(unsigned char octet);
 
 static int __wchar_forbitten(utf8_wchar_t sym) {
     // Surrogate pairs.
-    if (sym >= 0xd800 && sym <= 0xdfff) return (-1);
-
-    return (0);
+    if (sym >= 0xd800 && sym <= 0xdfff) return -1;
+    return 0;
 }
 
 static int __utf8_forbitten(unsigned char octet) {
@@ -138,11 +135,11 @@ static int __utf8_forbitten(unsigned char octet) {
         case 0xc1:
         case 0xf5:
         case 0xff: {
-            return (-1);
+            return -1;
         }
     }
 
-    return (0);
+    return 0;
 }
 
 /// This function translates UTF-8 string into UCS-2 or UCS-4 string (all symbols will be in local
@@ -170,7 +167,7 @@ static size_t utf8_to_wchar_internal(const char *in, size_t insize, utf8_wstring
     utf8_wchar_t high;
     size_t n, total, i, n_bits;
 
-    if (in == NULL || insize == 0) return (0);
+    if (in == NULL || insize == 0) return 0;
 
     if (out_string != NULL) out_string->clear();
 
@@ -179,7 +176,7 @@ static size_t utf8_to_wchar_internal(const char *in, size_t insize, utf8_wstring
     lim = p + insize;
 
     for (; p < lim; p += n) {
-        if (__utf8_forbitten(*p) != 0 && (flags & UTF8_IGNORE_ERROR) == 0) return (0);
+        if (__utf8_forbitten(*p) != 0 && (flags & UTF8_IGNORE_ERROR) == 0) return 0;
 
         // Get number of bytes for one wide character.
         n = 1;  // default: 1 byte. Used when skipping bytes
@@ -194,20 +191,14 @@ static size_t utf8_to_wchar_internal(const char *in, size_t insize, utf8_wstring
         } else if ((*p & 0xf8) == _SEQ4) {
             n = 4;
             high = (utf8_wchar_t)(*p & 0x07);
-        } else if ((*p & 0xfc) == _SEQ5) {
-            n = 5;
-            high = (utf8_wchar_t)(*p & 0x03);
-        } else if ((*p & 0xfe) == _SEQ6) {
-            n = 6;
-            high = (utf8_wchar_t)(*p & 0x01);
         } else {
-            if ((flags & UTF8_IGNORE_ERROR) == 0) return (0);
+            if ((flags & UTF8_IGNORE_ERROR) == 0) return 0;
             continue;
         }
 
         // Does the sequence header tell us truth about length?
         if (lim - p <= n - 1) {
-            if ((flags & UTF8_IGNORE_ERROR) == 0) return (0);
+            if ((flags & UTF8_IGNORE_ERROR) == 0) return 0;
             n = 1;
             continue;  // skip
         }
@@ -218,7 +209,7 @@ static size_t utf8_to_wchar_internal(const char *in, size_t insize, utf8_wstring
                 if ((p[i] & 0xc0) != _NXT) break;
             }
             if (i != n) {
-                if ((flags & UTF8_IGNORE_ERROR) == 0) return (0);
+                if ((flags & UTF8_IGNORE_ERROR) == 0) return 0;
                 n = 1;
                 continue;  // skip
             }
@@ -239,9 +230,8 @@ static size_t utf8_to_wchar_internal(const char *in, size_t insize, utf8_wstring
         if (__wchar_forbitten(out_val) != 0) {
             if ((flags & UTF8_IGNORE_ERROR) == 0) {
                 return 0;  // forbidden character
-            } else {
-                skip = true;
             }
+            skip = true;
         } else if (out_val == _BOM && (flags & UTF8_SKIP_BOM) != 0) {
             skip = true;
         }
@@ -256,7 +246,7 @@ static size_t utf8_to_wchar_internal(const char *in, size_t insize, utf8_wstring
         }
     }
 
-    return (total);
+    return total;
 }
 
 /// This function translates UCS-2/4 symbols (given in local machine byte order) into UTF-8 string.
@@ -278,7 +268,7 @@ static size_t wchar_to_utf8_internal(const utf8_wchar_t *in, size_t insize, char
     unsigned char *p, *lim;
     size_t total, n;
 
-    if (in == NULL || insize == 0 || (outsize == 0 && out != NULL)) return (0);
+    if (in == NULL || insize == 0 || (outsize == 0 && out != NULL)) return 0;
 
     w = in;
     wlim = w + insize;
@@ -287,19 +277,18 @@ static size_t wchar_to_utf8_internal(const utf8_wchar_t *in, size_t insize, char
     total = 0;
     for (; w < wlim; w++) {
         if (__wchar_forbitten(*w) != 0) {
-            if ((flags & UTF8_IGNORE_ERROR) == 0)
-                return (0);
-            else
-                continue;
+            if ((flags & UTF8_IGNORE_ERROR) == 0) return 0;
+            continue;
         }
 
         if (*w == _BOM && (flags & UTF8_SKIP_BOM) != 0) continue;
 
         const int32_t w_wide = *w;
         if (w_wide < 0) {
-            if ((flags & UTF8_IGNORE_ERROR) == 0) return (0);
+            if ((flags & UTF8_IGNORE_ERROR) == 0) return 0;
             continue;
-        } else if (w_wide <= 0x0000007f)
+        }
+        if (w_wide <= 0x0000007f)
             n = 1;
         else if (w_wide <= 0x000007ff)
             n = 2;
@@ -309,14 +298,14 @@ static size_t wchar_to_utf8_internal(const utf8_wchar_t *in, size_t insize, char
             n = 4;
         else if (w_wide <= 0x03ffffff)
             n = 5;
-        else  /// if (w_wide <= 0x7fffffff)
-            n = 6;
+        else
+            n = 6;  /// if (w_wide <= 0x7fffffff)
 
         total += n;
 
         if (out == NULL) continue;
 
-        if (lim - p <= n - 1) return (0); /* no space left */
+        if (lim - p <= n - 1) return 0;  // no space left
 
         // Extract the wchar_t as big-endian. If wchar_t is UCS-16, the first two bytes will be 0.
         unsigned char oc[4];
@@ -352,23 +341,6 @@ static size_t wchar_to_utf8_internal(const utf8_wchar_t *in, size_t insize, char
                 p[0] = _SEQ4 | ((oc[1] & 0x1f) >> 2);
                 break;
             }
-            case 5: {
-                p[4] = _NXT | (oc[3] & 0x3f);
-                p[3] = _NXT | (oc[3] >> 6) | ((oc[2] & 0x0f) << 2);
-                p[2] = _NXT | ((oc[2] & 0xf0) >> 4) | ((oc[1] & 0x03) << 4);
-                p[1] = _NXT | (oc[1] >> 2);
-                p[0] = _SEQ5 | (oc[0] & 0x03);
-                break;
-            }
-            case 6: {
-                p[5] = _NXT | (oc[3] & 0x3f);
-                p[4] = _NXT | (oc[3] >> 6) | ((oc[2] & 0x0f) << 2);
-                p[3] = _NXT | (oc[2] >> 4) | ((oc[1] & 0x03) << 4);
-                p[2] = _NXT | (oc[1] >> 2);
-                p[1] = _NXT | (oc[0] & 0x3f);
-                p[0] = _SEQ6 | ((oc[0] & 0x40) >> 6);
-                break;
-            }
         }
 
         // NOTE: do not check here for forbitten UTF-8 characters. They cannot appear here because
@@ -376,5 +348,5 @@ static size_t wchar_to_utf8_internal(const utf8_wchar_t *in, size_t insize, char
         p += n;
     }
 
-    return (total);
+    return total;
 }

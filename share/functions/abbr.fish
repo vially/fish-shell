@@ -22,24 +22,23 @@ function abbr --description 'Manage abbreviations' --signature '
 	if set -q word_phrase
 	
 		# Convert from old "key=value" to new "key value" syntax
-		if string match -qr '^[^ ]+=' -- $mode_arg
-			set mode_arg (string replace "=" " " -- $mode_arg)
+		# TODO: This should be removed later
+		if not set -q word_phrase[2]; and string match -qr '^[^ ]+=' -- $word_phrase
+			set word_phrase (string split "=" -- $word_phrase)
 		end
 	
 		# Bail out early if the exact abbr is already in
 		# This depends on the separator staying the same, but that's the common case (config.fish)
 		contains -- "$word_phrase" $fish_user_abbreviations; and return 0
-	
-		set -l kv (__fish_abbr_split "$word_phrase")
-		set -l key $kv[1]
-		set -l value $kv[2]
-
-		# ensure the key contains at least one non-space character
-		if not string match -qr "\w" -- $key
-			printf ( _ "%s: abbreviation must have a non-empty key\n" ) abbr >&2
+		set -l key $word_phrase[1]
+		set -e word_phrase[1]
+		set -l value "$word_phrase"
+		# Because we later store "$key $value", there can't be any spaces in the key
+		if string match -q "* *" -- $key
+			printf ( _ "%s: abbreviation cannot have spaces in the key\n" ) abbr >&2
 			return 1
 		end
-		if not string match -qr "\w" -- $value
+		if test -z "$value"
 			printf ( _ "%s: abbreviation must have a value\n" ) abbr >&2
 			return 1
 		end
@@ -52,36 +51,36 @@ function abbr --description 'Manage abbreviations' --signature '
 			# and therefore work properly if someone sets this as a global variable
 			set -U fish_user_abbreviations
 		end
-		set fish_user_abbreviations $fish_user_abbreviations "$word_phrase"
+		set fish_user_abbreviations $fish_user_abbreviations "$key $value"
 		return 0
 	
 	else if set -ql opt_erase
-		set -l key (__fish_abbr_split "$word")[1]
-		if set -l idx (__fish_abbr_get_by_key $key)
+		if set -l idx (__fish_abbr_get_by_key $word)
 			set -e fish_user_abbreviations[$idx]
 			return 0
 		else
-			printf ( _ "%s: no such abbreviation '%s'\n" ) abbr $key >&2
+			printf ( _ "%s: no such abbreviation '%s'\n" ) abbr $word >&2
 			return 2
 		end
  
-	else if begin ; set -ql opt_show ; or not count $argv > /dev/null; end
+	else if set -ql opt_show ; or not count $argv > /dev/null
 		# Either --show is set, or $argv is empty, which is like --show
 		for i in $fish_user_abbreviations
-			set -l kv (__fish_abbr_split $i)
+			set -l opt_double_dash
+			set -l kv (string split " " -m 1 -- $i)
 			set -l key $kv[1]
 			set -l value $kv[2]
 
 			# Check to see if either key or value has a leading dash
 			# If so, we need to write --
-			string match -q -- '-*' $key $value; and set -l opt_double_dash '--'
+			string match -q -- '-*' $key $value; and set opt_double_dash '--'
 			echo abbr $opt_double_dash (string escape -- $key $value)
 		end
 		return 0
 
 	else if set -ql opt_list
 		for i in $fish_user_abbreviations
-			set -l key (__fish_abbr_split $i)[1]
+			set -l key (string split " " -m 1 -- $i)[1]
 			printf "%s\n" $key
 		end
 		return 0
@@ -109,9 +108,4 @@ function __fish_abbr_get_by_key
 		return 0
 	end
 	return 1
-end
-
-function __fish_abbr_split -a input
-	# Because we always save space-separated, we can be certain that this will match
-	string split " " -m 1 -- $input
 end

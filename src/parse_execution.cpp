@@ -6,6 +6,8 @@
 //
 // Non-fatal errors are printed as soon as they are encountered; otherwise you would have to wait
 // for the execution to finish to see them.
+#include "config.h"  // IWYU pragma: keep
+
 #include <assert.h>
 #include <errno.h>
 #include <stdarg.h>
@@ -213,16 +215,18 @@ parse_execution_context_t::execution_cancellation_reason_t
 parse_execution_context_t::cancellation_reason(const block_t *block) const {
     if (shell_is_exiting()) {
         return execution_cancellation_exit;
-    } else if (parser && parser->cancellation_requested) {
+    }
+    if (parser && parser->cancellation_requested) {
         return execution_cancellation_skip;
-    } else if (block && block->loop_status != LOOP_NORMAL) {
+    }
+    if (block && block->loop_status != LOOP_NORMAL) {
         // Nasty hack - break and continue set the 'skip' flag as well as the loop status flag.
         return execution_cancellation_loop_control;
-    } else if (block && block->skip) {
-        return execution_cancellation_skip;
-    } else {
-        return execution_cancellation_none;
     }
+    if (block && block->skip) {
+        return execution_cancellation_skip;
+    }
+    return execution_cancellation_none;
 }
 
 /// Return whether the job contains a single statement, of block type, with no redirections.
@@ -390,8 +394,8 @@ parse_execution_result_t parse_execution_context_t::run_function_statement(
         int definition_line_offset = this->line_offset_of_character_at_offset(contents_start);
         wcstring error_str;
         io_streams_t streams;
-        int err = define_function(*parser, streams, argument_list, contents_str,
-                                  definition_line_offset, &error_str);
+        int err = builtin_function(*parser, streams, argument_list, contents_str,
+                                   definition_line_offset, &error_str);
         proc_set_last_status(err);
 
         if (!error_str.empty()) {
@@ -1042,10 +1046,9 @@ parse_execution_result_t parse_execution_context_t::populate_boolean_process(
 
     if (skip_job) {
         return parse_execution_skipped;
-    } else {
-        const parse_node_t &subject = *tree.get_child(bool_statement, 1, symbol_statement);
-        return this->populate_job_process(job, proc, subject);
     }
+    const parse_node_t &subject = *tree.get_child(bool_statement, 1, symbol_statement);
+    return this->populate_job_process(job, proc, subject);
 }
 
 parse_execution_result_t parse_execution_context_t::populate_block_process(
@@ -1182,7 +1185,7 @@ parse_execution_result_t parse_execution_context_t::run_1_job(const parse_node_t
 
     // Get terminal modes.
     struct termios tmodes = {};
-    if (get_is_interactive()) {
+    if (shell_is_interactive()) {
         if (tcgetattr(STDIN_FILENO, &tmodes)) {
             // Need real error handling here.
             wperror(L"tcgetattr");
@@ -1253,14 +1256,14 @@ parse_execution_result_t parse_execution_context_t::run_1_job(const parse_node_t
     j->tmodes = tmodes;
     job_set_flag(j, JOB_CONTROL,
                  (job_control_mode == JOB_CONTROL_ALL) ||
-                     ((job_control_mode == JOB_CONTROL_INTERACTIVE) && (get_is_interactive())));
+                     ((job_control_mode == JOB_CONTROL_INTERACTIVE) && (shell_is_interactive())));
 
     job_set_flag(j, JOB_FOREGROUND, !tree.job_should_be_backgrounded(job_node));
 
     job_set_flag(j, JOB_TERMINAL, job_get_flag(j, JOB_CONTROL) && !is_subshell && !is_event);
 
     job_set_flag(j, JOB_SKIP_NOTIFICATION,
-                 is_subshell || is_block || is_event || !get_is_interactive());
+                 is_subshell || is_block || is_event || !shell_is_interactive());
 
     // Tell the current block what its job is. This has to happen before we populate it (#1394).
     parser->current_block()->job = j;

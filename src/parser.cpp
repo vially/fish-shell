@@ -1,4 +1,6 @@
 // The fish parser. Contains functions for parsing and evaluating code.
+#include "config.h"  // IWYU pragma: keep
+
 #include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -73,7 +75,7 @@ class io_chain_t;
 /// Unknown block description.
 #define UNKNOWN_BLOCK N_(L"unknown/invalid block")
 
-/// Datastructure to describe a block type, like while blocks, command substitution blocks, etc.
+/// Data structure to describe a block type, like while blocks, command substitution blocks, etc.
 struct block_lookup_entry {
     // The block type id. The legal values are defined in parser.h.
     block_type_t type;
@@ -223,6 +225,8 @@ const wchar_t *parser_t::get_block_desc(int block) const {
     return _(UNKNOWN_BLOCK);
 }
 
+#if 0
+// TODO: Lint says this isn't used (which is true). Should this be removed?
 wcstring parser_t::block_stack_description() const {
     wcstring result;
     size_t idx = this->block_count();
@@ -239,6 +243,7 @@ wcstring parser_t::block_stack_description() const {
     }
     return result;
 }
+#endif
 
 const block_t *parser_t::block_at_index(size_t idx) const {
     // Zero corresponds to the last element in our vector.
@@ -251,11 +256,7 @@ block_t *parser_t::block_at_index(size_t idx) {
     return idx < count ? block_stack.at(count - idx - 1) : NULL;
 }
 
-const block_t *parser_t::current_block() const {
-    return block_stack.empty() ? NULL : block_stack.back();
-}
-
-block_t *parser_t::current_block() { return block_stack.empty() ? NULL : block_stack.back(); }
+block_t *const parser_t::current_block() { return block_stack.empty() ? NULL : block_stack.back(); }
 
 void parser_t::forbid_function(const wcstring &function) { forbidden_function.push_back(function); }
 
@@ -522,7 +523,7 @@ wcstring parser_t::current_line() {
     wcstring prefix;
 
     // If we are not going to print a stack trace, at least print the line number and filename.
-    if (!get_is_interactive() || is_function()) {
+    if (!shell_is_interactive() || is_function()) {
         if (file) {
             append_format(prefix, _(L"%ls (line %d): "), user_presentable_path(file).c_str(),
                           lineno);
@@ -533,7 +534,7 @@ wcstring parser_t::current_line() {
         }
     }
 
-    bool is_interactive = get_is_interactive();
+    bool is_interactive = shell_is_interactive();
     bool skip_caret = is_interactive && !is_function();
 
     // Use an error with empty text.
@@ -670,9 +671,8 @@ int parser_t::eval_block_node(node_offset_t node_idx, const io_chain_t &io,
     if (this->cancellation_requested) {
         if (!block_stack.empty()) {
             return 1;
-        } else {
-            this->cancellation_requested = false;
         }
+        this->cancellation_requested = false;
     }
 
     // Only certain blocks are allowed.
@@ -757,7 +757,7 @@ void parser_t::get_backtrace(const wcstring &src, const parse_error_list_t &erro
     if (!errors.empty()) {
         const parse_error_t &err = errors.at(0);
 
-        const bool is_interactive = get_is_interactive();
+        const bool is_interactive = shell_is_interactive();
 
         // Determine if we want to try to print a caret to point at the source error. The
         // err.source_start <= src.size() check is due to the nasty way that slices work, which is

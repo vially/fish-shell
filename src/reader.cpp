@@ -232,9 +232,8 @@ class reader_data_t {
     editable_line_t *active_edit_line() {
         if (this->is_navigating_pager_contents() && this->pager.is_search_field_shown()) {
             return &this->pager.search_field_line;
-        } else {
-            return &this->command_line;
         }
+        return &this->command_line;
     }
 
     /// Do what we need to do whenever our command line changes.
@@ -430,8 +429,8 @@ static void reader_repaint() {
     size_t cursor_position = focused_on_pager ? data->pager.cursor_position() : cmd_line->position;
 
     s_write(&data->screen, data->left_prompt_buff, data->right_prompt_buff, full_line,
-            cmd_line->size(), &colors[0], &indents[0], cursor_position, data->sel_start_pos,
-            data->sel_stop_pos, data->current_page_rendering, focused_on_pager);
+            cmd_line->size(), &colors[0], &indents[0], cursor_position,
+            data->current_page_rendering, focused_on_pager);
 
     data->repaint_needed = false;
 }
@@ -530,9 +529,6 @@ void reader_data_t::pager_selection_changed() {
                                              this->cycle_command_line, &cursor_pos, false);
     }
     reader_set_buffer_maintaining_pager(new_cmd_line, cursor_pos);
-
-    // Since we just inserted a completion, don't immediately do a new autosuggestion.
-    this->suppress_autosuggestion = true;
 
     // Trigger repaint (see issue #765).
     reader_repaint_needed();
@@ -785,22 +781,18 @@ void reader_init() {
 
     // Set the mode used for the terminal, initialized to the current mode.
     memcpy(&shell_modes, &terminal_mode_on_startup, sizeof shell_modes);
-    shell_modes.c_iflag &= ~ICRNL;   // turn off mapping CR (\cM) to NL (\cJ)
-    shell_modes.c_iflag &= ~INLCR;   // turn off mapping NL (\cJ) to CR (\cM)
+
+    shell_modes.c_iflag &= ~ICRNL;  // disable mapping CR (\cM) to NL (\cJ)
+    shell_modes.c_iflag &= ~INLCR;  // disable mapping NL (\cJ) to CR (\cM)
+    shell_modes.c_iflag &= ~IXON;   // disable flow control
+    shell_modes.c_iflag &= ~IXOFF;  // disable flow control
+
     shell_modes.c_lflag &= ~ICANON;  // turn off canonical mode
     shell_modes.c_lflag &= ~ECHO;    // turn off echo mode
-    shell_modes.c_iflag &= ~IXON;    // disable flow control
-    shell_modes.c_iflag &= ~IXOFF;   // disable flow control
+    shell_modes.c_lflag &= ~IEXTEN;  // turn off handling of discard and lnext characters
+
     shell_modes.c_cc[VMIN] = 1;
     shell_modes.c_cc[VTIME] = 0;
-
-#if defined(_POSIX_VDISABLE)
-// PCA disable VDSUSP (typically control-Y), which is a funny job control. function available only
-// on OS X and BSD systems. This lets us use control-Y for yank instead.
-#ifdef VDSUSP
-    shell_modes.c_cc[VDSUSP] = _POSIX_VDISABLE;
-#endif
-#endif
 
     // We don't use term_steal because this can fail if fd 0 isn't associated with a tty and this
     // function is run regardless of whether stdin is tied to a tty. This is harmless in that case.
@@ -1070,55 +1062,54 @@ wcstring completion_apply_to_command_line(const wcstring &val_str, complete_flag
         size_t new_cursor_pos = (begin - buff) + move_cursor;
         *inout_cursor_pos = new_cursor_pos;
         return sb;
-    } else {
-        wchar_t quote = L'\0';
-        wcstring replaced;
-        if (do_escape) {
-            // Note that we ignore COMPLETE_DONT_ESCAPE_TILDES here. We get away with this because
-            // unexpand_tildes only operates on completions that have COMPLETE_REPLACES_TOKEN set,
-            // but we ought to respect them.
-            parse_util_get_parameter_info(command_line, cursor_pos, &quote, NULL, NULL);
-
-            // If the token is reported as unquoted, but ends with a (unescaped) quote, and we can
-            // modify the command line, then delete the trailing quote so that we can insert within
-            // the quotes instead of after them. See issue #552.
-            if (quote == L'\0' && !append_only && cursor_pos > 0) {
-                // The entire token is reported as unquoted...see if the last character is an
-                // unescaped quote.
-                wchar_t trailing_quote = unescaped_quote(command_line, cursor_pos - 1);
-                if (trailing_quote != L'\0') {
-                    quote = trailing_quote;
-                    back_into_trailing_quote = true;
-                }
-            }
-
-            replaced = parse_util_escape_string_with_quote(val_str, quote);
-        } else {
-            replaced = val;
-        }
-
-        size_t insertion_point = cursor_pos;
-        if (back_into_trailing_quote) {
-            // Move the character back one so we enter the terminal quote.
-            assert(insertion_point > 0);
-            insertion_point--;
-        }
-
-        // Perform the insertion and compute the new location.
-        wcstring result = command_line;
-        result.insert(insertion_point, replaced);
-        size_t new_cursor_pos =
-            insertion_point + replaced.size() + (back_into_trailing_quote ? 1 : 0);
-        if (add_space) {
-            if (quote != L'\0' && unescaped_quote(command_line, insertion_point) != quote) {
-                // This is a quoted parameter, first print a quote.
-                result.insert(new_cursor_pos++, wcstring(&quote, 1));
-            }
-            result.insert(new_cursor_pos++, L" ");
-        }
-        *inout_cursor_pos = new_cursor_pos;
-        return result;
     }
+
+    wchar_t quote = L'\0';
+    wcstring replaced;
+    if (do_escape) {
+        // Note that we ignore COMPLETE_DONT_ESCAPE_TILDES here. We get away with this because
+        // unexpand_tildes only operates on completions that have COMPLETE_REPLACES_TOKEN set,
+        // but we ought to respect them.
+        parse_util_get_parameter_info(command_line, cursor_pos, &quote, NULL, NULL);
+
+        // If the token is reported as unquoted, but ends with a (unescaped) quote, and we can
+        // modify the command line, then delete the trailing quote so that we can insert within
+        // the quotes instead of after them. See issue #552.
+        if (quote == L'\0' && !append_only && cursor_pos > 0) {
+            // The entire token is reported as unquoted...see if the last character is an
+            // unescaped quote.
+            wchar_t trailing_quote = unescaped_quote(command_line, cursor_pos - 1);
+            if (trailing_quote != L'\0') {
+                quote = trailing_quote;
+                back_into_trailing_quote = true;
+            }
+        }
+
+        replaced = parse_util_escape_string_with_quote(val_str, quote);
+    } else {
+        replaced = val;
+    }
+
+    size_t insertion_point = cursor_pos;
+    if (back_into_trailing_quote) {
+        // Move the character back one so we enter the terminal quote.
+        assert(insertion_point > 0);
+        insertion_point--;
+    }
+
+    // Perform the insertion and compute the new location.
+    wcstring result = command_line;
+    result.insert(insertion_point, replaced);
+    size_t new_cursor_pos = insertion_point + replaced.size() + (back_into_trailing_quote ? 1 : 0);
+    if (add_space) {
+        if (quote != L'\0' && unescaped_quote(command_line, insertion_point) != quote) {
+            // This is a quoted parameter, first print a quote.
+            result.insert(new_cursor_pos++, wcstring(&quote, 1));
+        }
+        result.insert(new_cursor_pos++, L" ");
+    }
+    *inout_cursor_pos = new_cursor_pos;
+    return result;
 }
 
 /// Insert the string at the current cursor position. The function checks if the string is quoted or
@@ -1133,9 +1124,6 @@ static void completion_insert(const wchar_t *val, complete_flags_t flags) {
     wcstring new_command_line = completion_apply_to_command_line(val, flags, el->text, &cursor,
                                                                  false /* not append only */);
     reader_set_buffer_maintaining_pager(new_command_line, cursor);
-
-    // Since we just inserted a completion, don't immediately do a new autosuggestion.
-    data->suppress_autosuggestion = true;
 }
 
 struct autosuggestion_context_t {
@@ -1445,53 +1433,56 @@ static bool handle_completions(const std::vector<completion_t> &comp,
             surviving_completions.push_back(el);
         }
 
-        // Try to find a common prefix to insert among the surviving completions.
-        wcstring common_prefix;
-        complete_flags_t flags = 0;
-        bool prefix_is_partial_completion = false;
-        for (size_t i = 0; i < surviving_completions.size(); i++) {
-            const completion_t &el = surviving_completions.at(i);
-            if (i == 0) {
-                // First entry, use the whole string.
-                common_prefix = el.completion;
-                flags = el.flags;
-            } else {
-                // Determine the shared prefix length.
-                size_t idx, max = mini(common_prefix.size(), el.completion.size());
-                for (idx = 0; idx < max; idx++) {
-                    wchar_t ac = common_prefix.at(idx), bc = el.completion.at(idx);
-                    bool matches = (ac == bc);
-                    // If we are replacing the token, allow case to vary.
-                    if (will_replace_token && !matches) {
-                        // Hackish way to compare two strings in a case insensitive way, hopefully
-                        // better than towlower().
-                        matches = (wcsncasecmp(&ac, &bc, 1) == 0);
+        bool use_prefix = false;
+        if (match_type_shares_prefix(best_match_type)) {
+            // Try to find a common prefix to insert among the surviving completions.
+            wcstring common_prefix;
+            complete_flags_t flags = 0;
+            bool prefix_is_partial_completion = false;
+            for (size_t i = 0; i < surviving_completions.size(); i++) {
+                const completion_t &el = surviving_completions.at(i);
+                if (i == 0) {
+                    // First entry, use the whole string.
+                    common_prefix = el.completion;
+                    flags = el.flags;
+                } else {
+                    // Determine the shared prefix length.
+                    size_t idx, max = mini(common_prefix.size(), el.completion.size());
+                    for (idx = 0; idx < max; idx++) {
+                        wchar_t ac = common_prefix.at(idx), bc = el.completion.at(idx);
+                        bool matches = (ac == bc);
+                        // If we are replacing the token, allow case to vary.
+                        if (will_replace_token && !matches) {
+                            // Hackish way to compare two strings in a case insensitive way,
+                            // hopefully better than towlower().
+                            matches = (wcsncasecmp(&ac, &bc, 1) == 0);
+                        }
+                        if (!matches) break;
                     }
-                    if (!matches) break;
+
+                    // idx is now the length of the new common prefix.
+                    common_prefix.resize(idx);
+                    prefix_is_partial_completion = true;
+
+                    // Early out if we decide there's no common prefix.
+                    if (idx == 0) break;
                 }
-
-                // idx is now the length of the new common prefix.
-                common_prefix.resize(idx);
-                prefix_is_partial_completion = true;
-
-                // Early out if we decide there's no common prefix.
-                if (idx == 0) break;
             }
-        }
 
-        // Determine if we use the prefix. We use it if it's non-empty and it will actually make the
-        // command line longer. It may make the command line longer by virtue of not using
-        // REPLACE_TOKEN (so it always appends to the command line), or by virtue of replacing the
-        // token but being longer than it.
-        bool use_prefix = common_prefix.size() > (will_replace_token ? tok.size() : 0);
-        assert(!use_prefix || !common_prefix.empty());
+            // Determine if we use the prefix. We use it if it's non-empty and it will actually make
+            // the command line longer. It may make the command line longer by virtue of not using
+            // REPLACE_TOKEN (so it always appends to the command line), or by virtue of replacing
+            // the token but being longer than it.
+            use_prefix = common_prefix.size() > (will_replace_token ? tok.size() : 0);
+            assert(!use_prefix || !common_prefix.empty());
 
-        if (use_prefix) {
-            // We got something. If more than one completion contributed, then it means we have a
-            // prefix; don't insert a space after it.
-            if (prefix_is_partial_completion) flags |= COMPLETE_NO_SPACE;
-            completion_insert(common_prefix.c_str(), flags);
-            success = true;
+            if (use_prefix) {
+                // We got something. If more than one completion contributed, then it means we have
+                // a prefix; don't insert a space after it.
+                if (prefix_is_partial_completion) flags |= COMPLETE_NO_SPACE;
+                completion_insert(common_prefix.c_str(), flags);
+                success = true;
+            }
         }
 
         if (continue_after_prefix_insertion || !use_prefix) {
@@ -1687,7 +1678,7 @@ static void reader_interactive_destroy() {
 
 void reader_sanity_check() {
     // Note: 'data' is non-null if we are interactive, except in the testing environment.
-    if (get_is_interactive() && data != NULL) {
+    if (shell_is_interactive() && data != NULL) {
         if (data->command_line.position > data->command_line.size()) sanity_lose();
         if (data->colors.size() != data->command_line.size()) sanity_lose();
         if (data->indents.size() != data->command_line.size()) sanity_lose();
@@ -1836,14 +1827,15 @@ static void handle_token_history(int forward, int reset) {
     }
 }
 
+
+enum move_word_dir_t { MOVE_DIR_LEFT, MOVE_DIR_RIGHT };
+
 /// Move buffer position one word or erase one word. This function updates both the internal buffer
 /// and the screen. It is used by M-left, M-right and ^W to do block movement or block erase.
 ///
-/// \param dir Direction to move/erase. 0 means move left, 1 means move right.
+/// \param move_right true if moving right
 /// \param erase Whether to erase the characters along the way or only move past them.
-/// \param new if the new kill item should be appended to the previous kill item or not.
-enum move_word_dir_t { MOVE_DIR_LEFT, MOVE_DIR_RIGHT };
-
+/// \param newv if the new kill item should be appended to the previous kill item or not.
 static void move_word(editable_line_t *el, bool move_right, bool erase,
                       enum move_word_style_t style, bool newv) {
     // Return if we are already at the edge.
@@ -1926,7 +1918,7 @@ void reader_set_buffer(const wcstring &b, size_t pos) {
 }
 
 size_t reader_get_cursor_pos() {
-    if (!data) return (size_t)(-1);
+    if (!data) return (size_t)-1;
 
     return data->command_line.position;
 }
@@ -2180,11 +2172,9 @@ static int threaded_highlight(background_highlight_context_t *ctx) {
 /// highlighting maykes characters under the sursor unreadable.
 ///
 /// \param match_highlight_pos_adjust the adjustment to the position to use for bracket matching.
-/// This is added to the current cursor position and may be negative.
-/// \param error if non-null, any possible errors in the buffer are further descibed by the strings
-/// inserted into the specified arraylist
+///        This is added to the current cursor position and may be negative.
 /// \param no_io if true, do a highlight that does not perform I/O, synchronously. If false, perform
-/// an asynchronous highlight in the background, which may perform disk I/O.
+///        an asynchronous highlight in the background, which may perform disk I/O.
 static void reader_super_highlight_me_plenty(int match_highlight_pos_adjust, bool no_io) {
     const editable_line_t *el = &data->command_line;
     long match_highlight_pos = (long)el->position + match_highlight_pos_adjust;
@@ -2218,7 +2208,7 @@ static void reader_super_highlight_me_plenty(int match_highlight_pos_adjust, boo
 }
 
 bool shell_is_exiting() {
-    if (get_is_interactive())
+    if (shell_is_interactive())
         return job_list_is_empty() && data != NULL && data->end_loop;
     else
         return end_loop;
@@ -2357,9 +2347,9 @@ static int can_read(int fd) {
 //
 // TODO: Actually implement the replacement as documented above.
 static int wchar_private(wchar_t c) {
-    return ((c >= RESERVED_CHAR_BASE && c < RESERVED_CHAR_END) ||
-            (c >= ENCODE_DIRECT_BASE && c < ENCODE_DIRECT_END) ||
-            (c >= INPUT_COMMON_BASE && c < INPUT_COMMON_END));
+    return (c >= RESERVED_CHAR_BASE && c < RESERVED_CHAR_END) ||
+           (c >= ENCODE_DIRECT_BASE && c < ENCODE_DIRECT_END) ||
+           (c >= INPUT_COMMON_BASE && c < INPUT_COMMON_END);
 }
 
 /// Test if the specified character in the specified string is backslashed. pos may be at the end of
@@ -2781,14 +2771,14 @@ const wchar_t *reader_readline(int nchars) {
             // Evaluate. If the current command is unfinished, or if the charater is escaped using a
             // backslash, insert a newline.
             case R_EXECUTE: {
-                // Delete any autosuggestion.
-                data->autosuggestion.clear();
-
                 // If the user hits return while navigating the pager, it only clears the pager.
                 if (data->is_navigating_pager_contents()) {
                     clear_pager();
                     break;
                 }
+
+                // Delete any autosuggestion.
+                data->autosuggestion.clear();
 
                 // The user may have hit return with pager contents, but while not navigating them.
                 // Clear the pager in that event.
@@ -3413,7 +3403,7 @@ int reader_read(int fd, const io_chain_t &io) {
     int inter = ((fd == STDIN_FILENO) && isatty(STDIN_FILENO));
     proc_push_interactive(inter);
 
-    res = get_is_interactive() ? read_i() : read_ni(fd, io);
+    res = shell_is_interactive() ? read_i() : read_ni(fd, io);
 
     // If the exit command was called in a script, only exit the script, not the program.
     if (data) data->end_loop = 0;

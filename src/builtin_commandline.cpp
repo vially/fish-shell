@@ -1,4 +1,6 @@
 // Functions used for implementing the commandline builtin.
+#include "config.h"  // IWYU pragma: keep
+
 #include <assert.h>
 #include <errno.h>
 #include <pthread.h>
@@ -65,7 +67,7 @@ static wcstring_list_t *get_transient_stack() {
 static bool get_top_transient(wcstring *out_result) {
     ASSERT_IS_MAIN_THREAD();
     bool result = false;
-    scoped_lock locker(transient_commandline_lock);
+    scoped_lock locker(transient_commandline_lock);  //!OCLINT(side-effect)
     const wcstring_list_t *stack = get_transient_stack();
     if (!stack->empty()) {
         out_result->assign(stack->back());
@@ -77,7 +79,7 @@ static bool get_top_transient(wcstring *out_result) {
 builtin_commandline_scoped_transient_t::builtin_commandline_scoped_transient_t(
     const wcstring &cmd) {
     ASSERT_IS_MAIN_THREAD();
-    scoped_lock locker(transient_commandline_lock);
+    scoped_lock locker(transient_commandline_lock);  //!OCLINT(side-effect)
     wcstring_list_t *stack = get_transient_stack();
     stack->push_back(cmd);
     this->token = stack->size();
@@ -85,7 +87,7 @@ builtin_commandline_scoped_transient_t::builtin_commandline_scoped_transient_t(
 
 builtin_commandline_scoped_transient_t::~builtin_commandline_scoped_transient_t() {
     ASSERT_IS_MAIN_THREAD();
-    scoped_lock locker(transient_commandline_lock);
+    scoped_lock locker(transient_commandline_lock);  //!OCLINT(side-effect)
     wcstring_list_t *stack = get_transient_stack();
     assert(this->token == stack->size());
     stack->pop_back();
@@ -436,11 +438,10 @@ int builtin_commandline(parser_t &parser, io_streams_t &streams, wchar_t **argv)
             current_buffer = reader_get_buffer();
             new_pos = maxi(0L, mini(new_pos, (long)wcslen(current_buffer)));
             reader_set_buffer(current_buffer, (size_t)new_pos);
-            return 0;
         } else {
             streams.out.append_format(L"%lu\n", (unsigned long)reader_get_cursor_pos());
-            return 0;
         }
+        return 0;
     }
 
     if (line_mode) {

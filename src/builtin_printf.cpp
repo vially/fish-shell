@@ -48,6 +48,7 @@
 // David MacKenzie <djm@gnu.ai.mit.edu>
 
 // This file has been imported from source code of printf command in GNU Coreutils version 6.9.
+#include "config.h"  // IWYU pragma: keep
 
 #include <errno.h>
 #include <limits.h>
@@ -196,24 +197,6 @@ static int octal_to_bin(wchar_t c) {
     }
 }
 
-double C_STRTOD(wchar_t const *nptr, wchar_t **endptr) {
-    double r;
-
-    const wcstring saved_locale = wsetlocale(LC_NUMERIC, NULL);
-
-    if (!saved_locale.empty()) {
-        wsetlocale(LC_NUMERIC, L"C");
-    }
-
-    r = wcstod(nptr, endptr);
-
-    if (!saved_locale.empty()) {
-        wsetlocale(LC_NUMERIC, saved_locale.c_str());
-    }
-
-    return r;
-}
-
 void builtin_printf_state_t::fatal_error(const wchar_t *fmt, ...) {
     // Don't error twice.
     if (early_exit) return;
@@ -282,7 +265,12 @@ uintmax_t raw_string_to_scalar_type(const wchar_t *s, wchar_t **end) {
 
 template <>
 long double raw_string_to_scalar_type(const wchar_t *s, wchar_t **end) {
-    return C_STRTOD(s, end);
+    // Forcing the locale to C is questionable but it's what the old C_STRTOD() that I inlined here
+    // as part of changing how locale management is done by fish.
+    char * old_locale = setlocale(LC_NUMERIC, "C");
+    double val = wcstod(s, end);
+    setlocale(LC_NUMERIC, old_locale);
+    return val;
 }
 
 template <typename T>

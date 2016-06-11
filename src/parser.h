@@ -193,8 +193,11 @@ class parser_t {
     /// The list of blocks, allocated with new. It's our responsibility to delete these.
     std::vector<block_t *> block_stack;
 
+#if 0
+// TODO: Lint says this isn't used (which is true). Should this be removed?
     /// Gets a description of the block stack, for debugging.
     wcstring block_stack_description() const;
+#endif
 
     /// List of profile items, allocated with new.
     std::vector<profile_item_t *> profile_items;
@@ -269,8 +272,7 @@ class parser_t {
     block_t *block_at_index(size_t idx);
 
     /// Returns the current (innermost) block.
-    const block_t *current_block() const;
-    block_t *current_block();
+    block_t *const current_block();
 
     /// Count of blocks.
     size_t block_count() const { return block_stack.size(); }
@@ -310,15 +312,6 @@ class parser_t {
     /// parser_t will clean it up.
     profile_item_t *create_profile_item();
 
-    /// Test if the specified string can be parsed, or if more bytes need to be read first. The
-    /// result will have the PARSER_TEST_ERROR bit set if there is a syntax error in the code, and
-    /// the PARSER_TEST_INCOMPLETE bit set if the code contains unclosed blocks.
-    ///
-    /// \param buff the text buffer to test
-    /// \param block_level if non-null, the block nesting level will be filled out into this array
-    /// \param out if non-null, any errors in the command will be filled out into this buffer
-    /// \param prefix the prefix string to prepend to each error message written to the \c out
-    /// buffer.
     void get_backtrace(const wcstring &src, const parse_error_list_t &errors,
                        wcstring *output) const;
 

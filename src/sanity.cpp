@@ -1,4 +1,6 @@
 // Functions for performing sanity checks on the program state.
+#include "config.h"  // IWYU pragma: keep
+
 #include <unistd.h>
 
 #include "common.h"
@@ -18,8 +20,7 @@ void sanity_lose() {
 }
 
 int sanity_check() {
-    if (!insane)
-        if (get_is_interactive()) history_sanity_check();
+    if (!insane && shell_is_interactive()) history_sanity_check();
     if (!insane) reader_sanity_check();
     if (!insane) kill_sanity_check();
     if (!insane) proc_sanity_check();

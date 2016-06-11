@@ -16,6 +16,7 @@
 // Check the other builtin manuals for proper syntax.
 //
 // 4). Use 'git add doc_src/NAME.txt' to start tracking changes to the documentation file.
+#include "config.h"  // IWYU pragma: keep
 
 #include <assert.h>
 #include <errno.h>
@@ -82,7 +83,7 @@
 // The send stuff to foreground message.
 #define FG_MSG _(L"Send job %d, '%ls' to foreground\n")
 
-/// Datastructure to describe a builtin.
+/// Data structure to describe a builtin.
 struct builtin_data_t {
     // Name of the builtin.
     const wchar_t *name;
@@ -165,7 +166,7 @@ wcstring builtin_help_get(parser_t &parser, io_streams_t &streams, const wchar_t
 /// to an interactive screen, it may be shortened to fit the screen.
 void builtin_print_help(parser_t &parser, io_streams_t &streams, const wchar_t *cmd,
                         output_stream_t &b) {
-    bool is_stderr = (&b == &streams.err);
+    bool is_stderr = &b == &streams.err;
     if (is_stderr) {
         b.append(parser.current_line());
     }
@@ -183,7 +184,7 @@ void builtin_print_help(parser_t &parser, io_streams_t &streams, const wchar_t *
 
             screen_height = common_get_height();
             lines = count_char(str, L'\n');
-            if (!get_is_interactive() || (lines > 2 * screen_height / 3)) {
+            if (!shell_is_interactive() || (lines > 2 * screen_height / 3)) {
                 wchar_t *pos;
                 int cut = 0;
                 int i;
@@ -444,27 +445,27 @@ static int builtin_bind_erase(const wcstring_list_t &seq_list, int all, const wc
         }
 
         return 0;
-    } else {
-        int res = 0;
-
-        if (mode == NULL) mode = DEFAULT_BIND_MODE;
-
-        for (size_t i = 0; i < seq_list.size(); i++) {
-            const wcstring &seq = seq_list.at(i);
-            if (use_terminfo) {
-                wcstring seq2;
-                if (get_terminfo_sequence(seq.c_str(), &seq2, streams)) {
-                    input_mapping_erase(seq2, mode);
-                } else {
-                    res = 1;
-                }
-            } else {
-                input_mapping_erase(seq.c_str(), mode);
-            }
-        }
-
-        return res;
     }
+
+    int res = 0;
+    if (mode == NULL) mode = DEFAULT_BIND_MODE;
+
+    for (size_t i = 0; i < seq_list.size(); i++) {
+        const wcstring &seq = seq_list.at(i);
+        if (use_terminfo) {
+            wcstring seq2;
+            if (get_terminfo_sequence(seq.c_str(), &seq2, streams)) {
+                input_mapping_erase(seq2, mode);
+            } else {
+                res = 1;
+            }
+        } else {
+            input_mapping_erase(seq.c_str(), mode);
+        }
+    }
+
+
+    return res;
 }
 
 static const wchar_t *const g_bind_usage =
@@ -904,6 +905,7 @@ static int builtin_generic(parser_t &parser, io_streams_t &streams, wchar_t **ar
             }
         }
     }
+
     return STATUS_BUILTIN_ERROR;
 }
 
@@ -934,7 +936,11 @@ static wcstring functions_def(const wcstring &name) {
         out.append(esc_desc);
     }
 
-    if (!function_get_shadows(name)) {
+    if (function_get_shadow_builtin(name)) {
+        out.append(L" --shadow-builtin");
+    }
+
+    if (!function_get_shadow_scope(name)) {
         out.append(L" --no-scope-shadowing");
     }
 
@@ -1468,16 +1474,15 @@ static int builtin_pwd(parser_t &parser, io_streams_t &streams, wchar_t **argv) 
     wcstring res = wgetcwd();
     if (res.empty()) {
         return STATUS_BUILTIN_ERROR;
-    } else {
-        streams.out.append(res);
-        streams.out.push_back(L'\n');
-        return STATUS_BUILTIN_OK;
     }
+    streams.out.append(res);
+    streams.out.push_back(L'\n');
+    return STATUS_BUILTIN_OK;
 }
 
 /// Adds a function to the function set. It calls into function.cpp to perform any heavy lifting.
-int define_function(parser_t &parser, io_streams_t &streams, const wcstring_list_t &c_args,
-                    const wcstring &contents, int definition_line_offset, wcstring *out_err) {
+int builtin_function(parser_t &parser, io_streams_t &streams, const wcstring_list_t &c_args,
+                     const wcstring &contents, int definition_line_offset, wcstring *out_err) {
     wgetopter_t w;
     assert(out_err != NULL);
 
@@ -1500,7 +1505,8 @@ int define_function(parser_t &parser, io_streams_t &streams, const wcstring_list
     wcstring_list_t named_arguments;
     wcstring_list_t inherit_vars;
 
-    bool shadows = true;
+    bool shadow_builtin = false;
+    bool shadow_scope = true;
 
     wcstring signature;
     bool do_signature = false;
@@ -1523,18 +1529,18 @@ int define_function(parser_t &parser, io_streams_t &streams, const wcstring_list
                                            {L"wraps", required_argument, 0, 'w'},
                                            {L"help", no_argument, 0, 'h'},
                                            {L"argument-names", no_argument, 0, 'a'},
+                                           {L"shadow-builtin", no_argument, 0, 'B'},
                                            {L"no-scope-shadowing", no_argument, 0, 'S'},
                                            {L"inherit-variable", required_argument, 0, 'V'},
                                            {L"signature", required_argument, 0, 'g'},
                                            {0, 0, 0, 0}};
 
-    while (1 && (!res)) {
+    while (1 && !res) {
         int opt_index = 0;
 
         // The leading - here specifies RETURN_IN_ORDER.
-        int opt = w.wgetopt_long(argc, argv, L"-d:s:j:p:v:e:w:haSV:", long_options, &opt_index);
+        int opt = w.wgetopt_long(argc, argv, L"-d:s:j:p:v:e:w:haBSV:", long_options, &opt_index);
         if (opt == -1) break;
-
         switch (opt) {
             case 0: {
                 if (long_options[opt_index].flag != 0) break;
@@ -1556,7 +1562,6 @@ int define_function(parser_t &parser, io_streams_t &streams, const wcstring_list
                 events.push_back(event_t::signal_event(sig));
                 break;
             }
-
             case 'v': {
                 if (wcsvarname(w.woptarg)) {
                     append_format(*out_err, _(L"%ls: Invalid variable name '%ls'"), argv[0],
@@ -1606,7 +1611,6 @@ int define_function(parser_t &parser, io_streams_t &streams, const wcstring_list
                         e.type = EVENT_JOB_ID;
                         e.param1.job_id = job_id;
                     }
-
                 } else {
                     errno = 0;
                     pid = fish_wcstoi(w.woptarg, &end, 10);
@@ -1631,8 +1635,12 @@ int define_function(parser_t &parser, io_streams_t &streams, const wcstring_list
                 name_is_first_positional = !positionals.empty();
                 break;
             }
+            case 'B': {
+                shadow_builtin = true;
+                break;
+            }
             case 'S': {
-                shadows = 0;
+                shadow_scope = false;
                 break;
             }
             case 'w': {
@@ -1731,6 +1739,31 @@ int define_function(parser_t &parser, io_streams_t &streams, const wcstring_list
             }
         }
     }
+    
+    if (!res) {
+        bool function_name_shadows_builtin = false;
+        wcstring_list_t builtin_names = builtin_get_names();
+        for (size_t i = 0; i < builtin_names.size(); i++) {
+            const wchar_t *el = builtin_names.at(i).c_str();
+            if (el == function_name) {
+                function_name_shadows_builtin = true;
+                break;
+            }
+        }
+        if (function_name_shadows_builtin && !shadow_builtin) {
+            append_format(
+                          *out_err,
+                          _(L"%ls: function name shadows a builtin so you must use '--shadow-builtin'"),
+                          argv[0]);
+            res = STATUS_BUILTIN_ERROR;
+        } else if (!function_name_shadows_builtin && shadow_builtin) {
+            append_format(*out_err, _(L"%ls: function name does not shadow a builtin so you "
+                                      L"must not use '--shadow-builtin'"),
+                          argv[0]);
+            res = STATUS_BUILTIN_ERROR;
+        }
+    }
+
 
     if (!res && do_signature) {
         // Handle a signature
@@ -1756,7 +1789,8 @@ int define_function(parser_t &parser, io_streams_t &streams, const wcstring_list
         d.name = function_name;
         if (desc) d.description = desc;
         d.events.swap(events);
-        d.shadows = shadows;
+        d.shadow_builtin = shadow_builtin;
+        d.shadow_scope = shadow_scope;
         d.named_arguments.swap(named_arguments);
         d.inherit_vars.swap(inherit_vars);
 
@@ -1822,9 +1856,7 @@ static int builtin_random(parser_t &parser, io_streams_t &streams, wchar_t **arg
                 srand48_r(time(0), &seed_buffer);
             }
             lrand48_r(&seed_buffer, &res);
-            // The labs() shouldn't be necessary since lrand48 is supposed to
-            // return only positive integers but we're going to play it safe.
-            streams.out.append_format(L"%ld\n", labs(res % 32768));
+            streams.out.append_format(L"%ld\n", res % 32768);
             break;
         }
         case 1: {
@@ -2416,7 +2448,7 @@ static int builtin_cd(parser_t &parser, io_streams_t &streams, wchar_t **argv) {
                                       argv[0], dir_in.c_str());
         }
 
-        if (!get_is_interactive()) {
+        if (!shell_is_interactive()) {
             streams.err.append(parser.current_line());
         }
 
@@ -2433,7 +2465,7 @@ static int builtin_cd(parser_t &parser, io_streams_t &streams, wchar_t **argv) {
             streams.err.append_format(_(L"%ls: '%ls' is not a directory\n"), argv[0], dir.c_str());
         }
 
-        if (!get_is_interactive()) {
+        if (!shell_is_interactive()) {
             streams.err.append(parser.current_line());
         }
 
@@ -2684,10 +2716,10 @@ static int send_to_bg(parser_t &parser, io_streams_t &streams, job_t *j, const w
             L"bg", j->job_id, j->command_wcstr());
         builtin_print_help(parser, streams, L"bg", streams.err);
         return STATUS_BUILTIN_ERROR;
-    } else {
-        streams.err.append_format(_(L"Send job %d '%ls' to background\n"), j->job_id,
-                                  j->command_wcstr());
     }
+
+    streams.err.append_format(_(L"Send job %d '%ls' to background\n"), j->job_id,
+                              j->command_wcstr());
     make_first(j);
     job_set_flag(j, JOB_FOREGROUND, 0);
     job_continue(j, job_is_stopped(j));
@@ -3133,9 +3165,8 @@ static const builtin_data_t *builtin_lookup(const wcstring &name) {
     const builtin_data_t *found = std::lower_bound(builtin_datas, array_end, name);
     if (found != array_end && name == found->name) {
         return found;
-    } else {
-        return NULL;
     }
+    return NULL;
 }
 
 extern const wchar_t *const g_jobs_usage;
@@ -3185,14 +3216,10 @@ int builtin_run(parser_t &parser, const wchar_t *const *argv, io_streams_t &stre
     }
 
     if (data != NULL) {
-        int status;
-
-        status = cmd(parser, streams, argv);
-        return status;
-
-    } else {
-        debug(0, UNKNOWN_BUILTIN_ERR_MSG, argv[0]);
+        return cmd(parser, streams, argv);
     }
+
+    debug(0, UNKNOWN_BUILTIN_ERR_MSG, argv[0]);
     return STATUS_BUILTIN_ERROR;
 }
 

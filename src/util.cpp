@@ -1,10 +1,11 @@
 // Generic utilities library.
 //
 // Contains data structures such as automatically growing array lists, priority queues, etc.
+#include "config.h"  // IWYU pragma: keep
+
 #include <errno.h>
 #include <stdlib.h>
 #include <sys/time.h>
-#include <sys/types.h>
 #include <wchar.h>
 #include <wctype.h>
 
@@ -50,7 +51,7 @@ int wcsfilecmp(const wchar_t *a, const wchar_t *b) {
         b = bend - 1;
     } else {
         int diff = towlower(*a) - towlower(*b);
-        if (diff != 0) return (diff > 0) ? 2 : -2;
+        if (diff != 0) return diff > 0 ? 2 : -2;
 
         secondary_diff = *a - *b;
     }

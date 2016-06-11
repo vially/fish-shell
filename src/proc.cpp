@@ -101,10 +101,11 @@ static int is_interactive = -1;
 
 static bool proc_had_barrier = false;
 
-int get_is_interactive(void) {
+bool shell_is_interactive(void) {
     ASSERT_IS_MAIN_THREAD();
-    // is_interactive is initialized to -1; ensure someone has popped/pushed it before then.
-    assert(is_interactive >= 0);
+    // is_interactive is statically initialized to -1. Ensure it has been dynamically set
+    // before we're called.
+    assert(is_interactive != -1);
     return is_interactive > 0;
 }
 
@@ -166,7 +167,7 @@ static pthread_mutex_t job_id_lock = PTHREAD_MUTEX_INITIALIZER;
 static std::vector<bool> consumed_job_ids;
 
 job_id_t acquire_job_id(void) {
-    scoped_lock lock(job_id_lock);
+    scoped_lock lock(job_id_lock);  //!OCLINT(has side effects)
 
     // Find the index of the first 0 slot.
     std::vector<bool>::iterator slot =
@@ -175,17 +176,17 @@ job_id_t acquire_job_id(void) {
         // We found a slot. Note that slot 0 corresponds to job ID 1.
         *slot = true;
         return (job_id_t)(slot - consumed_job_ids.begin() + 1);
-    } else {
-        // We did not find a slot; create a new slot. The size of the vector is now the job ID
-        // (since it is one larger than the slot).
-        consumed_job_ids.push_back(true);
-        return (job_id_t)consumed_job_ids.size();
     }
+
+    // We did not find a slot; create a new slot. The size of the vector is now the job ID
+    // (since it is one larger than the slot).
+    consumed_job_ids.push_back(true);
+    return (job_id_t)consumed_job_ids.size();
 }
 
 void release_job_id(job_id_t jid) {
     assert(jid > 0);
-    scoped_lock lock(job_id_lock);
+    scoped_lock lock(job_id_lock);  //!OCLINT(has side effects)
     size_t slot = (size_t)(jid - 1), count = consumed_job_ids.size();
 
     // Make sure this slot is within our vector and is currently set to consumed.
@@ -367,15 +368,13 @@ process_t::process_t()
 {
 }
 
-process_t::~process_t() {
-    if (this->next != NULL) delete this->next;
-}
+process_t::~process_t() { delete this->next; }
 
 job_t::job_t(job_id_t jobid, const io_chain_t &bio)
     : block_io(bio), first_process(NULL), pgid(0), tmodes(), job_id(jobid), flags(0) {}
 
 job_t::~job_t() {
-    if (first_process != NULL) delete first_process;
+    delete first_process;
     release_job_id(job_id);
 }
 
@@ -451,10 +450,9 @@ static int process_mark_finished_children(bool wants_await) {
 
     if (got_error) {
         return -1;
-    } else {
-        s_last_processed_sigchld_generation_count = local_count;
-        return processed_count;
     }
+    s_last_processed_sigchld_generation_count = local_count;
+    return processed_count;
 }
 
 /// This is called from a signal handler. The signal is always SIGCHLD.
@@ -651,61 +649,35 @@ int job_reap(bool interactive) {
 
 /// Get the CPU time for the specified process.
 unsigned long proc_get_jiffies(process_t *p) {
-    wchar_t fn[FN_SIZE];
+    if (p->pid <= 0) return 0;
 
+    wchar_t fn[FN_SIZE];
     char state;
     int pid, ppid, pgrp, session, tty_nr, tpgid, exit_signal, processor;
-
     long int cutime, cstime, priority, nice, placeholder, itrealvalue, rss;
     unsigned long int flags, minflt, cminflt, majflt, cmajflt, utime, stime, starttime, vsize, rlim,
         startcode, endcode, startstack, kstkesp, kstkeip, signal, blocked, sigignore, sigcatch,
         wchan, nswap, cnswap;
     char comm[1024];
 
-    if (p->pid <= 0) return 0;
-
     swprintf(fn, FN_SIZE, L"/proc/%d/stat", p->pid);
-
     FILE *f = wfopen(fn, "r");
     if (!f) return 0;
 
-    int count = fscanf(
-        f,
-        "%d %s %c "
-        "%d %d %d "
-        "%d %d %lu "
-
-        "%lu %lu %lu "
-        "%lu %lu %lu "
-        "%ld %ld %ld "
-
-        "%ld %ld %ld "
-        "%lu %lu %ld "
-        "%lu %lu %lu "
-
-        "%lu %lu %lu "
-        "%lu %lu %lu "
-        "%lu %lu %lu "
-
-        "%lu %d %d ",
-
-        &pid, comm, &state, &ppid, &pgrp, &session, &tty_nr, &tpgid, &flags,
-
-        &minflt, &cminflt, &majflt, &cmajflt, &utime, &stime, &cutime, &cstime, &priority,
-
-        &nice, &placeholder, &itrealvalue, &starttime, &vsize, &rss, &rlim, &startcode, &endcode,
-
-        &startstack, &kstkesp, &kstkeip, &signal, &blocked, &sigignore, &sigcatch, &wchan, &nswap,
-
-        &cnswap, &exit_signal, &processor);
-
-    // Don't need to check exit status of fclose on read-only streams.
+    // TODO: replace the use of fscanf() as it is brittle and should never be used.
+    int count = fscanf(f,
+                       "%9d %1023s %c %9d %9d %9d %9d %9d %9lu "
+                       "%9lu %9lu %9lu %9lu %9lu %9lu %9ld %9ld %9ld "
+                       "%9ld %9ld %9ld %9lu %9lu %9ld %9lu %9lu %9lu "
+                       "%9lu %9lu %9lu %9lu %9lu %9lu %9lu %9lu %9lu "
+                       "%9lu %9d %9d ",
+                       &pid, comm, &state, &ppid, &pgrp, &session, &tty_nr, &tpgid, &flags, &minflt,
+                       &cminflt, &majflt, &cmajflt, &utime, &stime, &cutime, &cstime, &priority,
+                       &nice, &placeholder, &itrealvalue, &starttime, &vsize, &rss, &rlim,
+                       &startcode, &endcode, &startstack, &kstkesp, &kstkeip, &signal, &blocked,
+                       &sigignore, &sigcatch, &wchan, &nswap, &cnswap, &exit_signal, &processor);
     fclose(f);
-
-    if (count < 17) {
-        return 0;
-    }
-
+    if (count < 17) return 0;
     return utime + stime + cutime + cstime;
 }
 

@@ -1,7 +1,6 @@
 // Functions for reading a character of input from stdin.
 #include "config.h"
 
-#include <assert.h>
 #include <errno.h>
 #include <unistd.h>
 #include <wchar.h>
@@ -130,39 +129,6 @@ wcstring describe_char(wint_t c) {
     }
     return format_string(L"%02x", c);
 }
-
-/// Description of each supported input function.
-static const wchar_t *desc_arr[] = {
-    L"Move to beginning of line",
-    L"Move to end of line",
-    L"Move forward one character",
-    L"Move backward one character",
-    L"Move forward one word",
-    L"Move backward one word",
-    L"Search backward through list of previous commands",
-    L"Search forward through list of previous commands",
-    L"Delete one character forward",
-    L"Delete one character backward",
-    L"Move contents from cursor to end of line to killring",
-    L"Paste contents of killring",
-    L"Rotate to previous killring entry",
-    L"Guess the rest of the next input token",
-    L"Move to first item of history",
-    L"Move to last item of history",
-    L"Clear current line",
-    L"Move contents from beginning of line to cursor to killring",
-    L"Move entire line to killring",
-    L"Move next word to killring",
-    L"Move previous word to killring",
-    L"Write out key bindings",
-    L"Clear entire screen",
-    L"Quit the running program",
-    L"Search backward through list of previous commands for matching token",
-    L"Search forward through list of previous commands for matching token",
-    L"Insert the pressed key",
-    L"Do nothing",
-    L"End of file",
-    L"Repeat command"};
 
 /// Internal code for each supported input function.
 static const wchar_t code_arr[] = {R_BEGINNING_OF_LINE,
@@ -370,35 +336,25 @@ void update_fish_color_support(void) {
 
 int input_init() {
     if (is_init) return 1;
-
     is_init = true;
-
     input_common_init(&interrupt_handler);
 
-    const env_var_t term = env_get_string(L"TERM");
-    int errret;
-    if (setupterm(const_cast<char *>(wcs2string(term).c_str()), STDOUT_FILENO, &errret) == ERR) {
-        debug(0, _(L"Could not set up terminal"));
-        if (errret == 0) {
-            debug(0, _(L"Check that your terminal type, '%ls', is supported on this system"),
-                  term.c_str());
-            debug(0, _(L"Attempting to use '%ls' instead"), DEFAULT_TERM);
-            env_set(L"TERM", DEFAULT_TERM, ENV_GLOBAL | ENV_EXPORT);
-            const std::string default_term = wcs2string(DEFAULT_TERM);
-            if (setupterm(const_cast<char *>(default_term.c_str()), STDOUT_FILENO, &errret) ==
-                ERR) {
-                debug(0, _(L"Could not set up terminal"));
-                exit_without_destructors(1);
-            }
-        } else {
+    int err_ret;
+    if (setupterm(NULL, STDOUT_FILENO, &err_ret) == ERR) {
+        env_var_t term = env_get_string(L"TERM");
+        debug(0, _(L"Your TERM value of '%ls' is not valid"), term.c_str());
+        debug(0, _(L"Check that your terminal type is supported on this system"));
+        env_set(L"TERM", DEFAULT_TERM, ENV_GLOBAL | ENV_EXPORT);
+        if (setupterm(NULL, STDOUT_FILENO, &err_ret) == ERR) {
+            debug(0, _(L"Unable to setup terminal using your TERM or the '%ls' fallback"),
+                  DEFAULT_TERM);
             exit_without_destructors(1);
+        } else {
+            debug(0, _(L"Using fallback terminal type '%ls' instead"), DEFAULT_TERM);
         }
     }
-    assert(!term.missing());
-    output_set_term(term);
 
     input_terminfo_init();
-
     update_fish_color_support();
 
     // If we have no keybindings, add a few simple defaults.
@@ -533,13 +489,12 @@ static bool input_mapping_is_match(const input_mapping_t &m) {
         // m.command.c_str());
         // We matched the entire sequence.
         return true;
-    } else {
-        int k;
-        // Return the read characters.
-        input_common_next_ch(c);
-        for (k = j - 1; k >= 0; k--) {
-            input_common_next_ch(m.seq[k]);
-        }
+    }
+
+    // Return the read characters.
+    input_common_next_ch(c);
+    for (int k = j - 1; k >= 0; k--) {
+        input_common_next_ch(m.seq[k]);
     }
 
     return false;
@@ -628,12 +583,12 @@ wint_t input_readch(bool allow_commands) {
                 case R_AND: {
                     if (input_function_status) {
                         return input_readch();
-                    } else {
-                        while ((c = input_common_readch(0)) && c >= R_MIN && c <= R_MAX)
-                            ;
-                        input_common_next_ch(c);
-                        return input_readch();
                     }
+                    while ((c = input_common_readch(0)) && c >= R_MIN && c <= R_MAX) {
+                        // do nothing
+                    }
+                    input_common_next_ch(c);
+                    return input_readch();
                 }
                 default: { return c; }
             }

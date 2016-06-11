@@ -1,4 +1,6 @@
 // Functions for handling event triggers.
+#include "config.h"  // IWYU pragma: keep
+
 #include <assert.h>
 #include <signal.h>
 #include <stdbool.h>
@@ -229,9 +231,8 @@ static wcstring event_desc_compact(const event_t &event) {
     }
     if (event.function_name.size()) {
         return format_string(L"%ls: \"%ls\"", res.c_str(), event.function_name.c_str());
-    } else {
-        return res;
     }
+    return res;
 }
 
 void event_add_handler(const event_t &event) {

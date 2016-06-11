@@ -42,14 +42,6 @@
 #include "fallback.h"  // IWYU pragma: keep
 #include "util.h"      // IWYU pragma: keep
 
-#ifdef TPUTS_KLUDGE
-int tputs(const char *str, int affcnt, int (*fish_putc)(tputs_arg_t)) {
-    while (*str) {
-        fish_putc(*str++);
-    }
-}
-#endif
-
 #ifdef TPARM_SOLARIS_KLUDGE
 #undef tparm
 
@@ -98,550 +90,7 @@ char *tparm_solaris_kludge(char *str, ...) {
 
 #endif
 
-#ifndef HAVE_FWPRINTF
-#define INTERNAL_FWPRINTF 1
-#endif
-
-#ifdef HAVE_BROKEN_FWPRINTF
-#define INTERNAL_FWPRINTF 1
-#endif
-
-#ifdef INTERNAL_FWPRINTF
-
-/// Internal function for the wprintf fallbacks. USed to write the specified number of spaces.
-static void pad(void (*writer)(wchar_t), int count) {
-    int i;
-    if (count < 0) return;
-
-    for (i = 0; i < count; i++) {
-        writer(L' ');
-    }
-}
-
-/// Generic formatting function. All other string formatting functions are secretly a wrapper around
-/// this function. vgprintf does not implement all the filters supported by printf, only those that
-/// are currently used by fish. vgprintf internally uses snprintf to implement the number outputs,
-/// such as %f and %x.
-///
-/// Currently supported functionality:
-///
-/// - precision specification, both through .* and .N
-/// - Padding through * and N
-/// - Right padding using the - prefix
-/// - long versions of all filters thorugh l and ll prefix
-/// - Character output using %c
-/// - String output through %s
-/// - Floating point number output through %f
-/// - Integer output through %d, %i, %u, %o, %x and %X
-///
-/// For a full description on the usage of *printf, see use 'man 3 printf'.
-static int vgwprintf(void (*writer)(wchar_t), const wchar_t *filter, va_list va) {
-    const wchar_t *filter_org = filter;
-    int count = 0;
-
-    for (; *filter; filter++) {
-        if (*filter == L'%') {
-            int is_long = 0;
-            int width = -1;
-            filter++;
-            int loop = 1;
-            int precision = -1;
-            int pad_left = 1;
-
-            if (iswdigit(*filter)) {
-                width = 0;
-                while ((*filter >= L'0') && (*filter <= L'9')) {
-                    width = 10 * width + (*filter++ - L'0');
-                }
-            }
-
-            while (loop) {
-                switch (*filter) {
-                    case L'l': {
-                        // Long variable.
-                        is_long++;
-                        filter++;
-                        break;
-                    }
-                    case L'*': {
-                        // Set minimum field width.
-                        width = va_arg(va, int);
-                        filter++;
-                        break;
-                    }
-                    case L'-': {
-                        filter++;
-                        pad_left = 0;
-                        break;
-                    }
-                    case L'.': {
-                        // Set precision.
-                        filter++;
-                        if (*filter == L'*') {
-                            precision = va_arg(va, int);
-                        } else {
-                            precision = 0;
-                            while ((*filter >= L'0') && (*filter <= L'9')) {
-                                precision = 10 * precision + (*filter++ - L'0');
-                            }
-                        }
-                        break;
-                    }
-                    default: {
-                        loop = 0;
-                        break;
-                    }
-                }
-            }
-
-            switch (*filter) {
-                case L'c': {
-                    wchar_t c;
-
-                    if ((width >= 0) && pad_left) {
-                        pad(writer, width - 1);
-                        count += maxi(width - 1, 0);
-                    }
-
-                    c = is_long ? va_arg(va, wint_t) : btowc(va_arg(va, int));
-                    if (precision != 0) writer(c);
-
-                    if ((width >= 0) && !pad_left) {
-                        pad(writer, width - 1);
-                        count += maxi(width - 1, 0);
-                    }
-
-                    count++;
-                    break;
-                }
-                case L's': {
-                    wchar_t *ss = 0;
-                    wcstring wide_ss;
-                    if (is_long) {
-                        ss = va_arg(va, wchar_t *);
-                    } else {
-                        char *ns = va_arg(va, char *);
-
-                        if (ns) {
-                            wide_ss = str2wcstring(ns);
-                            ss = wide_ss.c_str();
-                        }
-                    }
-
-                    if (!ss) {
-                        return -1;
-                    }
-
-                    if ((width >= 0) && pad_left) {
-                        pad(writer, width - wcslen(ss));
-                        count += maxi(width - wcslen(ss), 0);
-                    }
-
-                    wchar_t *s = ss;
-                    int precount = count;
-
-                    while (*s) {
-                        if ((precision > 0) && (precision <= (count - precount))) break;
-                        writer(*(s++));
-                        count++;
-                    }
-
-                    if ((width >= 0) && !pad_left) {
-                        pad(writer, width - wcslen(ss));
-                        count += maxi(width - wcslen(ss), 0);
-                    }
-
-                    break;
-                }
-                case L'd':
-                case L'i':
-                case L'o':
-                case L'u':
-                case L'x':
-                case L'X': {
-                    char str[33];
-                    char *pos;
-                    char format[16];
-                    int len;
-
-                    format[0] = 0;
-                    strcat(format, "%");
-                    if (precision >= 0) strcat(format, ".*");
-                    switch (is_long) {
-                        case 2: {
-                            strcat(format, "ll");
-                            break;
-                        }
-                        case 1: {
-                            strcat(format, "l");
-                            break;
-                        }
-                    }
-
-                    len = strlen(format);
-                    format[len++] = (char)*filter;
-                    format[len] = 0;
-
-                    switch (*filter) {
-                        case L'd':
-                        case L'i': {
-                            switch (is_long) {
-                                case 0: {
-                                    int d = va_arg(va, int);
-                                    if (precision >= 0)
-                                        snprintf(str, 32, format, precision, d);
-                                    else
-                                        snprintf(str, 32, format, d);
-
-                                    break;
-                                }
-                                case 1: {
-                                    long d = va_arg(va, long);
-                                    if (precision >= 0)
-                                        snprintf(str, 32, format, precision, d);
-                                    else
-                                        snprintf(str, 32, format, d);
-                                    break;
-                                }
-                                case 2: {
-                                    long long d = va_arg(va, long long);
-                                    if (precision >= 0)
-                                        snprintf(str, 32, format, precision, d);
-                                    else
-                                        snprintf(str, 32, format, d);
-                                    break;
-                                }
-                                default: {
-                                    debug(0, L"Invalid length modifier in string %ls\n",
-                                          filter_org);
-                                    return -1;
-                                }
-                            }
-                            break;
-                        }
-
-                        case L'u':
-                        case L'o':
-                        case L'x':
-                        case L'X': {
-                            switch (is_long) {
-                                case 0: {
-                                    unsigned d = va_arg(va, unsigned);
-                                    if (precision >= 0)
-                                        snprintf(str, 32, format, precision, d);
-                                    else
-                                        snprintf(str, 32, format, d);
-                                    break;
-                                }
-                                case 1: {
-                                    unsigned long d = va_arg(va, unsigned long);
-                                    if (precision >= 0)
-                                        snprintf(str, 32, format, precision, d);
-                                    else
-                                        snprintf(str, 32, format, d);
-                                    break;
-                                }
-                                case 2: {
-                                    unsigned long long d = va_arg(va, unsigned long long);
-                                    if (precision >= 0)
-                                        snprintf(str, 32, format, precision, d);
-                                    else
-                                        snprintf(str, 32, format, d);
-                                    break;
-                                }
-                                default: {
-                                    debug(0, L"Invalid length modifier in string %ls\n",
-                                          filter_org);
-                                    return -1;
-                                }
-                            }
-                            break;
-                        }
-                        default: {
-                            debug(0, L"Invalid filter %ls in string %ls\n", *filter, filter_org);
-                            return -1;
-                        }
-                    }
-
-                    if ((width >= 0) && pad_left) {
-                        int l = maxi(width - strlen(str), 0);
-                        pad(writer, l);
-                        count += l;
-                    }
-
-                    pos = str;
-
-                    while (*pos) {
-                        writer(*(pos++));
-                        count++;
-                    }
-
-                    if ((width >= 0) && !pad_left) {
-                        int l = maxi(width - strlen(str), 0);
-                        pad(writer, l);
-                        count += l;
-                    }
-
-                    break;
-                }
-
-                case L'f': {
-                    char str[32];
-                    char *pos;
-                    double val = va_arg(va, double);
-
-                    if (precision >= 0) {
-                        if (width >= 0) {
-                            snprintf(str, 32, "%*.*f", width, precision, val);
-                        } else {
-                            snprintf(str, 32, "%.*f", precision, val);
-                        }
-                    } else {
-                        if (width >= 0) {
-                            snprintf(str, 32, "%*f", width, val);
-                        } else {
-                            snprintf(str, 32, "%f", val);
-                        }
-                    }
-
-                    pos = str;
-
-                    while (*pos) {
-                        writer(*(pos++));
-                        count++;
-                    }
-
-                    break;
-                }
-
-                case L'n': {
-                    int *n = va_arg(va, int *);
-
-                    *n = count;
-                    break;
-                }
-                case L'%': {
-                    writer('%');
-                    count++;
-                    break;
-                }
-                default: {
-                    debug(0, L"Unknown switch %lc in string %ls\n", *filter, filter_org);
-                    return -1;
-                }
-            }
-        } else {
-            writer(*filter);
-            count++;
-        }
-    }
-
-    return count;
-}
-
-/// Holds data for swprintf writer.
-static struct {
-    int count;
-    int max;
-    wchar_t *pos;
-} sw_data;
-
-/// Writers for string output.
-static void sw_writer(wchar_t c) {
-    if (sw_data.count < sw_data.max) *(sw_data.pos++) = c;
-    sw_data.count++;
-}
-
-int vswprintf(wchar_t *out, size_t n, const wchar_t *filter, va_list va) {
-    int written;
-
-    sw_data.pos = out;
-    sw_data.max = n;
-    sw_data.count = 0;
-    written = vgwprintf(&sw_writer, filter, va);
-    if (written < n) {
-        *sw_data.pos = 0;
-    } else {
-        written = -1;
-    }
-
-    return written;
-}
-
-int swprintf(wchar_t *out, size_t n, const wchar_t *filter, ...) {
-    va_list va;
-    int written;
-
-    va_start(va, filter);
-    written = vswprintf(out, n, filter, va);
-    va_end(va);
-    return written;
-}
-
-/// Holds auxiliary data for fwprintf and wprintf writer.
-static FILE *fw_data;
-
-static void fw_writer(wchar_t c) { fputwc(c, fw_data); }
-
-/// Writers for file output.
-int vfwprintf(FILE *f, const wchar_t *filter, va_list va) {
-    fw_data = f;
-    return vgwprintf(&fw_writer, filter, va);
-}
-
-int fwprintf(FILE *f, const wchar_t *filter, ...) {
-    va_list va;
-    int written;
-
-    va_start(va, filter);
-    written = vfwprintf(f, filter, va);
-    va_end(va);
-    return written;
-}
-
-int vwprintf(const wchar_t *filter, va_list va) { return vfwprintf(stdout, filter, va); }
-
-int wprintf(const wchar_t *filter, ...) {
-    va_list va;
-    int written;
-
-    va_start(va, filter);
-    written = vwprintf(filter, va);
-    va_end(va);
-    return written;
-}
-
-#endif
-
-#ifndef HAVE_FGETWC
-wint_t fgetwc(FILE *stream) {
-    wchar_t res;
-    mbstate_t state = {};
-
-    while (1) {
-        int b = fgetc(stream);
-        if (b == EOF) {
-            return WEOF;
-        }
-
-        if (MB_CUR_MAX == 1)  // single-byte locale, all values are legal
-        {
-            return b;
-        }
-
-        char bb = b;
-        size_t sz = mbrtowc(&res, &bb, 1, &state);
-        switch (sz) {
-            case -1: {
-                return WEOF;
-            }
-            case -2: {
-                break;
-            }
-            case 0: {
-                return 0;
-            }
-            default: { return res; }
-        }
-    }
-}
-#endif
-
-#ifndef HAVE_FPUTWC
-wint_t fputwc(wchar_t wc, FILE *stream) {
-    int res = 0;
-    mbstate_t state = {};
-    char s[MB_CUR_MAX + 1] = {};
-
-    if (MB_CUR_MAX == 1)  // single-byte locale (C/POSIX/ISO-8859)
-    {
-        // If `wc` contains a wide character we emit a question-mark.
-        if (wc & ~0xFF) {
-            wc = '?';
-        }
-        s[0] = (char)wc;
-        res = fputs(s, stream);
-    } else {
-        size_t len = wcrtomb(s, wc, &state);
-        if (len == (size_t)-1) {
-            debug(1, L"Wide character %d has no narrow representation", wc);
-        } else {
-            res = fputs(s, stream);
-        }
-    }
-
-    return res == EOF ? WEOF : wc;
-}
-#endif
-
-#ifndef HAVE_WCSTOK
-
-/// Used by fallback wcstok. Borrowed from glibc.
-static size_t fish_wcsspn(const wchar_t *wcs, const wchar_t *accept) {
-    register const wchar_t *p;
-    register const wchar_t *a;
-    register size_t count = 0;
-
-    for (p = wcs; *p != L'\0'; ++p) {
-        for (a = accept; *a != L'\0'; ++a)
-            if (*p == *a) break;
-
-        if (*a == L'\0')
-            return count;
-        else
-            ++count;
-    }
-    return count;
-}
-
-/// Used by fallback wcstok. Borrowed from glibc.
-static wchar_t *fish_wcspbrk(const wchar_t *wcs, const wchar_t *accept) {
-    while (*wcs != L'\0')
-        if (wcschr(accept, *wcs) == NULL)
-            ++wcs;
-        else
-            return (wchar_t *)wcs;
-    return NULL;
-}
-
-/// Fallback wcstok implementation. Borrowed from glibc.
-wchar_t *wcstok(wchar_t *wcs, const wchar_t *delim, wchar_t **save_ptr) {
-    wchar_t *result;
-
-    if (wcs == NULL) {
-        if (*save_ptr == NULL) {
-            errno = EINVAL;
-            return NULL;
-        } else
-            wcs = *save_ptr;
-    }
-
-    // Scan leading delimiters.
-    wcs += fish_wcsspn(wcs, delim);
-
-    if (*wcs == L'\0') {
-        *save_ptr = NULL;
-        return NULL;
-    }
-
-    // Find the end of the token.
-    result = wcs;
-
-    wcs = fish_wcspbrk(result, delim);
-
-    if (wcs == NULL) {
-        // This token finishes the string.
-        *save_ptr = NULL;
-    } else {
-        // Terminate the token and make *SAVE_PTR point past it.
-        *wcs = L'\0';
-        *save_ptr = wcs + 1;
-    }
-    return result;
-}
-
-#endif
-
+#if __APPLE__
 /// Fallback implementations of wcsdup and wcscasecmp. On systems where these are not needed (e.g.
 /// building on Linux) these should end up just being stripped, as they are static functions that
 /// are not referenced in this file.
@@ -655,18 +104,19 @@ __attribute__((unused)) static wchar_t *wcsdup_fallback(const wchar_t *in) {
     memcpy(out, in, sizeof(wchar_t) * (len + 1));
     return out;
 }
+#endif
 
 __attribute__((unused)) static int wcscasecmp_fallback(const wchar_t *a, const wchar_t *b) {
     if (*a == 0) {
-        return (*b == 0) ? 0 : -1;
+        return *b == 0 ? 0 : -1;
     } else if (*b == 0) {
         return 1;
     }
     int diff = towlower(*a) - towlower(*b);
-    if (diff != 0)
+    if (diff != 0) {
         return diff;
-    else
-        return wcscasecmp_fallback(a + 1, b + 1);
+    }
+    return wcscasecmp_fallback(a + 1, b + 1);
 }
 
 __attribute__((unused)) static int wcsncasecmp_fallback(const wchar_t *a, const wchar_t *b,
@@ -674,18 +124,17 @@ __attribute__((unused)) static int wcsncasecmp_fallback(const wchar_t *a, const 
     if (count == 0) return 0;
 
     if (*a == 0) {
-        return (*b == 0) ? 0 : -1;
+        return *b == 0 ? 0 : -1;
     } else if (*b == 0) {
         return 1;
     }
     int diff = towlower(*a) - towlower(*b);
-    if (diff != 0)
-        return diff;
-    else
-        return wcsncasecmp_fallback(a + 1, b + 1, count - 1);
+    if (diff != 0) return diff;
+    return wcsncasecmp_fallback(a + 1, b + 1, count - 1);
 }
 
-#if __APPLE__ && __DARWIN_C_LEVEL >= 200809L
+#if __APPLE__
+#if __DARWIN_C_LEVEL >= 200809L
 // Note parens avoid the macro expansion.
 wchar_t *wcsdup_use_weak(const wchar_t *a) {
     if (&wcsdup != NULL) return (wcsdup)(a);
@@ -701,39 +150,14 @@ int wcsncasecmp_use_weak(const wchar_t *s1, const wchar_t *s2, size_t n) {
     if (&wcsncasecmp != NULL) return (wcsncasecmp)(s1, s2, n);
     return wcsncasecmp_fallback(s1, s2, n);
 }
-
-#else  //__APPLE__
-
-#ifndef HAVE_WCSDUP
+#else   // __DARWIN_C_LEVEL >= 200809L
 wchar_t *wcsdup(const wchar_t *in) { return wcsdup_fallback(in); }
-#endif
-
-#ifndef HAVE_WCSCASECMP
 int wcscasecmp(const wchar_t *a, const wchar_t *b) { return wcscasecmp_fallback(a, b); }
-#endif
-#endif  //__APPLE__
-
-#ifndef HAVE_WCSLEN
-size_t wcslen(const wchar_t *in) {
-    const wchar_t *end = in;
-    while (*end) end++;
-    return end - in;
+int wcsncasecmp(const wchar_t *a, const wchar_t *b, size_t n) {
+    return wcsncasecmp_fallback(a, b, n);
 }
-#endif
-
-#ifndef HAVE_WCSNCASECMP
-int wcsncasecmp(const wchar_t *a, const wchar_t *b, size_t count) {
-    return wcsncasecmp_fallback(a, b, count);
-}
-#endif
-
-#ifndef HAVE_WCWIDTH
-int wcwidth(wchar_t c) {
-    if (c < 32) return 0;
-    if (c == 127) return 0;
-    return 1;
-}
-#endif
+#endif  // __DARWIN_C_LEVEL >= 200809L
+#endif  // __APPLE__
 
 #ifndef HAVE_WCSNDUP
 wchar_t *wcsndup(const wchar_t *in, size_t c) {
@@ -746,105 +170,7 @@ wchar_t *wcsndup(const wchar_t *in, size_t c) {
 }
 #endif
 
-long convert_digit(wchar_t d, int base) {
-    long res = -1;
-    if ((d <= L'9') && (d >= L'0')) {
-        res = d - L'0';
-    } else if ((d <= L'z') && (d >= L'a')) {
-        res = d + 10 - L'a';
-    } else if ((d <= L'Z') && (d >= L'A')) {
-        res = d + 10 - L'A';
-    }
-    if (res >= base) {
-        res = -1;
-    }
-
-    return res;
-}
-
-#ifndef HAVE_WCSTOL
-long wcstol(const wchar_t *nptr, wchar_t **endptr, int base) {
-    long long res = 0;
-    int is_set = 0;
-    if (base > 36) {
-        errno = EINVAL;
-        return 0;
-    }
-
-    while (1) {
-        long nxt = convert_digit(*nptr, base);
-        if (endptr != 0) *endptr = (wchar_t *)nptr;
-        if (nxt < 0) {
-            if (!is_set) {
-                errno = EINVAL;
-            }
-            return res;
-        }
-        res = (res * base) + nxt;
-        is_set = 1;
-        if (res > LONG_MAX) {
-            errno = ERANGE;
-            return LONG_MAX;
-        }
-        if (res < LONG_MIN) {
-            errno = ERANGE;
-            return LONG_MIN;
-        }
-        nptr++;
-    }
-}
-
-#endif
-#ifndef HAVE_WCSLCAT
-
-/*$OpenBSD: strlcat.c,v 1.11 2003/06/17 21:56:24 millert Exp $*/
-
-/*
- * Copyright (c) 1998 Todd C. Miller <Todd.Miller@courtesan.com>
- *
- * Permission to use, copy, modify, and distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
- */
-
-size_t wcslcat(wchar_t *dst, const wchar_t *src, size_t siz) {
-    register wchar_t *d = dst;
-    register const wchar_t *s = src;
-    register size_t n = siz;
-    size_t dlen;
-
-    // Find the end of dst and adjust bytes left but don't go past end.
-    while (n-- != 0 && *d != '\0') d++;
-
-    dlen = d - dst;
-    n = siz - dlen;
-
-    if (n == 0) return (dlen + wcslen(s));
-
-    while (*s != '\0') {
-        if (n != 1) {
-            *d++ = *s;
-            n--;
-        }
-        s++;
-    }
-    *d = '\0';
-
-    return (dlen + (s - src));
-    /* count does not include NUL */
-}
-
-#endif
 #ifndef HAVE_WCSLCPY
-
 /*$OpenBSD: strlcpy.c,v 1.8 2003/06/17 21:56:24 millert Exp $*/
 
 /*
@@ -862,7 +188,6 @@ size_t wcslcat(wchar_t *dst, const wchar_t *src, size_t siz) {
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-
 size_t wcslcpy(wchar_t *dst, const wchar_t *src, size_t siz) {
     register wchar_t *d = dst;
     register const wchar_t *s = src;
@@ -882,14 +207,12 @@ size_t wcslcpy(wchar_t *dst, const wchar_t *src, size_t siz) {
         while (*s++)
             ;
     }
-    return (s - src - 1);
+    return s - src - 1;
     // Count does not include NUL.
 }
-
 #endif
 
 #ifndef HAVE_LRAND48_R
-
 int lrand48_r(struct drand48_data *buffer, long int *result) {
     *result = rand_r(&buffer->seed);
     return 0;
@@ -899,20 +222,16 @@ int srand48_r(long int seedval, struct drand48_data *buffer) {
     buffer->seed = (unsigned int)seedval;
     return 0;
 }
-
 #endif
 
 #ifndef HAVE_FUTIMES
-
 int futimes(int fd, const struct timeval *times) {
     errno = ENOSYS;
     return -1;
 }
-
 #endif
 
 #if HAVE_GETTEXT
-
 char *fish_gettext(const char *msgid) {
     return gettext(msgid);
     ;
@@ -923,35 +242,10 @@ char *fish_bindtextdomain(const char *domainname, const char *dirname) {
 }
 
 char *fish_textdomain(const char *domainname) { return textdomain(domainname); }
-
 #else
-
 char *fish_gettext(const char *msgid) { return (char *)msgid; }
-
 char *fish_bindtextdomain(const char *domainname, const char *dirname) { return NULL; }
-
 char *fish_textdomain(const char *domainname) { return NULL; }
-
-#endif
-
-#if HAVE_DCGETTEXT
-
-char *fish_dcgettext(const char *domainname, const char *msgid, int category) {
-    return dcgettext(domainname, msgid, category);
-}
-
-#else
-
-char *fish_dcgettext(const char *domainname, const char *msgid, int category) {
-    return (char *)msgid;
-}
-
-#endif
-
-#ifndef HAVE__NL_MSG_CAT_CNTR
-
-int _nl_msg_cat_cntr = 0;
-
 #endif
 
 #ifndef HAVE_KILLPG
@@ -961,49 +255,23 @@ int killpg(int pgr, int sig) {
 }
 #endif
 
-#ifndef HAVE_BACKTRACE
-int backtrace(void **buffer, int size) { return 0; }
-#endif
-
-#ifndef HAVE_BACKTRACE_SYMBOLS_FD
-char **backtrace_symbols_fd(void *const *buffer, int size, int fd) { return 0; }
-#endif
-
-#ifndef HAVE_SYSCONF
-
-long sysconf(int name) {
-    if (name == _SC_ARG_MAX) {
-#ifdef ARG_MAX
-        return ARG_MAX;
-#endif
-    }
-
-    return -1;
-}
-#endif
-
 #ifndef HAVE_NAN
 double nan(char *tagp) { return 0.0 / 0.0; }
 #endif
 
-// Big hack to use our versions of wcswidth where we know them to be broken, like on OS X.
+// Big hack to use our versions of wcswidth where we know them to be broken, which is
+// EVERYWHERE (https://github.com/fish-shell/fish-shell/issues/2199)
 #ifndef HAVE_BROKEN_WCWIDTH
 #define HAVE_BROKEN_WCWIDTH 1
 #endif
 
 #if !HAVE_BROKEN_WCWIDTH
-
 int fish_wcwidth(wchar_t wc) { return wcwidth(wc); }
-
 int fish_wcswidth(const wchar_t *str, size_t n) { return wcswidth(str, n); }
-
 #else
-
 static int mk_wcwidth(wchar_t wc);
 static int mk_wcswidth(const wchar_t *pwcs, size_t n);
-
 int fish_wcwidth(wchar_t wc) { return mk_wcwidth(wc); }
-
 int fish_wcswidth(const wchar_t *str, size_t n) { return mk_wcswidth(str, n); }
 
 /*
@@ -1066,7 +334,6 @@ int fish_wcswidth(const wchar_t *str, size_t n) { return mk_wcswidth(str, n); }
  *
  * Latest version: http://www.cl.cam.ac.uk/~mgk25/ucs/wcwidth.c
  */
-
 struct interval {
     int first;
     int last;
@@ -1195,5 +462,4 @@ static int mk_wcswidth(const wchar_t *pwcs, size_t n) {
     }
     return width;
 }
-
 #endif  // HAVE_BROKEN_WCWIDTH

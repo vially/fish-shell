@@ -1,4 +1,6 @@
 // Functions that we may safely call after fork().
+#include "config.h"  // IWYU pragma: keep
+
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -112,7 +114,7 @@ int set_child_group(job_t *j, process_t *p, int print_errors) {
 /// close_unused_internal_pipes() and closing the universal variable server file descriptor. It then
 /// goes on to perform all the redirections described by \c io.
 ///
-/// \param io the list of IO redirections for the child
+/// \param io_chain the list of IO redirections for the child
 ///
 /// \return 0 on sucess, -1 on failure
 static int handle_child_io(const io_chain_t &io_chain) {
