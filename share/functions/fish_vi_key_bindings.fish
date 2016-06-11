@@ -1,10 +1,14 @@
 function fish_vi_key_bindings --description 'vi-like key bindings for fish'
-    # The default escape timeout is 300ms. But for users of Vi bindings that can
-    # be slightly annoying when trying to switch to Vi "normal" mode. Too,
-    # vi-mode users are unlikely to use escape-as-meta. So set a much shorter
-    # timeout in this case.
-    set -q fish_escape_delay_ms
-    or set -g fish_escape_delay_ms 10
+	if test "$fish_key_bindings" != "fish_vi_key_bindings"
+		# Allow the user to set the variable universally
+		set -q fish_key_bindings; or set -g fish_key_bindings
+		set fish_key_bindings fish_vi_key_bindings # This triggers the handler, which calls us again and ensures the user_key_bindings are executed
+		return
+	end
+    # The default escape timeout is 300ms. But for users of Vi bindings that can be slightly
+    # annoying when trying to switch to Vi "normal" mode. So set a shorter timeout in this case
+    # unless the user has explicitly set the delay.
+    set -q fish_escape_delay_ms; or set -g fish_escape_delay_ms 100
 
     set -l init_mode insert
     set -l eol_keys \$ g\$ \e\[F
@@ -19,23 +23,23 @@ function fish_vi_key_bindings --description 'vi-like key bindings for fish'
     fish_default_key_bindings -M insert
     fish_default_key_bindings -M default
 
+    # Remove the default self-insert bindings in default mode
+    bind -e "" -M default
     # Add way to kill current command line while in insert mode.
-    bind -M insert \cc 'commandline ""'
+    bind -M insert \cc __fish_cancel_commandline
     # Add a way to switch from insert to normal (command) mode.
     bind -M insert -m default \e backward-char force-repaint
 
-    #
-    # normal (command) mode
-    #
+    # Default (command) mode
     bind :q exit
     bind \cd exit
-    bind \cc 'commandline ""'
+    bind -m insert \cc __fish_cancel_commandline
     bind h backward-char
     bind l forward-char
     bind \e\[C forward-char
     bind \e\[D backward-char
 
-    # Some linux VTs output these (why?)
+    # Some terminals output these when they're in in keypad mode.
     bind \eOC forward-char
     bind \eOD backward-char
 
@@ -222,4 +226,12 @@ function fish_vi_key_bindings --description 'vi-like key bindings for fish'
     bind -M visual -m default \e end-selection force-repaint
 
     set fish_bind_mode $init_mode
+
+    # Make it easy to turn an unexecuted command into a comment in the shell history. Also, remove
+    # the commenting chars so the command can be further edited then executed.
+    bind -M default \# __fish_toggle_comment_commandline
+    bind -M visual \# __fish_toggle_comment_commandline
+    bind -M default \e\# __fish_toggle_comment_commandline
+    bind -M insert \e\# __fish_toggle_comment_commandline
+    bind -M visual \e\# __fish_toggle_comment_commandline
 end

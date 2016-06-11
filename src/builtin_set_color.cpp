@@ -1,13 +1,5 @@
-/** \file builtin_set_color.cpp Functions defining the set_color builtin
-
-Functions used for implementing the set_color builtin.
-
-*/
+// Functions used for implementing the set_color builtin.
 #include "config.h"
-
-#include "builtin.h"
-#include "color.h"
-#include "output.h"
 
 #if HAVE_NCURSES_H
 #include <ncurses.h>
@@ -16,44 +8,43 @@ Functions used for implementing the set_color builtin.
 #else
 #include <curses.h>
 #endif
-
 #if HAVE_TERM_H
 #include <term.h>
 #elif HAVE_NCURSES_TERM_H
 #include <ncurses/term.h>
 #endif
+#include <assert.h>
+#include <stdbool.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <memory>
+#include <string>
+#include <vector>
 
+#include "builtin.h"
+#include "color.h"
+#include "common.h"
+#include "docopt_registration.h"
+#include "io.h"
+#include "output.h"
+#include "proc.h"
+#include "wgetopt.h"
+#include "wutil.h"  // IWYU pragma: keep
 
-/**
-   Error message for invalid path operations
-*/
-#define BUILTIN_SET_PATH_ERROR L"%ls: Warning: path component %ls may not be valid in %ls.\n"
+class parser_t;
 
-/**
-   Hint for invalid path operation with a colon
-*/
-#define BUILTIN_SET_PATH_HINT L"%ls: Did you mean 'set %ls $%ls %ls'?\n"
-
-/**
-   Error for mismatch between index count and elements
-*/
-#define BUILTIN_SET_ARG_COUNT L"%ls: The number of variable indexes does not match the number of values\n"
-
-static void print_colors(io_streams_t &streams)
-{
+static void print_colors(io_streams_t &streams) {
     const wcstring_list_t result = rgb_color_t::named_color_names();
     size_t i;
-    for (i=0; i < result.size(); i++)
-    {
+    for (i = 0; i < result.size(); i++) {
         streams.out.append(result.at(i));
         streams.out.push_back(L'\n');
     }
 }
 
-/* function we set as the output writer */
 static std::string builtin_set_color_output;
-static int set_color_builtin_outputter(char c)
-{
+/// Function we set as the output writer.
+static int set_color_builtin_outputter(char c) {
     ASSERT_IS_MAIN_THREAD();
     builtin_set_color_output.push_back(c);
     return 0;
@@ -62,7 +53,7 @@ static int set_color_builtin_outputter(char c)
 /**
    set_color builtin
 */
-static const wchar_t * const g_set_color_usage =
+extern const wchar_t * const g_set_color_usage =
     L"Usage:\n"
     L"       set_color [options] [<color>...]\n"
     L"\n"
@@ -74,7 +65,7 @@ static const wchar_t * const g_set_color_usage =
     L"       -h, --help  displays a help message and exits.\n"
 ;
 
-static int builtin_set_color(parser_t &parser, io_streams_t &streams, wchar_t **argv){
+int builtin_set_color(parser_t &parser, io_streams_t &streams, wchar_t **argv){
     /* Some code passes variables to set_color that don't exist, like $fish_user_whatever. As a hack, quietly return failure. */
     if (argv[1] == NULL)
     {
@@ -121,8 +112,8 @@ static int builtin_set_color(parser_t &parser, io_streams_t &streams, wchar_t **
         return STATUS_BUILTIN_ERROR;
     }
     
-    // #1323: We may have multiple foreground colors. Choose the best one.
-    // If we had no foreground coor, we'll get none(); if we have at least one we expect not-none
+    // #1323: We may have multiple foreground colors. Choose the best one. If we had no foreground
+    // color, we'll get none(); if we have at least one we expect not-none.
     const rgb_color_t fg = best_color(fgcolors, output_get_color_support());
     assert(fgcolors.empty() || !fg.is_none());
 
@@ -133,39 +124,31 @@ static int builtin_set_color(parser_t &parser, io_streams_t &streams, wchar_t **
         return STATUS_BUILTIN_ERROR;
     }
 
-    /* Make sure that the term exists */
-    if (cur_term == NULL && setupterm(0, STDOUT_FILENO, &errret) == ERR)
-    {
+    // Make sure that the term exists.
+    if (cur_term == NULL && setupterm(0, STDOUT_FILENO, &errret) == ERR) {
         streams.err.append_format(_(L"%ls: Could not set up terminal\n"), argv[0]);
         return STATUS_BUILTIN_ERROR;
     }
 
-    /*
-       Test if we have at least basic support for setting fonts, colors
-       and related bits - otherwise just give up...
-    */
-    if (! exit_attribute_mode)
-    {
+    // Test if we have at least basic support for setting fonts, colors and related bits - otherwise
+    // just give up...
+    if (!exit_attribute_mode) {
         return STATUS_BUILTIN_ERROR;
     }
 
-    /* Save old output function so we can restore it */
+    // Save old output function so we can restore it.
     int (* const saved_writer_func)(char) = output_get_writer();
 
-    /* Set our output function, which writes to a std::string */
+    // Set our output function, which writes to a std::string.
     builtin_set_color_output.clear();
     output_set_writer(set_color_builtin_outputter);
 
-    if (bold)
-    {
-        if (enter_bold_mode)
-            writembs(tparm(enter_bold_mode));
+    if (bold) {
+        if (enter_bold_mode) writembs(tparm(enter_bold_mode));
     }
 
-    if (underline)
-    {
-        if (enter_underline_mode)
-            writembs(enter_underline_mode);
+    if (underline) {
+        if (enter_underline_mode) writembs(enter_underline_mode);
     }
 
     if (bgcolor_str != NULL)
@@ -177,15 +160,11 @@ static int builtin_set_color(parser_t &parser, io_streams_t &streams, wchar_t **
         }
     }
 
-    if (! fg.is_none())
-    {
-        if (fg.is_normal() || fg.is_reset())
-        {
+    if (!fg.is_none()) {
+        if (fg.is_normal() || fg.is_reset()) {
             write_color(rgb_color_t::black(), true /* is_fg */);
             writembs(tparm(exit_attribute_mode));
-        }
-        else
-        {
+        } else {
             write_color(fg, true /* is_fg */);
         }
     }
@@ -198,10 +177,10 @@ static int builtin_set_color(parser_t &parser, io_streams_t &streams, wchar_t **
         }
     }
 
-    /* Restore saved writer function */
+    // Restore saved writer function.
     output_set_writer(saved_writer_func);
 
-    /* Output the collected string */
+    // Output the collected string.
     streams.out.append(str2wcstring(builtin_set_color_output));
     builtin_set_color_output.clear();
 

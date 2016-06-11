@@ -37,9 +37,9 @@ complete --signature "
             echo (commandline -ct)|sed -ne 's/\(.*@\).*/\1/p'
             )(__fish_print_hostnames)
       
-      <user>            (__fish_print_users | __fish_sgrep -v '^_')@
+      <user>            (__fish_print_users | string match -r -v '^_')@
       <command_to_run>  (__fish_complete_subcommand --fcs-skip=2)
-      <bind_address>    (cat /proc/net/arp ^/dev/null| __fish_sgrep -v '^IP'|cut -d ' ' -f 1 ^/dev/null)
+      <bind_address>    (cat /proc/net/arp ^/dev/null| string match -r -v '^IP'|cut -d ' ' -f 1 ^/dev/null)
       <escape_char>     \^ none
 "
 

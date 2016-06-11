@@ -1,6 +1,12 @@
 
-function fish_default_key_bindings -d "Default (Emacs-like) key bindings for fish" -a mode
-	if not set -q mode[1]
+function fish_default_key_bindings -d "Default (Emacs-like) key bindings for fish"
+	if not set -q argv[1]
+		if test "$fish_key_bindings" != "fish_default_key_bindings"
+			# Allow the user to set the variable universally
+			set -q fish_key_bindings; or set -g fish_key_bindings
+			set fish_key_bindings fish_default_key_bindings # This triggers the handler, which calls us again and ensures the user_key_bindings are executed
+			return
+		end
 		# Clear earlier bindings, if any
 		bind --erase --all
 	end
@@ -109,7 +115,7 @@ function fish_default_key_bindings -d "Default (Emacs-like) key bindings for fis
 	bind $argv \el __fish_list_current_token
 	bind $argv \ew 'set tok (commandline -pt); if test $tok[1]; echo; whatis $tok[1]; commandline -f repaint; end'
 	bind $argv \cl 'clear; commandline -f repaint'
-	bind $argv \cc 'commandline ""'
+	bind $argv \cc __fish_cancel_commandline
 	bind $argv \cu backward-kill-line
 	bind $argv \cw backward-kill-path-component
 	bind $argv \ed 'set -l cmd (commandline); if test -z "$cmd"; echo; dirh; commandline -f repaint; else; commandline -f kill-word; end'
@@ -127,7 +133,7 @@ function fish_default_key_bindings -d "Default (Emacs-like) key bindings for fis
 	bind $argv \ep '__fish_paginate'
 	
 	# shift-tab does a tab complete followed by a search
-	bind --key btab complete-and-search
+	bind $argv --key btab complete-and-search
 
 	# escape cancels stuff	
 	bind \e cancel
@@ -144,5 +150,8 @@ function fish_default_key_bindings -d "Default (Emacs-like) key bindings for fis
 			bind $argv \eOc forward-word
 			bind $argv \eOd backward-word
 	end
-end
 
+	# Make it easy to turn an unexecuted command into a comment in the shell history. Also,
+	# remove the commenting chars so the command can be further edited then executed.
+	bind \e\# __fish_toggle_comment_commandline
+end
