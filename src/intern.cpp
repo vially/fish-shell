@@ -2,7 +2,6 @@
 #include "config.h"  // IWYU pragma: keep
 
 #include <pthread.h>
-#include <stdbool.h>
 #include <stddef.h>
 #include <wchar.h>
 #include <algorithm>
@@ -39,7 +38,7 @@ static const wchar_t *intern_with_dup(const wchar_t *in, bool dup) {
     if (!in) return NULL;
 
     debug(5, L"intern %ls", in);
-    scoped_lock lock(intern_lock);  //!OCLINT(has side effects)
+    scoped_lock locker(intern_lock);
     const wchar_t *result;
 
 #if USE_SET

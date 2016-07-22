@@ -23,6 +23,7 @@
 #include "env.h"
 #include "fallback.h"  // IWYU pragma: keep
 #include "history.h"
+#include "io.h"
 #include "iothread.h"
 #include "lru.h"
 #include "parse_constants.h"
@@ -204,11 +205,11 @@ static size_t read_line(const char *base, size_t cursor, size_t len, std::string
     // Locate the newline.
     assert(cursor <= len);
     const char *start = base + cursor;
-    const char *newline = (char *)memchr(start, '\n', len - cursor);
-    if (newline != NULL) {  // we found a newline
-        result.assign(start, newline - start);
+    const char *a_newline = (char *)memchr(start, '\n', len - cursor);
+    if (a_newline != NULL) {  // we found a newline
+        result.assign(start, a_newline - start);
         // Return the amount to advance the cursor; skip over the newline.
-        return newline - start + 1;
+        return a_newline - start + 1;
     }
 
     // We ran off the end.
@@ -543,17 +544,17 @@ static size_t offset_of_next_item_fish_2_0(const char *begin, size_t mmap_length
         const char *line_start = begin + cursor;
 
         // Advance the cursor to the next line.
-        const char *newline = (const char *)memchr(line_start, '\n', mmap_length - cursor);
-        if (newline == NULL) break;
+        const char *a_newline = (const char *)memchr(line_start, '\n', mmap_length - cursor);
+        if (a_newline == NULL) break;
 
         // Advance the cursor past this line. +1 is for the newline.
-        cursor = newline - begin + 1;
+        cursor = a_newline - begin + 1;
 
         // Skip lines with a leading space, since these are in the interior of one of our items.
         if (line_start[0] == ' ') continue;
 
         // Skip very short lines to make one of the checks below easier.
-        if (newline - line_start < 3) continue;
+        if (a_newline - line_start < 3) continue;
 
         // Try to be a little YAML compatible. Skip lines with leading %, ---, or ...
         if (!memcmp(line_start, "%", 1) || !memcmp(line_start, "---", 3) ||
@@ -564,7 +565,7 @@ static size_t offset_of_next_item_fish_2_0(const char *begin, size_t mmap_length
         // leading "- cmd: - cmd: - cmd:". Trim all but one leading "- cmd:".
         const char *double_cmd = "- cmd: - cmd: ";
         const size_t double_cmd_len = strlen(double_cmd);
-        while (newline - line_start > double_cmd_len &&
+        while (a_newline - line_start > double_cmd_len &&
                !memcmp(line_start, double_cmd, double_cmd_len)) {
             // Skip over just one of the - cmd. In the end there will be just one left.
             line_start += strlen("- cmd: ");
@@ -574,7 +575,7 @@ static size_t offset_of_next_item_fish_2_0(const char *begin, size_t mmap_length
         // 123456". Ignore those.
         const char *cmd_when = "- cmd:    when:";
         const size_t cmd_when_len = strlen(cmd_when);
-        if (newline - line_start >= cmd_when_len && !memcmp(line_start, cmd_when, cmd_when_len))
+        if (a_newline - line_start >= cmd_when_len && !memcmp(line_start, cmd_when, cmd_when_len))
             continue;
 
         // At this point, we know line_start is at the beginning of an item. But maybe we want to
@@ -673,7 +674,7 @@ static size_t offset_of_next_item(const char *begin, size_t mmap_length,
 history_t &history_collection_t::alloc(const wcstring &name) {
     // Note that histories are currently never deleted, so we can return a reference to them without
     // using something like shared_ptr.
-    scoped_lock locker(m_lock);  //!OCLINT(side-effect)
+    scoped_lock locker(m_lock);
     history_t *&current = m_histories[name];
     if (current == NULL) current = new history_t(name);
     return *current;
@@ -700,7 +701,7 @@ history_t::history_t(const wcstring &pname)
 history_t::~history_t() { pthread_mutex_destroy(&lock); }
 
 void history_t::add(const history_item_t &item, bool pending) {
-    scoped_lock locker(lock);  //!OCLINT(side-effect)
+    scoped_lock locker(lock);
 
     // Try merging with the last item.
     if (!new_items.empty() && new_items.back().merge(item)) {
@@ -793,7 +794,7 @@ void history_t::set_valid_file_paths(const wcstring_list_t &valid_file_paths,
         return;
     }
 
-    scoped_lock locker(lock);  //!OCLINT(side-effect)
+    scoped_lock locker(lock);
 
     // Look for an item with the given identifier. It is likely to be at the end of new_items.
     for (history_item_list_t::reverse_iterator iter = new_items.rbegin(); iter != new_items.rend();
@@ -806,7 +807,7 @@ void history_t::set_valid_file_paths(const wcstring_list_t &valid_file_paths,
 }
 
 void history_t::get_string_representation(wcstring *result, const wcstring &separator) {
-    scoped_lock locker(lock);  //!OCLINT(side-effect)
+    scoped_lock locker(lock);
 
     bool first = true;
 
@@ -852,7 +853,7 @@ void history_t::get_string_representation(wcstring *result, const wcstring &sepa
 }
 
 history_item_t history_t::item_at_index(size_t idx) {
-    scoped_lock locker(lock);  //!OCLINT(side-effect)
+    scoped_lock locker(lock);
 
     // 0 is considered an invalid index.
     assert(idx > 0);
@@ -1388,30 +1389,76 @@ void history_t::save_internal(bool vacuum) {
     }
     if (!ok) {
         // We did not or could not append; rewrite the file ("vacuum" it).
-        ok = this->save_internal_via_rewrite();
+        this->save_internal_via_rewrite();
     }
 }
 
 void history_t::save(void) {
-    scoped_lock locker(lock);  //!OCLINT(side-effect)
+    scoped_lock locker(lock);
     this->save_internal(false);
 }
 
+// Formats a single history record, including a trailing newline.  Returns true
+// if bytes were written to the output stream and false otherwise.
+static bool format_history_record(const history_item_t &item, const bool with_time,
+                                  io_streams_t &streams) {
+    if (with_time) {
+        const time_t seconds = item.timestamp();
+        struct tm timestamp;
+        if (!localtime_r(&seconds, &timestamp)) return false;
+        char timestamp_string[22];
+        if (strftime(timestamp_string, 22, "%Y-%m-%d %H:%M:%S  ", &timestamp) != 21) return false;
+        streams.out.append(str2wcstring(timestamp_string));
+    }
+    streams.out.append(item.str());
+    streams.out.append(L"\n");
+    return true;
+}
+
+bool history_t::search(history_search_type_t search_type, wcstring_list_t search_args,
+                       bool with_time, io_streams_t &streams) {
+    // scoped_lock locker(lock);
+    if (search_args.empty()) {
+        // Start at one because zero is the current command.
+        for (int i = 1; !this->item_at_index(i).empty(); ++i) {
+            if (!format_history_record(this->item_at_index(i), with_time, streams)) return false;
+        }
+        return true;
+    }
+
+    for (wcstring_list_t::const_iterator iter = search_args.begin(); iter != search_args.end();
+         ++iter) {
+        const wcstring &search_string = *iter;
+        if (search_string.empty()) {
+            streams.err.append_format(L"Searching for the empty string isn't allowed");
+            return false;
+        }
+        history_search_t searcher = history_search_t(*this, search_string, search_type);
+        while (searcher.go_backwards()) {
+            if (!format_history_record(searcher.current_item(), with_time, streams)) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
 void history_t::disable_automatic_saving() {
-    scoped_lock locker(lock);  //!OCLINT(side-effect)
+    scoped_lock locker(lock);
     disable_automatic_save_counter++;
     assert(disable_automatic_save_counter != 0);  // overflow!
 }
 
 void history_t::enable_automatic_saving() {
-    scoped_lock locker(lock);                    //!OCLINT(side-effect)
+    scoped_lock locker(lock);
     assert(disable_automatic_save_counter > 0);  // underflow
     disable_automatic_save_counter--;
     save_internal_unless_disabled();
 }
 
 void history_t::clear(void) {
-    scoped_lock locker(lock);  //!OCLINT(side-effect)
+    scoped_lock locker(lock);
     new_items.clear();
     deleted_items.clear();
     first_unwritten_new_item_index = 0;
@@ -1422,7 +1469,7 @@ void history_t::clear(void) {
 }
 
 bool history_t::is_empty(void) {
-    scoped_lock locker(lock);  //!OCLINT(side-effect)
+    scoped_lock locker(lock);
 
     // If we have new items, we're not empty.
     if (!new_items.empty()) return false;
@@ -1517,9 +1564,9 @@ void history_t::populate_from_bash(FILE *stream) {
             success = (bool)fgets(buff, sizeof buff, stream);
             if (success) {
                 // Skip the newline.
-                char *newline = strchr(buff, '\n');
-                if (newline) *newline = '\0';
-                has_newline = (newline != NULL);
+                char *a_newline = strchr(buff, '\n');
+                if (a_newline) *a_newline = '\0';
+                has_newline = (a_newline != NULL);
 
                 // Append what we've got.
                 line.append(buff);
@@ -1542,13 +1589,19 @@ void history_t::incorporate_external_changes() {
     // to preserve old_item_offsets so that they don't have to be recomputed. (However, then items
     // *deleted* in other instances would not show up here).
     time_t new_timestamp = time(NULL);
-    scoped_lock locker(lock);  //!OCLINT(side-effect)
+    scoped_lock locker(lock);
 
     // If for some reason the clock went backwards, we don't want to start dropping items; therefore
     // we only do work if time has progressed. This also makes multiple calls cheap.
     if (new_timestamp > this->boundary_timestamp) {
         this->boundary_timestamp = new_timestamp;
         this->clear_file_state();
+
+        // We also need to erase new_items, since we go through those first, and that means we
+        // will not properly interleave them with items from other instances.
+        // We'll pick them up from the file (#2312)
+        this->save_internal(false);
+        this->new_items.clear();
     }
 }
 
@@ -1696,6 +1749,6 @@ void history_t::add_pending_with_file_detection(const wcstring &str) {
 
 /// Very simple, just mark that we have no more pending items.
 void history_t::resolve_pending() {
-    scoped_lock locker(lock);  //!OCLINT(side-effect)
+    scoped_lock locker(lock);
     this->has_pending_item = false;
 }

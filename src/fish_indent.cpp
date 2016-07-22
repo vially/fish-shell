@@ -21,7 +21,6 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA
 #include <errno.h>
 #include <getopt.h>
 #include <locale.h>
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -80,9 +79,15 @@ static void append_whitespace(indent_t node_indent, bool do_indent, bool has_new
 
 // Dump a parse tree node in a form helpful to someone debugging the behavior of this program.
 static void dump_node(indent_t node_indent, const parse_node_t &node, const wcstring &source) {
-    int nextc_idx = node.source_start + node.source_length;
-    wchar_t prevc = node.source_start > 0 ? source[node.source_start - 1] : L' ';
-    wchar_t nextc = nextc_idx < source.size() ? source[nextc_idx] : L' ';
+    wchar_t nextc = L' ';
+    wchar_t prevc = L' ';
+    wcstring source_txt = L"";
+    if (node.source_start != SOURCE_OFFSET_INVALID && node.source_length != SOURCE_OFFSET_INVALID) {
+        int nextc_idx = node.source_start + node.source_length;
+        if (nextc_idx < source.size()) nextc = source[node.source_start + node.source_length];
+        if (node.source_start > 0) prevc = source[node.source_start - 1];
+        source_txt = source.substr(node.source_start, node.source_length);
+    }
     wchar_t prevc_str[4] = {prevc, 0, 0, 0};
     wchar_t nextc_str[4] = {nextc, 0, 0, 0};
     if (prevc < L' ') {
@@ -97,8 +102,7 @@ static void dump_node(indent_t node_indent, const parse_node_t &node, const wcst
     }
     fwprintf(stderr, L"{off %4d, len %4d, indent %2u, kw %ls, %ls} [%ls|%ls|%ls]\n",
              node.source_start, node.source_length, node_indent, keyword_description(node.keyword),
-             token_type_description(node.type), prevc_str,
-             source.substr(node.source_start, node.source_length).c_str(), nextc_str);
+             token_type_description(node.type), prevc_str, source_txt.c_str(), nextc_str);
 }
 
 static void prettify_node_recursive(const wcstring &source, const parse_node_tree_t &tree,
@@ -157,7 +161,9 @@ static void prettify_node_recursive(const wcstring &source, const parse_node_tre
 
     // Recurse to all our children.
     for (node_offset_t idx = 0; idx < node.child_count; idx++) {
-        // Note we pass our type to our child, which becomes its parent node type.
+        // Note: We pass our type to our child, which becomes its parent node type.
+        // Note: While node.child_start could be -1 (NODE_OFFSET_INVALID) the addition is safe
+        // because we won't execute this call in that case since node.child_count should be zero.
         prettify_node_recursive(source, tree, node.child_start + idx, node_indent, node_type,
                                 has_new_line, out_result, do_indent);
     }
@@ -214,7 +220,7 @@ static std::string ansi_colorize(const wcstring &text,
         }
         writech(text.at(i));
     }
-
+    set_color(rgb_color_t::normal(), rgb_color_t::normal());
     output_set_writer(saved);
     std::string result;
     result.swap(output_receiver);
@@ -351,12 +357,17 @@ int main(int argc, char *argv[]) {
     const char *output_location = "";
     bool do_indent = true;
 
-    const char *short_opts = "+dhvwi";
-    const struct option long_opts[] = {
-        {"dump", no_argument, NULL, 'd'},  {"no-indent", no_argument, NULL, 'i'},
-        {"help", no_argument, NULL, 'h'},  {"version", no_argument, NULL, 'v'},
-        {"write", no_argument, NULL, 'w'}, {"html", no_argument, NULL, 1},
-        {"ansi", no_argument, NULL, 2},    {NULL, 0, NULL, 0}};
+    const char *short_opts = "+d:hvwiD:";
+    const struct option long_opts[] = {{"debug-level", required_argument, NULL, 'd'},
+                                       {"debug-stack-frames", required_argument, NULL, 'D'},
+                                       {"dump-parse-tree", no_argument, NULL, 'P'},
+                                       {"no-indent", no_argument, NULL, 'i'},
+                                       {"help", no_argument, NULL, 'h'},
+                                       {"version", no_argument, NULL, 'v'},
+                                       {"write", no_argument, NULL, 'w'},
+                                       {"html", no_argument, NULL, 1},
+                                       {"ansi", no_argument, NULL, 2},
+                                       {NULL, 0, NULL, 0}};
 
     int opt;
     while ((opt = getopt_long(argc, argv, short_opts, long_opts, NULL)) != -1) {
@@ -366,7 +377,7 @@ int main(int argc, char *argv[]) {
                 exit(127);
                 break;
             }
-            case 'd': {
+            case 'P': {
                 dump_parse_tree = true;
                 break;
             }
@@ -396,6 +407,36 @@ int main(int argc, char *argv[]) {
                 output_type = output_type_ansi;
                 break;
             }
+            case 'd': {
+                char *end;
+                long tmp;
+
+                errno = 0;
+                tmp = strtol(optarg, &end, 10);
+
+                if (tmp >= 0 && tmp <= 10 && !*end && !errno) {
+                    debug_level = (int)tmp;
+                } else {
+                    fwprintf(stderr, _(L"Invalid value '%s' for debug-level flag"), optarg);
+                    exit(1);
+                }
+                break;
+            }
+            case 'D': {
+                char *end;
+                long tmp;
+
+                errno = 0;
+                tmp = strtol(optarg, &end, 10);
+
+                if (tmp > 0 && tmp <= 128 && !*end && !errno) {
+                    debug_stack_frames = (int)tmp;
+                } else {
+                    fwprintf(stderr, _(L"Invalid value '%s' for debug-stack-frames flag"), optarg);
+                    exit(1);
+                }
+                break;
+            }
             default: {
                 // We assume getopt_long() has already emitted a diagnostic msg.
                 exit(1);
@@ -409,11 +450,12 @@ int main(int argc, char *argv[]) {
 
     wcstring src;
     if (argc == 0) {
-        src = read_file(stdin);
         if (output_type == output_type_file) {
-            fwprintf(stderr, _(L"You cannot use -w without providing the path to read from and write to."));
+            fwprintf(stderr, _(L"Expected file path to read/write for -w:\n\n $ %ls -w foo.fish\n"),
+                     program_name);
             exit(1);
         }
+        src = read_file(stdin);
     } else if (argc == 1) {
         FILE *fh = fopen(*argv, "r");
         if (fh) {

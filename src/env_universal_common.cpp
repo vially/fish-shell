@@ -8,7 +8,6 @@
 #include <limits.h>
 #include <pwd.h>
 #include <stdarg.h>
-#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
@@ -312,7 +311,7 @@ void env_universal_t::set_internal(const wcstring &key, const wcstring &val, boo
 }
 
 void env_universal_t::set(const wcstring &key, const wcstring &val, bool exportv) {
-    scoped_lock locker(lock);  //!OCLINT(side-effect)
+    scoped_lock locker(lock);
     this->set_internal(key, val, exportv, true /* overwrite */);
 }
 
@@ -332,7 +331,7 @@ bool env_universal_t::remove(const wcstring &key) {
 
 wcstring_list_t env_universal_t::get_names(bool show_exported, bool show_unexported) const {
     wcstring_list_t result;
-    scoped_lock locker(lock);  //!OCLINT(side-effect)
+    scoped_lock locker(lock);
     var_table_t::const_iterator iter;
     for (iter = vars.begin(); iter != vars.end(); ++iter) {
         const wcstring &key = iter->first;
@@ -1023,7 +1022,7 @@ class universal_notifier_shmem_poller_t : public universal_notifier_t {
         }
 
         // Get the size.
-        size_t size = 0;
+        off_t size = 0;
         if (!errored) {
             struct stat buf = {};
             if (fstat(fd, &buf) < 0) {
@@ -1352,7 +1351,7 @@ class universal_notifier_named_pipe_t : public universal_notifier_t {
         // Now return the smaller of the two values. If we get ULONG_MAX, it means there's no more
         // need to poll; in that case return 0.
         unsigned long result = mini(readback_delay, polling_delay);
-        if (result == ULLONG_MAX) {
+        if (result == ULONG_MAX) {
             result = 0;
         }
         return result;

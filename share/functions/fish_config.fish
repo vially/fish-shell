@@ -6,5 +6,6 @@ function fish_config --description "Launch fish's web based configuration" --sig
 	if count $argv >/dev/null
 		set initial_tab $argv[1]
 	end
-	eval $__fish_datadir/tools/web_config/webconfig.py $initial_tab
+	set -x __fish_bin_dir $__fish_bin_dir
+	eval (string escape $__fish_datadir/tools/web_config/webconfig.py) $initial_tab
 end

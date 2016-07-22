@@ -1827,7 +1827,6 @@ static void handle_token_history(int forward, int reset) {
     }
 }
 
-
 enum move_word_dir_t { MOVE_DIR_LEFT, MOVE_DIR_RIGHT };
 
 /// Move buffer position one word or erase one word. This function updates both the internal buffer
@@ -2123,6 +2122,9 @@ class background_highlight_context_t {
             // The gen count has changed, so don't do anything.
             return 0;
         }
+        VOMIT_ON_FAILURE(
+            pthread_setspecific(generation_count_key, (void *)(uintptr_t)generation_count));
+
         if (!string_to_highlight.empty()) {
             highlight_function(string_to_highlight, colors, match_highlight_pos, NULL /* error */,
                                vars);
@@ -2177,6 +2179,7 @@ static int threaded_highlight(background_highlight_context_t *ctx) {
 ///        an asynchronous highlight in the background, which may perform disk I/O.
 static void reader_super_highlight_me_plenty(int match_highlight_pos_adjust, bool no_io) {
     const editable_line_t *el = &data->command_line;
+    assert(el != NULL);
     long match_highlight_pos = (long)el->position + match_highlight_pos_adjust;
     assert(match_highlight_pos >= 0);
 

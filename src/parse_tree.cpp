@@ -12,7 +12,7 @@
 #include <vector>
 
 #include "common.h"
-#include "fallback.h"  // IWYU pragma: keep
+#include "fallback.h"
 #include "parse_constants.h"
 #include "parse_productions.h"
 #include "parse_tree.h"
@@ -593,25 +593,25 @@ class parse_ll_t {
 #if 0
 void parse_ll_t::dump_stack(void) const {
     // Walk backwards from the top, looking for parents.
-    wcstring_list_t lines;
+    wcstring_list_t stack_lines;
     if (symbol_stack.empty()) {
-        lines.push_back(L"(empty)");
+        stack_lines.push_back(L"(empty)");
     } else {
         node_offset_t child = symbol_stack.back().node_idx;
         node_offset_t cursor = child;
-        lines.push_back(nodes.at(cursor).describe());
+        stack_lines.push_back(nodes.at(cursor).describe());
         while (cursor--) {
             const parse_node_t &node = nodes.at(cursor);
             if (node.child_start <= child && node.child_start + node.child_count > child) {
-                lines.push_back(node.describe());
+                stack_lines.push_back(node.describe());
                 child = cursor;
             }
         }
     }
 
     fprintf(stderr, "Stack dump (%zu elements):\n", symbol_stack.size());
-    for (size_t idx = 0; idx < lines.size(); idx++) {
-        fprintf(stderr, "    %ls\n", lines.at(idx).c_str());
+    for (size_t idx = 0; idx < stack_lines.size(); idx++) {
+        fprintf(stderr, "    %ls\n", stack_lines.at(idx).c_str());
     }
 }
 #endif
@@ -1042,7 +1042,7 @@ void parse_ll_t::accept_tokens(parse_token_t token1, parse_token_t token2) {
             if (logit) {
                 fprintf(stderr, "Consumed token %ls\n", token1.describe().c_str());
             }
-            consumed = true;
+            // consumed = true;
             break;
         }
 

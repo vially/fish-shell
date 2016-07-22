@@ -6,10 +6,8 @@
 #include <dlfcn.h>
 #include <errno.h>
 #include <limits.h>
-#include <math.h>
 #include <signal.h>
 #include <stdarg.h>
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -17,7 +15,6 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/time.h>
-#include <sys/types.h>
 #include <termios.h>
 #include <unistd.h>
 #include <wchar.h>
@@ -70,6 +67,8 @@ static rwlock_t termsize_rwlock;
 
 static char *wcs2str_internal(const wchar_t *in, char *out);
 static void debug_shared(const wchar_t msg_level, const wcstring &msg);
+
+bool has_working_tty_timestamps = true;
 
 #ifdef HAVE_BACKTRACE_SYMBOLS
 // This function produces a stack backtrace with demangled function & method names. It is based on
@@ -471,10 +470,10 @@ wchar_t *quote_end(const wchar_t *pos) {
 
 void fish_setlocale() {
     // Use ellipsis if on known unicode system, otherwise use $.
-    ellipsis_char = (wcwidth(L'\x2026') > 0) ? L'\x2026' : L'$';
+    ellipsis_char = (fish_wcwidth(L'\x2026') > 0) ? L'\x2026' : L'$';
 
     // U+23CE is the "return" character
-    omitted_newline_char = (wcwidth(L'\x23CE') > 0) ? L'\x23CE' : L'~';
+    omitted_newline_char = (fish_wcwidth(L'\x23CE') > 0) ? L'\x23CE' : L'~';
 }
 
 bool contains_internal(const wchar_t *a, int vararg_handle, ...) {
@@ -771,7 +770,7 @@ wcstring reformat_for_screen(const wcstring &msg) {
 
             // If token is zero character long, we don't do anything.
             if (pos == start) {
-                start = pos = pos + 1;
+                pos = pos + 1;
             } else if (overflow) {
                 // In case of overflow, we print a newline, except if we already are at position 0.
                 wchar_t *token = wcsndup(start, pos - start);
@@ -1670,19 +1669,13 @@ void format_size_safe(char buff[128], unsigned long long sz) {
     }
 }
 
+/// Return the number of seconds from the UNIX epoch, with subsecond precision. This function uses
+/// the gettimeofday function and will have the same precision as that function.
 double timef() {
     struct timeval tv;
-    int time_res = gettimeofday(&tv, 0);
-
-    if (time_res) {
-        // Fixme: What on earth is the correct parameter value for NaN? The man pages and the
-        // standard helpfully state that this parameter is implementation defined. Gcc gives a
-        // warning if a null pointer is used. But not even all mighty Google gives a hint to what
-        // value should actually be returned.
-        return nan("");
-    }
-
-    return (double)tv.tv_sec + 0.000001 * tv.tv_usec;
+    VOMIT_ON_FAILURE(gettimeofday(&tv, 0));
+    // return (double)tv.tv_sec + 0.000001 * tv.tv_usec;
+    return (double)tv.tv_sec + 1e-6 * tv.tv_usec;
 }
 
 void exit_without_destructors(int code) { _exit(code); }

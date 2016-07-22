@@ -9,7 +9,6 @@
 #include <pthread.h>
 #include <signal.h>
 #include <stdarg.h>
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1229,6 +1228,9 @@ static void test_expand() {
     expand_test(L"/tmp/fish_expand_test/**z/xxx", 0, L"/tmp/fish_expand_test/baz/xxx", wnull,
                 L"Glob did the wrong thing 3");
 
+    expand_test(L"/tmp/fish_expand_test////baz/xxx", 0, L"/tmp/fish_expand_test////baz/xxx", wnull,
+                L"Glob did the wrong thing 3");
+
     expand_test(L"/tmp/fish_expand_test/b**", 0, L"/tmp/fish_expand_test/b",
                 L"/tmp/fish_expand_test/b/x", L"/tmp/fish_expand_test/bar",
                 L"/tmp/fish_expand_test/bax", L"/tmp/fish_expand_test/bax/xxx",
@@ -1293,6 +1295,10 @@ static void test_expand() {
 
     expand_test(L"b/xx", EXPAND_FOR_COMPLETIONS | EXPAND_FUZZY_MATCH, L"bax/xxx", L"baz/xxx", wnull,
                 L"Wrong fuzzy matching 5");
+
+    // multiple slashes with fuzzy matching - #3185
+    expand_test(L"l///n", EXPAND_FOR_COMPLETIONS | EXPAND_FUZZY_MATCH, L"lol///nub/", wnull,
+                L"Wrong fuzzy matching 6");
 
     if (chdir_set_pwd(saved_wd)) {
         err(L"chdir failed");
@@ -1814,6 +1820,7 @@ static void test_complete(void) {
 
     if (system("mkdir -p '/tmp/complete_test/'")) err(L"mkdir failed");
     if (system("touch '/tmp/complete_test/testfile'")) err(L"touch failed");
+    if (system("touch '/tmp/complete_test/has space'")) err(L"touch failed");
     if (system("chmod 700 '/tmp/complete_test/testfile'")) err(L"chmod failed");
 
     completions.clear();
@@ -1832,6 +1839,12 @@ static void test_complete(void) {
              COMPLETION_REQUEST_DEFAULT, vars);
     do_test(completions.size() == 1);
     do_test(completions.at(0).completion == L"e");
+
+    // Completing after spaces - see #2447
+    completions.clear();
+    complete(L"echo (ls /tmp/complete_test/has\\ ", &completions, COMPLETION_REQUEST_DEFAULT, vars);
+    do_test(completions.size() == 1);
+    do_test(completions.at(0).completion == L"space");
 
     // Add a function and test completing it in various ways.
     struct function_data_t func_data = {};
@@ -2685,9 +2698,9 @@ void history_tests_t::test_history_races_pound_on_history() {
     // Called in child process to modify history.
     history_t *hist = new history_t(L"race_test");
     hist->chaos_mode = true;
-    const wcstring_list_t lines = generate_history_lines(getpid());
-    for (size_t idx = 0; idx < lines.size(); idx++) {
-        const wcstring &line = lines.at(idx);
+    const wcstring_list_t hist_lines = generate_history_lines(getpid());
+    for (size_t idx = 0; idx < hist_lines.size(); idx++) {
+        const wcstring &line = hist_lines.at(idx);
         hist->add(line);
         hist->save();
     }
@@ -2726,15 +2739,15 @@ void history_tests_t::test_history_races(void) {
     }
 
     // Compute the expected lines.
-    wcstring_list_t lines[RACE_COUNT];
+    wcstring_list_t expected_lines[RACE_COUNT];
     for (size_t i = 0; i < RACE_COUNT; i++) {
-        lines[i] = generate_history_lines(children[i]);
+        expected_lines[i] = generate_history_lines(children[i]);
     }
 
     // Count total lines.
     size_t line_count = 0;
     for (size_t i = 0; i < RACE_COUNT; i++) {
-        line_count += lines[i].size();
+        line_count += expected_lines[i].size();
     }
 
     // Ensure we consider the lines that have been outputted as part of our history.
@@ -2753,10 +2766,10 @@ void history_tests_t::test_history_races(void) {
         size_t i;
         for (i = 0; i < RACE_COUNT; i++) {
             wcstring_list_t::iterator where =
-                std::find(lines[i].begin(), lines[i].end(), item.str());
-            if (where != lines[i].end()) {
+                std::find(expected_lines[i].begin(), expected_lines[i].end(), item.str());
+            if (where != expected_lines[i].end()) {
                 // Delete everything from the found location onwards.
-                lines[i].resize(where - lines[i].begin());
+                expected_lines[i].resize(where - expected_lines[i].begin());
 
                 // Break because we found it.
                 break;
@@ -2824,6 +2837,16 @@ void history_tests_t::test_history_merge(void) {
     for (size_t i = 0; i < count; i++) {
         hists[i]->incorporate_external_changes();
     }
+
+    // Everyone should also have items in the same order (#2312)
+    wcstring string_rep;
+    hists[0]->get_string_representation(&string_rep, L"\n");
+    for (size_t i = 0; i < count; i++) {
+        wcstring string_rep2;
+        hists[i]->get_string_representation(&string_rep2, L"\n");
+        do_test(string_rep == string_rep2);
+    }
+
     // Add some more per-history items.
     for (size_t i = 0; i < count; i++) {
         hists[i]->add(alt_texts[i]);
@@ -3873,6 +3896,42 @@ static void test_string(void) {
     }
 }
 
+/// Helper for test_timezone_env_vars().
+long return_timezone_hour(time_t tstamp, const wchar_t *timezone) {
+    struct tm ltime;
+    char ltime_str[3];
+    char *str_ptr;
+    int n;
+
+    env_set(L"TZ", timezone, ENV_EXPORT);
+    localtime_r(&tstamp, &ltime);
+    n = strftime(ltime_str, 3, "%H", &ltime);
+    if (n != 2) {
+        err(L"strftime() returned %d, expected 2", n);
+        return 0;
+    }
+    return strtol(ltime_str, &str_ptr, 10);
+}
+
+/// Verify that setting special env vars have the expected effect on the current shell process.
+static void test_timezone_env_vars(void) {
+    // Confirm changing the timezone affects fish's idea of the local time.
+    time_t tstamp = time(NULL);
+
+    long first_tstamp = return_timezone_hour(tstamp, L"UTC-1");
+    long second_tstamp = return_timezone_hour(tstamp, L"UTC-2");
+    long delta = second_tstamp - first_tstamp;
+    if (delta != 1 && delta != -23) {
+        err(L"expected a one hour timezone delta got %ld", delta);
+    }
+}
+
+/// Verify that setting special env vars have the expected effect on the current shell process.
+static void test_env_vars(void) {
+    test_timezone_env_vars();
+    // TODO: Add tests for the locale and ncurses vars.
+}
+
 /// Main test.
 int main(int argc, char **argv) {
     // Look for the file tests/test.fish. We expect to run in a directory containing that file.
@@ -3909,12 +3968,14 @@ int main(int argc, char **argv) {
     event_init();
     function_init();
     builtin_init();
-    reader_init();
     env_init();
     
     // needed for completion tests
     env_set(L"IFS", L"\n", ENV_DEFAULT);
 
+    reader_init();
+
+    // Set default signal handlers, so we can ctrl-C out of this.
     signal_reset_handlers();
 
     if (should_test_function("highlighting")) test_highlighting();
@@ -3965,6 +4026,7 @@ int main(int argc, char **argv) {
     if (should_test_function("history_races")) history_tests_t::test_history_races();
     if (should_test_function("history_formats")) history_tests_t::test_history_formats();
     if (should_test_function("string")) test_string();
+    if (should_test_function("env_vars")) test_env_vars();
     // history_tests_t::test_history_speed();
 
     say(L"Encountered %d errors in low-level tests", err_count);

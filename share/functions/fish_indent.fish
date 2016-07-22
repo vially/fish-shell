@@ -11,5 +11,5 @@ function fish_indent --description 'Indenter and prettifier for fish code' --sig
       --html           Output in HTML format
 '
 	# This is wrapped in a function so that fish_indent does not need to be found in PATH
-	eval $__fish_bin_dir/fish_indent $argv
+	eval (string escape $__fish_bin_dir/fish_indent) $argv
 end

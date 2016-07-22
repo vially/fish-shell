@@ -1,10 +1,9 @@
 // Functions used for implementing the complete builtin.
 #include "config.h"  // IWYU pragma: keep
 
-#include <stdbool.h>
 #include <stdlib.h>
 #include <wchar.h>
-#include <memory>  // IWYU pragma: keep
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -213,6 +212,10 @@ int builtin_complete(parser_t &parser, io_streams_t &streams, wchar_t **argv) {
             }
             case 'd': {
                 desc = w.woptarg;
+                if (w.woptarg[0] == '\0') {
+                    streams.err.append_format(L"%ls: -d requires a non-empty string\n", argv[0]);
+                    res = true;
+                }
                 break;
             }
             case 'u': {
@@ -225,14 +228,26 @@ int builtin_complete(parser_t &parser, io_streams_t &streams, wchar_t **argv) {
             }
             case 's': {
                 short_opt.append(w.woptarg);
+                if (w.woptarg[0] == '\0') {
+                    streams.err.append_format(L"%ls: -s requires a non-empty string\n", argv[0]);
+                    res = true;
+                }
                 break;
             }
             case 'l': {
                 gnu_opt.push_back(w.woptarg);
+                if (w.woptarg[0] == '\0') {
+                    streams.err.append_format(L"%ls: -l requires a non-empty string\n", argv[0]);
+                    res = true;
+                }
                 break;
             }
             case 'o': {
                 old_opt.push_back(w.woptarg);
+                if (w.woptarg[0] == '\0') {
+                    streams.err.append_format(L"%ls: -o requires a non-empty string\n", argv[0]);
+                    res = true;
+                }
                 break;
             }
             case 'a': {
