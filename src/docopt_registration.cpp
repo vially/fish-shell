@@ -230,7 +230,6 @@ bool register_argument_parser(const wcstring &cmd_or_empty, enum argument_parser
     }
     success = success && !effective_cmd.empty();
     
-    // Return an empty argument_parser_set_t if we failed
     if (success) {
         // Create our registration
         // We will transfer ownership to a shared_ptr
