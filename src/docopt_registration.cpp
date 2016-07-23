@@ -87,16 +87,17 @@ static void append_parse_error(parse_error_list_t *out_errors, size_t where, con
 /* Represents a single docopt registration. This is immutable. */
 class docopt_registration_t {
     friend class doc_register_t;
-    friend class docopt_registration_set_t;
+    friend class argument_parser_set_t;
     /* No copying */
     void operator=(docopt_registration_t &);
     docopt_registration_t(const docopt_registration_t &);
 
-    docopt_registration_t() : last_arg_only(false) {}
+public:
+    docopt_registration_t(enum argument_parser_source_t s) : source(s), last_arg_only(false) {}
 
+    const enum argument_parser_source_t source;
     wcstring usage;
     wcstring description;
-    wcstring condition;
     shared_ptr<docopt_fish::argument_parser_t<wcstring> > parser;
 
     // Legacy completion support: completions have historically only looked
@@ -105,135 +106,149 @@ class docopt_registration_t {
     bool last_arg_only;
 };
 
+// Looks for errors in the parser variable commands
+static bool validate_parser(const docopt_parser_t &parser, parse_error_list_t *out_errors) {
+    bool success = true;
+    const wcstring_list_t vars = parser.get_variables();
+    parser_t error_detector;
+    for (size_t i = 0; i < vars.size(); i++) {
+        const wcstring &var = vars.at(i);
+        const wcstring command_string = parser.metadata_for_name(var).command;
+        if (!command_string.empty()) {
+            wcstring local_err;
+            if (error_detector.detect_errors_in_argument_list(command_string, &local_err,
+                                                              L"")) {
+                wcstring err_text =
+                format_string(L"Command '%ls' contained a syntax error:\n%ls",
+                              command_string.c_str(), local_err.c_str());
+                // TODO: would be nice to have the actual position of the error
+                append_parse_error(out_errors, -1, err_text);
+                success = false;
+                break;
+            }
+        }
+    }
+    return success;
+}
+
+// Given a parser set, return a subset of parsers with the given source
+argument_parser_set_t argument_parser_set_t::filter_by_source(enum argument_parser_source_t source) const {
+    if (source == argument_parser_source_any) {
+        return *this;
+    }
+    argument_parser_set_t result;
+    for (size_t i=0; i < this->registrations.size(); i++) {
+        const shared_ptr<const docopt_registration_t> &reg = this->registrations.at(i);
+        if (reg->source == source) {
+            result.registrations.push_back(reg);
+        }
+    }
+    return result;
+}
+
 // Class that holds a mapping from command name to list of docopt descriptions
 class doc_register_t {
-    typedef std::map<wcstring, docopt_registration_set_t> registration_map_t;
+    typedef std::map<wcstring, argument_parser_set_t> registration_map_t;
     registration_map_t cmd_to_registration;
     mutex_lock_t lock;
 
-    // Looks for errors in the parser variable commands
-    static bool validate_parser(const docopt_parser_t &parser, parse_error_list_t *out_errors) {
-        bool success = true;
-        const wcstring_list_t vars = parser.get_variables();
-        parser_t error_detector;
-        for (size_t i = 0; i < vars.size(); i++) {
-            const wcstring &var = vars.at(i);
-            const wcstring command_string = parser.metadata_for_name(var).command;
-            if (!command_string.empty()) {
-                wcstring local_err;
-                if (error_detector.detect_errors_in_argument_list(command_string, &local_err,
-                                                                  L"")) {
-                    wcstring err_text =
-                        format_string(L"Command '%ls' contained a syntax error:\n%ls",
-                                      command_string.c_str(), local_err.c_str());
-                    // TODO: would be nice to have the actual position of the error
-                    append_parse_error(out_errors, -1, err_text);
-                    success = false;
-                    break;
-                }
-            }
-        }
-        return success;
-    }
-
    public:
-    bool register_usage(const wcstring &cmd_or_empty, const wcstring &condition,
-                        const wcstring &usage, const wcstring &description,
-                        parse_error_list_t *out_errors) {
-        // Try to parse it
-        shared_ptr<docopt_parser_t> parser(new docopt_parser_t());
-        docopt_error_list_t errors;
-        bool success = parser->set_doc(usage, &errors);
-
-        // Verify it
-        success = success && validate_parser(*parser, out_errors);
-
-        // Translate errors from docopt to parse_error over
-        if (out_errors != NULL) {
-            for (size_t i = 0; i < errors.size(); i++) {
-                const docopt_error_t &doc_err = errors.at(i);
-                append_parse_error(out_errors, doc_err.location, str2wcstring(doc_err.text));
-            }
-        }
-
-        // If the command is empty, we determine the command by inferring it from the doc, if there
-        // is one
-        wcstring effective_cmd = cmd_or_empty;
-        if (effective_cmd.empty()) {
-            const wcstring_list_t cmd_names = parser->get_command_names();
-            if (cmd_names.empty()) {
-                append_parse_error(out_errors, 0, L"No command name found in docopt description");
-            } else if (cmd_names.size() > 1) {
-                const wchar_t *first = cmd_names.at(0).c_str();
-                const wchar_t *second = cmd_names.at(1).c_str();
-                const wcstring text = format_string(
-                    L"Multiple command names found in docopt description, such as '%ls' and '%ls'",
-                    first, second);
-                append_parse_error(out_errors, 0, text);
+    
+    void register_parser(const shared_ptr<const docopt_registration_t> &new_reg, const wcstring &command) {
+        scoped_lock locker(lock);
+        argument_parser_set_t &regs = cmd_to_registration[command];
+        
+        // Hackish: remove any with a matching usage
+        typedef std::vector<shared_ptr<const docopt_registration_t> >::iterator reg_iter_t;
+        reg_iter_t iter = regs.registrations.begin();
+        while (iter != regs.registrations.end()) {
+            if ((*iter)->usage == new_reg->usage) {
+                iter = regs.registrations.erase(iter);
             } else {
-                assert(cmd_names.size() == 1);
-                effective_cmd = cmd_names.front();
+                ++iter;
             }
         }
-        success = success && !effective_cmd.empty();
-
-        if (success) {
-            // Ok, we're going to insert it!
-            scoped_lock locker(lock);
-            docopt_registration_set_t &regs = cmd_to_registration[effective_cmd];
-
-            // Remove any with a matching usage
-            typedef std::vector<shared_ptr<const docopt_registration_t> >::iterator reg_iter_t;
-            reg_iter_t iter = regs.registrations.begin();
-            while (iter != regs.registrations.end()) {
-                if ((*iter)->usage == usage) {
-                    iter = regs.registrations.erase(iter);
-                } else {
-                    ++iter;
-                }
-            }
-
-            // Create our registration
-            // We will transfer ownership to a shared_ptr
-            docopt_registration_t *reg = new docopt_registration_t();
-
-            reg->usage = usage;
-            reg->description = description;
-            reg->condition = condition;
-            reg->parser = parser;  // note shared_ptr
-
-            // insert in the front
-            // this transfers ownership!
-            regs.registrations.insert(regs.registrations.begin(),
-                                      shared_ptr<const docopt_registration_t>(reg));
-        }
-        return success;
+        
+        // insert in the front
+        // this transfers ownership!
+        regs.registrations.insert(regs.registrations.begin(), new_reg);
     }
-
-    docopt_registration_set_t get_registrations(const wcstring &cmd) {
+    
+    argument_parser_set_t get_registrations(const wcstring &cmd, enum argument_parser_source_t source) {
         scoped_lock locker(lock);
         registration_map_t::const_iterator where = this->cmd_to_registration.find(cmd);
         if (where == this->cmd_to_registration.end()) {
-            return docopt_registration_set_t();
+            return argument_parser_set_t();
         } else {
-            return where->second;
+            return where->second.filter_by_source(source);
         }
     }
 };
 static doc_register_t default_register;
 
-bool docopt_register_usage(const wcstring &cmd, const wcstring &name, const wcstring &usage,
-                           const wcstring &description, parse_error_list_t *out_errors) {
-    return default_register.register_usage(cmd, name, usage, description, out_errors);
+argument_parser_set_t docopt_get_registrations(const wcstring &cmd, enum argument_parser_source_t source) {
+    return default_register.get_registrations(cmd, source);
 }
 
-docopt_registration_set_t docopt_get_registrations(const wcstring &cmd) {
-    return default_register.get_registrations(cmd);
+bool register_argument_parser(const wcstring &cmd_or_empty, enum argument_parser_source_t source,
+                              const wcstring &usage, const wcstring &description, parse_error_list_t *out_errors) {
+    assert(source != argument_parser_source_any);
+    // Try to parse it
+    shared_ptr<docopt_parser_t> parser(new docopt_parser_t());
+    docopt_error_list_t errors;
+    bool success = parser->set_doc(usage, &errors);
+    
+    // Verify it
+    success = success && validate_parser(*parser, out_errors);
+    
+    // Translate errors from docopt to parse_error over
+    if (out_errors != NULL) {
+        for (size_t i = 0; i < errors.size(); i++) {
+            const docopt_error_t &doc_err = errors.at(i);
+            append_parse_error(out_errors, doc_err.location, str2wcstring(doc_err.text));
+        }
+    }
+    
+    // If the command is empty, we determine the command by inferring it from the doc, if there
+    // is one
+    wcstring effective_cmd = cmd_or_empty;
+    if (effective_cmd.empty()) {
+        const wcstring_list_t cmd_names = parser->get_command_names();
+        if (cmd_names.empty()) {
+            append_parse_error(out_errors, 0, L"No command name found in docopt description");
+        } else if (cmd_names.size() > 1) {
+            const wchar_t *first = cmd_names.at(0).c_str();
+            const wchar_t *second = cmd_names.at(1).c_str();
+            const wcstring text = format_string(
+                                                L"Multiple command names found in docopt description, such as '%ls' and '%ls'",
+                                                first, second);
+            append_parse_error(out_errors, 0, text);
+        } else {
+            assert(cmd_names.size() == 1);
+            effective_cmd = cmd_names.front();
+        }
+    }
+    success = success && !effective_cmd.empty();
+    
+    // Return an empty argument_parser_set_t if we failed
+    if (success) {
+        // Create our registration
+        // We will transfer ownership to a shared_ptr
+        docopt_registration_t *reg = new docopt_registration_t(source);
+        
+        reg->usage = usage;
+        reg->description = description;
+        reg->parser = parser;  // note shared_ptr
+        
+        // this transfers ownership!
+        default_register.register_parser(shared_ptr<const docopt_registration_t>(reg), effective_cmd);
+    }
+    return success;
 }
 
-docopt_registration_set_t::~docopt_registration_set_t() {}
+argument_parser_set_t::~argument_parser_set_t() {}
 
-std::vector<docopt_argument_status_t> docopt_registration_set_t::validate_arguments(
+std::vector<docopt_argument_status_t> argument_parser_set_t::validate_arguments(
     const wcstring_list_t &argv, docopt_parse_flags_t flags) const {
     std::vector<docopt_argument_status_t> result;
     result.reserve(argv.size());
@@ -266,7 +281,7 @@ static bool suggestionNameEquals(const docopt_suggestion_t &a, const docopt_sugg
     return a.token == b.token;
 }
 
-std::vector<docopt_suggestion_t> docopt_registration_set_t::suggest_next_argument(
+std::vector<docopt_suggestion_t> argument_parser_set_t::suggest_next_argument(
     const wcstring_list_t &argv, docopt_parse_flags_t flags) const {
     /* Construct a list of the last argument only, for last_arg_only support */
     wcstring_list_t last_arg;
@@ -308,7 +323,7 @@ std::vector<docopt_suggestion_t> docopt_registration_set_t::suggest_next_argumen
     return result;
 }
 
-bool docopt_registration_set_t::parse_arguments(const wcstring_list_t &argv,
+bool argument_parser_set_t::parse_arguments(const wcstring_list_t &argv,
                                                 docopt_arguments_t *out_arguments,
                                                 parse_error_list_t *out_errors,
                                                 std::vector<size_t> *out_unused_arguments) const {
@@ -381,9 +396,9 @@ bool docopt_registration_set_t::parse_arguments(const wcstring_list_t &argv,
     return true;
 }
 
-void docopt_registration_set_t::add_legacy_parser(
+void argument_parser_set_t::add_legacy_parser(
     const shared_ptr<docopt_fish::argument_parser_t<wcstring> > &r) {
-    docopt_registration_t *reg = new docopt_registration_t();
+    docopt_registration_t *reg = new docopt_registration_t(argument_parser_source_user_supplied);
     reg->last_arg_only = true;
     reg->parser = r;
     // Note this line transfers ownership

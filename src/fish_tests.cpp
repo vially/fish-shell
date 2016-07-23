@@ -1988,7 +1988,7 @@ static void test_docopt_complete(void) {
         L"       <val>  ONE TWO THREE\n"
         L"       <dynval>  (echo ONE\\nTWO\\nTHREE)\n";
 
-    docopt_register_usage(cmd, L"", usage, L"", NULL);
+    register_argument_parser(cmd, argument_parser_source_user_supplied, usage, L"", NULL);
     completion_list_t completions;
 
     complete(L"flea --c", &completions, COMPLETION_REQUEST_DEFAULT, vars);
@@ -2014,7 +2014,7 @@ static void test_docopt_complete(void) {
         L"Usage:\n"
         L"       leaf [<pid>]\n"
         L"       leaf --help\n";
-    docopt_register_usage(L"", L"", desc2, L"", NULL);
+    register_argument_parser(L"", argument_parser_source_user_supplied, desc2, L"", NULL);
     completions.clear();
     complete(L"leaf --he", &completions, COMPLETION_REQUEST_DEFAULT, vars);
     do_test(completions.size() == 1);
@@ -2043,8 +2043,8 @@ static void test_docopt_args(void) {
         L"Options:\n"
         L"       -h, --help  Help\n";
 
-    docopt_register_usage(L"", L"", usage1, L"", NULL);
-    docopt_register_usage(L"", L"", usage2, L"", NULL);
+    register_argument_parser(L"", argument_parser_source_user_supplied, usage1, L"", NULL);
+    register_argument_parser(L"", argument_parser_source_user_supplied, usage2, L"", NULL);
 
     wcstring_list_t argv;
     argv.push_back(cmd);

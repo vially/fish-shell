@@ -43,6 +43,8 @@
 
 typedef docopt_fish::argument_parser_t<wcstring> docopt_parser_t;
 
+typedef shared_ptr<docopt_parser_t> docopt_parser_ref_t;
+
 typedef docopt_fish::base_annotated_option_t<wcstring> legacy_option_t;
 
 /*
@@ -107,10 +109,10 @@ class completion_entry_t {
     legacy_option_list_t options;
 
     void invalidate_handle();
-    shared_ptr<docopt_parser_t> ensure_handle();
+    docopt_parser_ref_t ensure_handle();
 
     /** Handle on current docopt. Set to NULL if it must be recomputed. */
-    shared_ptr<docopt_parser_t> doc_handle;
+    docopt_parser_ref_t doc_handle;
 
    public:
     /** Command string */
@@ -484,9 +486,9 @@ void complete_add(const wchar_t *cmd, bool cmd_is_path, const wcstring &bare_opt
 
 // Have to determine ourselves if this is a path
 static void parse_cmd_string(const wcstring &str, wcstring &path, wcstring &cmd);
-static shared_ptr<docopt_parser_t> complete_rebuild_docopt_as_necessary(
+static docopt_parser_ref_t complete_rebuild_docopt_as_necessary(
     const wcstring &cmd_or_path) {
-    shared_ptr<docopt_parser_t> result;
+    docopt_parser_ref_t result;
     wcstring cmd, path;
     parse_cmd_string(cmd_or_path, path, cmd);
 
@@ -511,7 +513,7 @@ void completion_entry_t::invalidate_handle() {
     this->doc_handle.reset();
 }
 
-shared_ptr<docopt_parser_t> completion_entry_t::ensure_handle() {
+docopt_parser_ref_t completion_entry_t::ensure_handle() {
     ASSERT_IS_LOCKED(completion_lock);
     if (this->doc_handle.get() == NULL && !this->options.empty()) {
         this->doc_handle.reset(new docopt_parser_t());
@@ -868,8 +870,8 @@ bool completer_t::complete_from_docopt(const wcstring &cmd_unescape, const parse
     const bool allow_options = string_prefixes_string(L"-", last_arg);
 
     // Get existing registrations, and maybe add our legacy parser
-    docopt_registration_set_t regs = docopt_get_registrations(cmd_unescape);
-    shared_ptr<docopt_parser_t> legacy_parser = complete_rebuild_docopt_as_necessary(cmd_unescape);
+    argument_parser_set_t regs = docopt_get_registrations(cmd_unescape);
+    docopt_parser_ref_t legacy_parser = complete_rebuild_docopt_as_necessary(cmd_unescape);
     if (legacy_parser.get() != NULL) {
         regs.add_legacy_parser(legacy_parser);
     }

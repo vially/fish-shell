@@ -371,7 +371,7 @@ void function_prepare_environment(const wcstring &name, const wchar_t *const *ar
 
     // Docopt
     // TODO: argument validation / error handling
-    docopt_registration_set_t regs = docopt_get_registrations(name);
+    argument_parser_set_t regs = docopt_get_registrations(name);
     if (!regs.empty()) {
         size_t arg_count = 0;
         while (argv[arg_count]) {

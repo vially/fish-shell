@@ -419,13 +419,13 @@ int builtin_complete(parser_t &parser, io_streams_t &streams, wchar_t **argv) {
         parse_error_list_t errors;
         if (cmd.empty() && path.empty()) {
             // Here we attempt to infer the command
-            docopt_register_usage(wcstring(), L"default", signature, desc, &errors);
+            register_argument_parser(wcstring(), argument_parser_source_user_supplied, signature, desc, &errors);
         } else {
             // Use a silly loop to handle commands and paths uniformly
             for (size_t which = 0; which < 2; which++) {
                 const wcstring_list_t &cmd_or_path = (which ? cmd : path);
                 for (size_t i = 0; i < cmd_or_path.size(); i++) {
-                    docopt_register_usage(cmd_or_path.at(i), L"default", signature, desc, &errors);
+                    register_argument_parser(cmd_or_path.at(i), argument_parser_source_user_supplied, signature, desc, &errors);
                 }
             }
         }

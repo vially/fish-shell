@@ -263,8 +263,8 @@ bool parse_argv_or_show_help(parser_t &parser, const wchar_t *const *argv,
     parse_error_list_t errors;
     const wcstring_list_t argv_list = wcstring_list_t(argv, argv + argcount);
     const wcstring &cmd = argv_list.at(0);
-    bool parsed = docopt_get_registrations(cmd).parse_arguments(argv_list, out_args, &errors,
-                                                                NULL /* unused_args */);
+    bool parsed = docopt_get_registrations(cmd, argument_parser_source_builtin)
+                    .parse_arguments(argv_list, out_args, &errors, NULL /* unused_args */);
     if (!parsed) {
         // TODO: error handling
         builtin_print_help(parser, streams, argv[0], streams.err);
@@ -1768,9 +1768,9 @@ int builtin_function(parser_t &parser, io_streams_t &streams, const wcstring_lis
         // Handle a signature
         // If this fails, we don't want to define the function
         parse_error_list_t doc_errors;
-        bool success = docopt_register_usage(function_name, L"" /* condition */, signature,
-                                             L"" /* description */, &doc_errors);
-        if (!success) {
+        bool success = register_argument_parser(function_name, argument_parser_source_user_supplied,
+                                                signature, L"" /* description */, &doc_errors);
+        if (! success) {
             assert(!doc_errors.empty());
             const parse_error_t &err = doc_errors.front();
             bool is_interactive = false, skip_caret = false;
@@ -3199,9 +3199,10 @@ extern const wchar_t *const g_set_color_usage;
 extern const wchar_t *const g_bind_usage;
 
 static void docopt_init() {
-    docopt_register_usage(L"jobs", L"default", g_jobs_usage, L"", NULL);
-    docopt_register_usage(L"set_color", L"default", g_set_color_usage, L"", NULL);
-    docopt_register_usage(L"bind", L"default", g_bind_usage, L"", NULL);
+    const argument_parser_source_t source = argument_parser_source_builtin;
+    register_argument_parser(L"jobs", source, g_jobs_usage, L"", NULL);
+    register_argument_parser(L"set_color", source, g_set_color_usage, L"", NULL);
+    register_argument_parser(L"bind", source, g_bind_usage, L"", NULL);
 }
 
 void builtin_init() {

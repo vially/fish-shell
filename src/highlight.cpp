@@ -1220,7 +1220,7 @@ void highlighter_t::apply_docopt_coloring(const parse_node_t &statement_node) {
         }
     }
 
-    docopt_registration_set_t regs = docopt_get_registrations(argv.at(0));
+    argument_parser_set_t regs = docopt_get_registrations(argv.at(0));
     const std::vector<docopt_argument_status_t> statuses =
         regs.validate_arguments(argv, flag_match_allow_incomplete);
     if (!statuses.empty()) {
